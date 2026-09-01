@@ -28,6 +28,7 @@ RUN pnpm build
 FROM dependencies AS migrator
 
 COPY . .
+ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build"
 RUN pnpm prisma generate
 CMD ["sh", "-c", "pnpm prisma migrate deploy && pnpm db:seed"]
 
