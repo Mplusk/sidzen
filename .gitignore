@@ -1,0 +1,13 @@
+node_modules
+.next
+coverage
+.env
+.env.local
+.env.production
+*.log
+.DS_Store
+private-uploads/*
+!private-uploads/.gitkeep
+backups/*
+!backups/.gitkeep
+tsconfig.tsbuildinfo
