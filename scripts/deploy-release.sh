@@ -7,7 +7,6 @@ release_root="${project_root}/releases"
 incoming_root="${project_root}/incoming"
 shared_env="${project_root}/shared/.env.production"
 current_link="${project_root}/current"
-legacy_release="/opt/3dprinta-legacy"
 artifact="${incoming_root}/${release_sha}.tar.gz"
 staging_release="${release_root}/${release_sha}.staging"
 final_release="${release_root}/${release_sha}"
@@ -88,10 +87,6 @@ cleanup_successful_deploy() {
   done < <(find "$release_root" -mindepth 1 -maxdepth 1 -type d ! -name "$release_sha" -print0)
 
   find "$incoming_root" -mindepth 1 -maxdepth 1 -type f -name '*.tar.gz' -delete
-
-  if [[ -d "$legacy_release" ]]; then
-    rm -rf -- "$legacy_release"
-  fi
 
   docker builder prune --all --force
   docker image prune --all --force
