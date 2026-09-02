@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -32,3 +33,53 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+
+  deploy:
+    name: Deploy production
+    needs: verify
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://3dprinta.shop
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create immutable release archive
+        run: git archive --format=tar.gz --output="${RUNNER_TEMP}/3dprinta-${GITHUB_SHA}.tar.gz" "${GITHUB_SHA}"
+
+      - name: Configure deploy SSH key
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 0700 "${HOME}/.ssh"
+          printf '%s\n' "${DEPLOY_SSH_PRIVATE_KEY}" > "${HOME}/.ssh/3dprinta_deploy"
+          printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > "${HOME}/.ssh/known_hosts"
+          chmod 0600 "${HOME}/.ssh/3dprinta_deploy" "${HOME}/.ssh/known_hosts"
+          ssh-keygen -y -f "${HOME}/.ssh/3dprinta_deploy" > /dev/null
+
+      - name: Upload release
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          ssh_options=(-i "${HOME}/.ssh/3dprinta_deploy" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15)
+          ssh "${ssh_options[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" "install -d -m 0750 /opt/3dprinta/incoming"
+          scp "${ssh_options[@]}" "${RUNNER_TEMP}/3dprinta-${GITHUB_SHA}.tar.gz" "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/3dprinta/incoming/${GITHUB_SHA}.tar.gz"
+
+      - name: Activate release and clean previous versions
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          ssh_options=(-i "${HOME}/.ssh/3dprinta_deploy" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=20)
+          ssh "${ssh_options[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" "bash -s -- '${GITHUB_SHA}'" < scripts/deploy-release.sh
+
+      - name: Remove runner credentials
+        if: always()
+        run: rm -f -- "${HOME}/.ssh/3dprinta_deploy"

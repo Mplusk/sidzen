@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-project_dir="${PROJECT_DIR:-/opt/3dprinta}"
-cd "$project_dir"
+project_root="/opt/3dprinta"
+release_sha="$(git rev-parse HEAD)"
+archive="${project_root}/incoming/${release_sha}.tar.gz"
 
-git fetch origin main
-git checkout main
-git pull --ff-only origin main
-docker compose --env-file .env.production build
-docker compose --env-file .env.production up -d --remove-orphans
-docker compose --env-file .env.production ps
+install -d -m 0750 "${project_root}/incoming"
+git archive --format=tar.gz --output="$archive" "$release_sha"
+exec bash scripts/deploy-release.sh "$release_sha"

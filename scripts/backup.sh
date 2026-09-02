@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-project_dir="${PROJECT_DIR:-/opt/3dprinta}"
+project_dir="${PROJECT_DIR:-/opt/3dprinta/current}"
 backup_dir="${BACKUP_DIR:-/var/backups/3dprinta}"
 retention_days="${BACKUP_RETENTION_DAYS:-14}"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -15,7 +15,7 @@ umask 077
 mkdir -p "$destination"
 cd "$project_dir"
 
-docker compose --env-file .env.production exec -T db pg_dump -U 3dprinta -d 3dprinta --format=custom > "${destination}/database.dump"
+docker compose --project-name 3dprinta --env-file .env.production exec -T db pg_dump -U 3dprinta -d 3dprinta --format=custom > "${destination}/database.dump"
 docker run --rm -v 3dprinta_model-files:/source:ro -v "${destination}:/backup" alpine:3.20 tar -czf /backup/model-files.tar.gz -C /source .
 sha256sum "${destination}/database.dump" "${destination}/model-files.tar.gz" > "${destination}/SHA256SUMS"
 

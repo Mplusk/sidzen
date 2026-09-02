@@ -2,7 +2,7 @@
 
 ## Production-переменные
 
-Создайте `/opt/3dprinta/.env.production` с правами `600`:
+Создайте `/opt/3dprinta/shared/.env.production` с правами `600`:
 
 ```dotenv
 POSTGRES_PASSWORD=<случайный пароль>
@@ -19,17 +19,39 @@ TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
 ```
 
-## Первый запуск
+## CI/CD и первый запуск
+
+Workflow `.github/workflows/ci.yml` запускает Prisma validation, ESLint, TypeScript, Vitest и production build. После успешных проверок push в `main` автоматически:
+
+1. формирует неизменяемый архив commit SHA;
+2. передаёт его на сервер отдельным SSH-ключом пользователя деплоя;
+3. собирает образы, применяет миграции и запускает release;
+4. проверяет `/api/health/` и состояние БД;
+5. переключает `/opt/3dprinta/current` на новый release;
+6. только после успешного health check удаляет предыдущие release-каталоги, архивы, Docker build cache, остановленные контейнеры и неиспользуемые образы.
+
+При ошибке сборки, миграции, старта или health check workflow завершается с ошибкой и пытается пересобрать и запустить предыдущий release. Volumes PostgreSQL и пользовательских моделей никогда не очищаются.
+
+Repository secrets:
+
+```text
+DEPLOY_HOST
+DEPLOY_USER
+DEPLOY_SSH_PRIVATE_KEY
+DEPLOY_KNOWN_HOSTS
+```
+
+Для ручного первого запуска подготовьте `/opt/3dprinta/{incoming,releases,shared}`, поместите production env в `shared/.env.production`, затем загрузите архив commit SHA в `incoming` и вызовите `scripts/deploy-release.sh <full-sha>`.
+
+Проверка текущего release:
 
 ```bash
-cd /opt/3dprinta
-docker compose --env-file .env.production build
-docker compose --env-file .env.production up -d
-docker compose --env-file .env.production ps
+cd /opt/3dprinta/current
+docker compose --project-name 3dprinta --env-file .env.production ps
 curl --fail http://127.0.0.1:3000/api/health/
 ```
 
-Контейнер `migrate` применяет миграции и идемпотентный seed до запуска приложения. Повторный деплой выполняется `scripts/deploy.sh`.
+Контейнер `migrate` применяет миграции и идемпотентный seed до запуска приложения.
 
 ## Nginx и HTTPS
 
@@ -46,7 +68,7 @@ curl --fail http://127.0.0.1:3000/api/health/
 Пример cron (каждый день в 03:20 UTC):
 
 ```cron
-20 3 * * * /opt/3dprinta/scripts/backup.sh >> /var/log/3dprinta-backup.log 2>&1
+20 3 * * * /usr/local/sbin/3dprinta-backup >> /var/log/3dprinta-backup.log 2>&1
 ```
 
 По умолчанию копии лежат в `/var/backups/3dprinta` 14 дней. Минимум раз в месяц копируйте их на отдельный сервер или объектное хранилище.
@@ -56,8 +78,8 @@ curl --fail http://127.0.0.1:3000/api/health/
 Остановите приём новых заказов, затем:
 
 ```bash
-cd /opt/3dprinta
-docker compose --env-file .env.production exec -T db pg_restore --clean --if-exists --no-owner -U 3dprinta -d 3dprinta < /var/backups/3dprinta/<timestamp>/database.dump
+cd /opt/3dprinta/current
+docker compose --project-name 3dprinta --env-file .env.production exec -T db pg_restore --clean --if-exists --no-owner -U 3dprinta -d 3dprinta < /var/backups/3dprinta/<timestamp>/database.dump
 docker run --rm -v 3dprinta_model-files:/target -v /var/backups/3dprinta/<timestamp>:/backup:ro alpine:3.20 sh -c 'cd /target && tar -xzf /backup/model-files.tar.gz'
 ```
 
@@ -66,9 +88,10 @@ docker run --rm -v 3dprinta_model-files:/target -v /var/backups/3dprinta/<timest
 ## Диагностика
 
 ```bash
-docker compose --env-file .env.production ps
-docker compose --env-file .env.production logs --tail=200 app
-docker compose --env-file .env.production logs --tail=200 db
+cd /opt/3dprinta/current
+docker compose --project-name 3dprinta --env-file .env.production ps
+docker compose --project-name 3dprinta --env-file .env.production logs --tail=200 app
+docker compose --project-name 3dprinta --env-file .env.production logs --tail=200 db
 nginx -t
 certbot certificates
 ```
