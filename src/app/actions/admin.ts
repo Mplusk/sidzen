@@ -36,7 +36,7 @@ export async function createProductAction(formData: FormData) {
   const parsed = z.object({ name: z.string().trim().min(3).max(180), slug: z.string().trim().max(200), sku: z.string().trim().min(2).max(80), categoryId: z.string().min(1), basePrice: z.coerce.number().min(0), stock: z.coerce.number().int().min(0), shortDescription: z.string().trim().max(500), status: z.enum(["DRAFT", "REVIEW", "PUBLISHED", "HIDDEN", "ARCHIVED"]) }).safeParse({ name: formData.get("name"), slug: formData.get("slug") ?? "", sku: formData.get("sku"), categoryId: formData.get("categoryId"), basePrice: formData.get("basePrice"), stock: formData.get("stock"), shortDescription: formData.get("shortDescription") ?? "", status: formData.get("status") ?? "DRAFT" });
   if (!parsed.success) redirect("/admin/products/?error=invalid");
   const slug = parsed.data.slug ? slugify(parsed.data.slug) : slugify(parsed.data.name);
-  const product = await prisma.product.create({ data: { name: parsed.data.name, slug, sku: parsed.data.sku, basePrice: parsed.data.basePrice, stock: parsed.data.stock, madeToOrder: parsed.data.stock === 0, shortDescription: parsed.data.shortDescription, status: parsed.data.status, publishedAt: parsed.data.status === "PUBLISHED" ? new Date() : undefined, h1: parsed.data.name, title: `${parsed.data.name} | 3DPRINTA`, metaDescription: parsed.data.shortDescription, categories: { create: { categoryId: parsed.data.categoryId, isPrimary: true } } } });
+  const product = await prisma.product.create({ data: { name: parsed.data.name, slug, sku: parsed.data.sku, basePrice: parsed.data.basePrice, stock: parsed.data.stock, madeToOrder: parsed.data.stock === 0, shortDescription: parsed.data.shortDescription, status: parsed.data.status, publishedAt: parsed.data.status === "PUBLISHED" ? new Date() : undefined, h1: parsed.data.name, title: parsed.data.name, metaDescription: parsed.data.shortDescription, categories: { create: { categoryId: parsed.data.categoryId, isPrimary: true } } } });
   await writeAudit({ actorId: user.id, action: "product.create", entityType: "Product", entityId: product.id, after: { name: product.name, slug: product.slug, price: Number(product.basePrice), status: product.status } });
   redirect(`/admin/products/${product.id}/?created=1`);
 }
@@ -71,7 +71,7 @@ export async function createCategoryAction(formData: FormData) {
   const user = await requirePermission(PERMISSIONS.productsWrite);
   const name = String(formData.get("name") ?? "").trim();
   if (name.length < 2) redirect("/admin/catalog/?error=category");
-  const category = await prisma.category.create({ data: { name, slug: slugify(String(formData.get("slug") ?? name)), description: String(formData.get("description") ?? ""), title: `${name} | 3DPRINTA`, metaDescription: String(formData.get("description") ?? ""), h1: name } });
+  const category = await prisma.category.create({ data: { name, slug: slugify(String(formData.get("slug") ?? name)), description: String(formData.get("description") ?? ""), title: name, metaDescription: String(formData.get("description") ?? ""), h1: name } });
   await writeAudit({ actorId: user.id, action: "category.create", entityType: "Category", entityId: category.id, after: { name, slug: category.slug } });
   revalidatePath("/admin/catalog/");
 }
@@ -133,7 +133,7 @@ export async function createArticleAction(formData: FormData) {
   if (title.length < 5 || !rubricId) redirect("/admin/content/?error=article");
   const slug = slugify(String(formData.get("slug") ?? title));
   const excerpt = String(formData.get("excerpt") ?? "").trim();
-  const article = await prisma.article.create({ data: { title, slug, rubricId, excerpt, content: String(formData.get("content") ?? "").trim(), status: String(formData.get("status") ?? "DRAFT") as "DRAFT" | "REVIEW" | "PUBLISHED", h1: title, metaTitle: `${title} | 3DPRINTA`, metaDescription: excerpt, authorName: user.name ?? "Команда 3DPRINTA", publishedAt: formData.get("status") === "PUBLISHED" ? new Date() : undefined } });
+  const article = await prisma.article.create({ data: { title, slug, rubricId, excerpt, content: String(formData.get("content") ?? "").trim(), status: String(formData.get("status") ?? "DRAFT") as "DRAFT" | "REVIEW" | "PUBLISHED", h1: title, metaTitle: title, metaDescription: excerpt, authorName: user.name ?? "Команда 3DPRINTA", publishedAt: formData.get("status") === "PUBLISHED" ? new Date() : undefined } });
   await writeAudit({ actorId: user.id, action: "article.create", entityType: "Article", entityId: article.id, after: { title, slug, status: article.status } });
   revalidatePath("/blog/");
   redirect("/admin/content/?saved=1");

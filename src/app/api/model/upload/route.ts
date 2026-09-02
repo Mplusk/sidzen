@@ -3,6 +3,7 @@ import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { analyzeModel } from "@/lib/model-analysis";
+import { modelFileResponse } from "@/lib/model-file-response";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { hasTrustedOrigin } from "@/lib/request-security";
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
       cookieStore.set(GUEST_FILE_COOKIE, guestKey, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 7 });
     }
     const existing = await prisma.customerModelFile.findFirst({ where: user ? { ownerId: user.id, sha256 } : { guestKey, sha256 } });
-    if (existing) return NextResponse.json({ file: serialize(existing), duplicate: true });
+    if (existing) return NextResponse.json({ file: modelFileResponse(existing), duplicate: true });
     const storedName = await storeModelFile(buffer, extension);
     const record = await prisma.customerModelFile.create({
       data: {
@@ -56,17 +57,9 @@ export async function POST(request: Request) {
         analysisNote: analysis.note,
       },
     });
-    return NextResponse.json({ file: serialize(record) }, { status: 201 });
+    return NextResponse.json({ file: modelFileResponse(record) }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Не удалось обработать файл";
     return NextResponse.json({ error: message }, { status: 400 });
   }
-}
-
-function serialize(file: { id: string; originalName: string; extension: string; sizeBytes: bigint; widthMm: unknown; heightMm: unknown; depthMm: unknown; volumeCm3: unknown; watertight: boolean | null; status: string; analysisNote: string | null }) {
-  return { ...file, sizeBytes: Number(file.sizeBytes), widthMm: numberOrNull(file.widthMm), heightMm: numberOrNull(file.heightMm), depthMm: numberOrNull(file.depthMm), volumeCm3: numberOrNull(file.volumeCm3) };
-}
-
-function numberOrNull(value: unknown) {
-  return value == null ? null : Number(value);
 }

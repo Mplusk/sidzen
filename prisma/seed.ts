@@ -68,8 +68,8 @@ async function seedCatalog() {
   for (const [slug, name, description, image] of categories) {
     await prisma.category.upsert({
       where: { slug },
-      update: { name, description, image, visible: true },
-      create: { slug, name, h1: name, title: `${name} на заказ — 3DPRINTA`, metaDescription: `${description}. 3D-печать с доставкой по России.`, description, image, visible: true },
+      update: { name, description, image, visible: true, title: `${name} на заказ` },
+      create: { slug, name, h1: name, title: `${name} на заказ`, metaDescription: `${description}. 3D-печать с доставкой по России.`, description, image, visible: true },
     });
   }
 
@@ -133,6 +133,7 @@ async function seedCatalog() {
         stock: item.stock,
         badge: item.badge,
         shortDescription: item.shortDescription,
+        title: `${item.name} — купить с доставкой`,
         status: PublicationStatus.PUBLISHED,
       },
       create: {
@@ -155,7 +156,7 @@ async function seedCatalog() {
         widthMm,
         depthMm,
         heightMm,
-        title: `${item.name} — купить с доставкой | 3DPRINTA`,
+        title: `${item.name} — купить с доставкой`,
         metaDescription: `${item.shortDescription} Производство 3DPRINTA, доставка по России.`,
         h1: item.name,
         publishedAt: new Date(),
@@ -192,8 +193,8 @@ async function seedContent() {
   for (const article of articles) {
     await prisma.article.upsert({
       where: { slug: article.slug },
-      update: { ...article, status: PublicationStatus.PUBLISHED },
-      create: { ...article, rubricId: rubric.id, status: PublicationStatus.PUBLISHED, authorName: "Команда 3DPRINTA", h1: article.title, metaTitle: `${article.title} | 3DPRINTA`, metaDescription: article.excerpt, publishedAt: new Date() },
+      update: { ...article, metaTitle: article.title, status: PublicationStatus.PUBLISHED },
+      create: { ...article, rubricId: rubric.id, status: PublicationStatus.PUBLISHED, authorName: "Команда 3DPRINTA", h1: article.title, metaTitle: article.title, metaDescription: article.excerpt, publishedAt: new Date() },
     });
   }
 
@@ -239,9 +240,9 @@ async function seedContent() {
   for (const [code, name, description, basePrice] of deliveryMethods) await prisma.deliveryMethod.upsert({ where: { code }, update: { name, description, basePrice }, create: { code, name, description, basePrice } });
 
   const seoPages = [
-    ["/", "3D-печать на заказ и готовые изделия | 3DPRINTA", "Интернет-магазин готовых изделий и 3D-печать по вашей модели с доставкой по России.", "3D-печать, которая решает задачу"],
-    ["/catalog/", "Каталог изделий 3D-печати | 3DPRINTA", "Готовые органайзеры, крепления, декор и прототипы. Выбор материала и цвета.", "Каталог изделий"],
-    ["/print/", "3D-печать по вашей модели — расчёт онлайн | 3DPRINTA", "Загрузите STL или OBJ, выберите материал и получите предварительную стоимость печати.", "Напечатать свою модель"],
+    ["/", "3D-печать на заказ и готовые изделия", "Интернет-магазин готовых изделий и 3D-печать по вашей модели с доставкой по России.", "3D-печать, которая решает задачу"],
+    ["/catalog/", "Каталог изделий 3D-печати", "Готовые органайзеры, крепления, декор и прототипы. Выбор материала и цвета.", "Каталог изделий"],
+    ["/print/", "3D-печать по вашей модели — расчёт онлайн", "Загрузите STL или OBJ, выберите материал и получите предварительную стоимость печати.", "Напечатать свою модель"],
   ] as const;
   for (const [path, title, metaDescription, h1] of seoPages) await prisma.seoPage.upsert({ where: { path }, update: { title, metaDescription, h1 }, create: { path, title, metaDescription, h1, schemaTypes: path === "/" ? ["Organization", "WebSite", "FAQPage"] : ["BreadcrumbList"] } });
 }

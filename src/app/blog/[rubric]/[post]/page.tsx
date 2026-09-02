@@ -4,9 +4,10 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { JsonLd } from "@/components/json-ld";
 import { prisma } from "@/lib/prisma";
 import { formatDate } from "@/lib/format";
+import { normalizePageTitle } from "@/lib/seo";
 
 type Params = Promise<{ rubric: string; post: string }>;
-export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> { const { post } = await params; const article = await prisma.article.findUnique({ where: { slug: post } }); return article ? { title: article.metaTitle ?? article.title, description: article.metaDescription ?? article.excerpt, alternates: { canonical: article.canonical ?? `/blog/guides/${article.slug}/` }, robots: article.robots } : {}; }
+export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> { const { post } = await params; const article = await prisma.article.findUnique({ where: { slug: post } }); return article ? { title: normalizePageTitle(article.metaTitle ?? article.title), description: article.metaDescription ?? article.excerpt, alternates: { canonical: article.canonical ?? `/blog/guides/${article.slug}/` }, robots: article.robots } : {}; }
 
 export default async function ArticlePage({ params }: { params: Params }) {
   const { post, rubric } = await params;

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { formatPrice } from "@/lib/format";
+import { normalizePageTitle } from "@/lib/seo";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { JsonLd } from "@/components/json-ld";
 import { addProductToCart } from "@/app/actions/cart";
@@ -15,12 +16,13 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const { product: slug, category } = await params;
   const product = await prisma.product.findUnique({ where: { slug }, include: { images: { orderBy: { sortOrder: "asc" }, take: 1 } } });
   if (!product) return {};
+  const title = normalizePageTitle(product.title ?? product.name);
   return {
-    title: product.title ?? product.name,
+    title,
     description: product.metaDescription ?? product.shortDescription,
     alternates: { canonical: product.canonical ?? `/catalog/${category}/${product.slug}/` },
     robots: product.robots,
-    openGraph: { title: product.title ?? product.name, description: product.metaDescription ?? product.shortDescription ?? undefined, images: product.images[0] ? [{ url: product.images[0].path, alt: product.images[0].alt }] : undefined },
+    openGraph: { title, description: product.metaDescription ?? product.shortDescription ?? undefined, images: product.images[0] ? [{ url: product.images[0].path, alt: product.images[0].alt }] : undefined },
   };
 }
 
