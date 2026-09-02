@@ -89,8 +89,8 @@ cleanup_successful_deploy() {
   find "$incoming_root" -mindepth 1 -maxdepth 1 -type f -name '*.tar.gz' -delete
 
   docker builder prune --all --force
-  docker image prune --all --force
   docker container prune --force
+  docker image prune --all --force
 }
 
 if [[ "$previous_release" == "$final_release" ]]; then
