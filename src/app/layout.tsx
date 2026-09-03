@@ -8,10 +8,10 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://3dprinta.shop"),
-  title: { default: "3DPRINTA — 3D-печать на заказ", template: "%s | 3DPRINTA" },
-  description: "Готовые изделия и 3D-печать по вашей модели с доставкой по России.",
+  title: { default: "Каталог изделий 3DPRINTA", template: "%s | 3DPRINTA" },
+  description: "Каталог готовых изделий с выбором материала, цвета и доставкой по России.",
   applicationName: "3DPRINTA",
-  alternates: { canonical: "/" },
+  alternates: { canonical: "/catalog/" },
   openGraph: { type: "website", locale: "ru_RU", siteName: "3DPRINTA", images: [{ url: "/generated/hero-studio.webp", width: 1536, height: 1024 }] },
   icons: { icon: "/favicon.svg" },
 };

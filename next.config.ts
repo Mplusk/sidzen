@@ -10,6 +10,15 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "110mb",
     },
   },
+  async redirects() {
+    const catalogOnlySections = ["print", "materials", "technologies", "blog", "faq", "delivery", "about", "contacts", "compare", "search"];
+    return [
+      { source: "/", destination: "/catalog/", permanent: true },
+      ...catalogOnlySections.map((section) => ({ source: `/${section}/:path*`, destination: "/catalog/", permanent: true })),
+      { source: "/account/models/:path*", destination: "/account/", permanent: true },
+      { source: "/account/favorites/:path*", destination: "/account/", permanent: true },
+    ];
+  },
   async headers() {
     return [
       {
