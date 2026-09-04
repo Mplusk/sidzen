@@ -41,7 +41,7 @@ fi
 
 compose_for() {
   local release_dir="$1"
-  docker compose \
+  COMPOSE_PARALLEL_LIMIT=1 docker compose \
     --project-name "$compose_project" \
     --env-file "$shared_env" \
     --file "${release_dir}/compose.yaml" \
@@ -125,7 +125,7 @@ rm -rf -- "$final_release"
 mv "$staging_release" "$final_release"
 
 printf 'Building release %s.\n' "$release_sha"
-if ! compose_for "$final_release" build --pull; then
+if ! compose_for "$final_release" build; then
   rollback "image build"
 fi
 
