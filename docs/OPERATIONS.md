@@ -30,7 +30,7 @@ Workflow `.github/workflows/ci.yml` запускает Prisma validation, ESLint
 5. переключает `/opt/3dprinta/current` на новый release;
 6. только после успешного health check удаляет предыдущие release-каталоги, архивы, Docker build cache, остановленные контейнеры и неиспользуемые образы.
 
-При ошибке сборки, миграции, старта или health check workflow завершается с ошибкой и пытается пересобрать и запустить предыдущий release. Volumes PostgreSQL и пользовательских моделей никогда не очищаются.
+При ошибке сборки, миграции, старта или health check workflow завершается с ошибкой и пытается пересобрать и запустить предыдущий release. Volumes PostgreSQL, пользовательских моделей и изображений товаров никогда не очищаются.
 
 Repository secrets:
 
@@ -63,7 +63,8 @@ curl --fail http://127.0.0.1:3000/api/health/
 
 - PostgreSQL в custom-format dump;
 - закрытый volume с моделями пользователей;
-- SHA-256 обоих архивов.
+- volume с загруженными изображениями товаров;
+- SHA-256 всех файлов резервной копии.
 
 Пример cron (каждый день в 03:20 UTC):
 
@@ -81,6 +82,7 @@ curl --fail http://127.0.0.1:3000/api/health/
 cd /opt/3dprinta/current
 docker compose --project-name 3dprinta --env-file .env.production exec -T db pg_restore --clean --if-exists --no-owner -U 3dprinta -d 3dprinta < /var/backups/3dprinta/<timestamp>/database.dump
 docker run --rm -v 3dprinta_model-files:/target -v /var/backups/3dprinta/<timestamp>:/backup:ro alpine:3.20 sh -c 'cd /target && tar -xzf /backup/model-files.tar.gz'
+docker run --rm -v 3dprinta_product-images:/target -v /var/backups/3dprinta/<timestamp>:/backup:ro alpine:3.20 sh -c 'cd /target && tar -xzf /backup/product-images.tar.gz'
 ```
 
 После восстановления проверьте `/api/health/`, вход администратора, каталог и доступ к файлам заказа.

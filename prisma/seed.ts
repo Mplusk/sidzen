@@ -123,20 +123,11 @@ async function seedCatalog() {
     { slug: "custom-model-print", sku: "PRINT-FILE-01", name: "Печать по вашей 3D-модели", category: "prototypes", type: ProductType.PRINT_TEMPLATE, basePrice: 650, stock: 0, badge: "Расчёт онлайн", image: "/generated/product-custom-print.webp", shortDescription: "Загрузите STL или OBJ, выберите материал и получите предварительную цену.", dimensions: [100, 100, 100], material: "pla" },
   ];
   for (const item of products) {
+    const existingProduct = await prisma.product.findUnique({ where: { slug: item.slug }, select: { id: true } });
+    if (existingProduct) continue;
     const [widthMm, depthMm, heightMm] = item.dimensions;
-    const product = await prisma.product.upsert({
-      where: { slug: item.slug },
-      update: {
-        name: item.name,
-        basePrice: item.basePrice,
-        oldPrice: item.oldPrice,
-        stock: item.stock,
-        badge: item.badge,
-        shortDescription: item.shortDescription,
-        title: `${item.name} — купить с доставкой`,
-        status: PublicationStatus.PUBLISHED,
-      },
-      create: {
+    const product = await prisma.product.create({
+      data: {
         name: item.name,
         slug: item.slug,
         sku: item.sku,

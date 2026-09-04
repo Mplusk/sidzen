@@ -1,5 +1,9 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { Prisma, type Product } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -8,6 +12,7 @@ import { writeAudit } from "@/lib/audit";
 import { slugify } from "@/lib/format";
 import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { parseProductForm, type ProductGalleryEntry } from "@/lib/product-admin";
 
 const orderStatuses = ["NEW", "ESTIMATING", "APPROVED", "AWAITING_PAYMENT", "PAID", "QUEUED", "PRINTING", "POST_PROCESSING", "PACKED", "SHIPPED", "DELIVERED", "CANCELED", "REFUNDED"] as const;
 
@@ -31,39 +36,167 @@ export async function updateTrackingAction(formData: FormData) {
   revalidatePath("/admin/orders/");
 }
 
+const productUploadDirectory = join(process.cwd(), "public", "uploads", "products");
+const imageTypes = new Map([["image/jpeg", "jpg"], ["image/png", "png"], ["image/webp", "webp"], ["image/avif", "avif"]]);
+
+function productImageFile(storedName: string) {
+  return join(process.cwd(), "public", "uploads", "products", storedName);
+}
+
+function validImageSignature(buffer: Buffer, type: string) {
+  if (type === "image/jpeg") return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  if (type === "image/png") return buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  if (type === "image/webp") return buffer.length >= 12 && buffer.subarray(0, 4).toString() === "RIFF" && buffer.subarray(8, 12).toString() === "WEBP";
+  if (type === "image/avif") return buffer.length >= 12 && buffer.subarray(4, 8).toString() === "ftyp" && ["avif", "avis"].includes(buffer.subarray(8, 12).toString());
+  return false;
+}
+
+async function storeProductImages(formData: FormData, productName: string) {
+  const files = formData.getAll("newImages").filter((entry): entry is File => entry instanceof File && entry.size > 0);
+  if (files.length > 10) throw new Error("images");
+  if (!files.length) return { entries: [] as ProductGalleryEntry[], storedPaths: [] as string[] };
+  await mkdir(productUploadDirectory, { recursive: true, mode: 0o755 });
+  const entries: ProductGalleryEntry[] = [];
+  const storedPaths: string[] = [];
+
+  try {
+    for (const file of files) {
+      const extension = imageTypes.get(file.type);
+      if (!extension || file.size > 10 * 1024 * 1024) throw new Error("images");
+      const buffer = Buffer.from(await file.arrayBuffer());
+      if (!validImageSignature(buffer, file.type)) throw new Error("images");
+      const storedName = `${randomUUID()}.${extension}`;
+      await writeFile(productImageFile(storedName), buffer, { flag: "wx", mode: 0o644 });
+      storedPaths.push(storedName);
+      entries.push({ path: `/uploads/products/${storedName}`, alt: `${productName}, изделие 3D-печати`, sortOrder: entries.length });
+    }
+    return { entries, storedPaths };
+  } catch (error) {
+    await Promise.all(storedPaths.map((storedName) => unlink(productImageFile(storedName)).catch(() => undefined)));
+    throw error;
+  }
+}
+
+async function removeStoredImages(storedPaths: string[]) {
+  await Promise.all(storedPaths.map((storedName) => unlink(productImageFile(storedName)).catch(() => undefined)));
+}
+
+function optionalText(value: string) {
+  return value || null;
+}
+
+function publicationDate(value: string, status: string, previous?: Date | null) {
+  if (value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) throw new Error("invalid");
+    return date;
+  }
+  return status === "PUBLISHED" ? previous ?? new Date() : null;
+}
+
+function productMutationData(input: Extract<ReturnType<typeof parseProductForm>, { success: true }>["data"], uploadedImages: ProductGalleryEntry[], previousImages: Array<{ path: string; width: number | null; height: number | null }> = [], previousPublishedAt?: Date | null, fillSeoDefaults = false) {
+  const existingDimensions = new Map(previousImages.map((image) => [image.path, { width: image.width, height: image.height }]));
+  const images = [...input.images, ...uploadedImages].map((image, sortOrder) => ({ ...image, sortOrder, ...existingDimensions.get(image.path) }));
+  return {
+    name: input.name,
+    slug: slugify(input.slug || input.name),
+    sku: input.sku,
+    type: input.type,
+    status: input.status,
+    badge: optionalText(input.badge),
+    shortDescription: optionalText(input.shortDescription),
+    description: optionalText(input.description),
+    usage: optionalText(input.usage),
+    instructions: optionalText(input.instructions),
+    specifications: input.specifications ? input.specifications as Prisma.InputJsonValue : Prisma.DbNull,
+    basePrice: input.basePrice,
+    oldPrice: input.oldPrice ?? null,
+    costPrice: input.costPrice ?? null,
+    stock: input.stock,
+    madeToOrder: input.madeToOrder,
+    leadDays: input.leadDays,
+    weightGrams: input.weightGrams ?? null,
+    widthMm: input.widthMm ?? null,
+    depthMm: input.depthMm ?? null,
+    heightMm: input.heightMm ?? null,
+    modelAsset: optionalText(input.modelAsset),
+    title: optionalText(input.title) ?? (fillSeoDefaults ? input.name : null),
+    h1: optionalText(input.h1) ?? (fillSeoDefaults ? input.name : null),
+    metaDescription: optionalText(input.metaDescription) ?? (fillSeoDefaults ? optionalText(input.shortDescription) : null),
+    canonical: optionalText(input.canonical),
+    robots: input.robots,
+    publishedAt: publicationDate(input.publishedAt, input.status, previousPublishedAt),
+    categoryRows: input.categoryIds.map((categoryId) => ({ categoryId, isPrimary: categoryId === input.primaryCategoryId })),
+    images,
+    materialLinks: input.materialIds.map((id) => ({ id })),
+    colorLinks: input.colorIds.map((id) => ({ id })),
+    technologyLinks: input.technologyIds.map((id) => ({ id })),
+    qualityLinks: input.qualityProfileIds.map((id) => ({ id })),
+    postProcessLinks: input.postProcessIds.map((id) => ({ id })),
+  };
+}
+
+function productErrorCode(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" ? "duplicate" : error instanceof Error && ["images", "specifications"].includes(error.message) ? error.message : "invalid";
+}
+
 export async function createProductAction(formData: FormData) {
   const user = await requirePermission(PERMISSIONS.productsWrite);
-  const parsed = z.object({ name: z.string().trim().min(3).max(180), slug: z.string().trim().max(200), sku: z.string().trim().min(2).max(80), categoryId: z.string().min(1), basePrice: z.coerce.number().min(0), stock: z.coerce.number().int().min(0), shortDescription: z.string().trim().max(500), status: z.enum(["DRAFT", "REVIEW", "PUBLISHED", "HIDDEN", "ARCHIVED"]) }).safeParse({ name: formData.get("name"), slug: formData.get("slug") ?? "", sku: formData.get("sku"), categoryId: formData.get("categoryId"), basePrice: formData.get("basePrice"), stock: formData.get("stock"), shortDescription: formData.get("shortDescription") ?? "", status: formData.get("status") ?? "DRAFT" });
-  if (!parsed.success) redirect("/admin/products/?error=invalid");
-  const slug = parsed.data.slug ? slugify(parsed.data.slug) : slugify(parsed.data.name);
-  const product = await prisma.product.create({ data: { name: parsed.data.name, slug, sku: parsed.data.sku, basePrice: parsed.data.basePrice, stock: parsed.data.stock, madeToOrder: parsed.data.stock === 0, shortDescription: parsed.data.shortDescription, status: parsed.data.status, publishedAt: parsed.data.status === "PUBLISHED" ? new Date() : undefined, h1: parsed.data.name, title: parsed.data.name, metaDescription: parsed.data.shortDescription, categories: { create: { categoryId: parsed.data.categoryId, isPrimary: true } } } });
+  const parsed = parseProductForm(formData);
+  if (!parsed.success) redirect(`/admin/products/new/?error=${parsed.error}`);
+  let upload: Awaited<ReturnType<typeof storeProductImages>>;
+  try {
+    upload = await storeProductImages(formData, parsed.data.name);
+  } catch (error) {
+    redirect(`/admin/products/new/?error=${productErrorCode(error)}`);
+  }
+
+  let product: Product;
+  try {
+    const data = productMutationData(parsed.data, upload.entries, [], undefined, true);
+    if (!data.slug) throw new Error("invalid");
+    product = await prisma.product.create({ data: {
+      name: data.name, slug: data.slug, sku: data.sku, type: data.type, status: data.status, badge: data.badge, shortDescription: data.shortDescription, description: data.description, usage: data.usage, instructions: data.instructions, specifications: data.specifications, basePrice: data.basePrice, oldPrice: data.oldPrice, costPrice: data.costPrice, stock: data.stock, madeToOrder: data.madeToOrder, leadDays: data.leadDays, weightGrams: data.weightGrams, widthMm: data.widthMm, depthMm: data.depthMm, heightMm: data.heightMm, modelAsset: data.modelAsset, title: data.title, h1: data.h1, metaDescription: data.metaDescription, canonical: data.canonical, robots: data.robots, publishedAt: data.publishedAt,
+      categories: { create: data.categoryRows }, images: { create: data.images }, materials: { connect: data.materialLinks }, colors: { connect: data.colorLinks }, technologies: { connect: data.technologyLinks }, qualityProfiles: { connect: data.qualityLinks }, postProcesses: { connect: data.postProcessLinks },
+    } });
+  } catch (error) {
+    await removeStoredImages(upload.storedPaths);
+    redirect(`/admin/products/new/?error=${productErrorCode(error)}`);
+  }
   await writeAudit({ actorId: user.id, action: "product.create", entityType: "Product", entityId: product.id, after: { name: product.name, slug: product.slug, price: Number(product.basePrice), status: product.status } });
+  revalidatePath("/catalog/");
   redirect(`/admin/products/${product.id}/?created=1`);
 }
 
 export async function updateProductAction(formData: FormData) {
   const user = await requirePermission(PERMISSIONS.productsWrite);
   const id = String(formData.get("id") ?? "");
-  const before = await prisma.product.findUniqueOrThrow({ where: { id } });
-  const data = {
-    name: String(formData.get("name") ?? "").trim().slice(0, 180),
-    slug: slugify(String(formData.get("slug") ?? before.slug)),
-    sku: String(formData.get("sku") ?? before.sku).trim().slice(0, 80),
-    basePrice: Number(formData.get("basePrice")),
-    oldPrice: formData.get("oldPrice") ? Number(formData.get("oldPrice")) : null,
-    stock: Math.max(0, Number(formData.get("stock")) || 0),
-    leadDays: Math.max(1, Number(formData.get("leadDays")) || 3),
-    shortDescription: String(formData.get("shortDescription") ?? "").trim(),
-    description: String(formData.get("description") ?? "").trim(),
-    title: String(formData.get("title") ?? "").trim(),
-    metaDescription: String(formData.get("metaDescription") ?? "").trim(),
-    h1: String(formData.get("h1") ?? "").trim(),
-    robots: String(formData.get("robots") ?? "index,follow"),
-    status: String(formData.get("status") ?? "DRAFT") as "DRAFT" | "REVIEW" | "PUBLISHED" | "HIDDEN" | "ARCHIVED",
-  };
-  const product = await prisma.product.update({ where: { id }, data: { ...data, publishedAt: data.status === "PUBLISHED" ? before.publishedAt ?? new Date() : before.publishedAt } });
+  if (!id) redirect("/admin/products/");
+  const parsed = parseProductForm(formData);
+  if (!parsed.success) redirect(`/admin/products/${id}/?error=${parsed.error}`);
+  const before = await prisma.product.findUniqueOrThrow({ where: { id }, include: { images: true, categories: { include: { category: { select: { slug: true } } } } } });
+  let upload: Awaited<ReturnType<typeof storeProductImages>>;
+  try {
+    upload = await storeProductImages(formData, parsed.data.name);
+  } catch (error) {
+    redirect(`/admin/products/${id}/?error=${productErrorCode(error)}`);
+  }
+
+  let product: Product;
+  try {
+    const data = productMutationData(parsed.data, upload.entries, before.images, before.publishedAt);
+    if (!data.slug) throw new Error("invalid");
+    product = await prisma.product.update({ where: { id }, data: {
+      name: data.name, slug: data.slug, sku: data.sku, type: data.type, status: data.status, badge: data.badge, shortDescription: data.shortDescription, description: data.description, usage: data.usage, instructions: data.instructions, specifications: data.specifications, basePrice: data.basePrice, oldPrice: data.oldPrice, costPrice: data.costPrice, stock: data.stock, madeToOrder: data.madeToOrder, leadDays: data.leadDays, weightGrams: data.weightGrams, widthMm: data.widthMm, depthMm: data.depthMm, heightMm: data.heightMm, modelAsset: data.modelAsset, title: data.title, h1: data.h1, metaDescription: data.metaDescription, canonical: data.canonical, robots: data.robots, publishedAt: data.publishedAt,
+      categories: { deleteMany: {}, create: data.categoryRows }, images: { deleteMany: {}, create: data.images }, materials: { set: data.materialLinks }, colors: { set: data.colorLinks }, technologies: { set: data.technologyLinks }, qualityProfiles: { set: data.qualityLinks }, postProcesses: { set: data.postProcessLinks },
+    } });
+  } catch (error) {
+    await removeStoredImages(upload.storedPaths);
+    redirect(`/admin/products/${id}/?error=${productErrorCode(error)}`);
+  }
   await writeAudit({ actorId: user.id, action: "product.update", entityType: "Product", entityId: product.id, before: { name: before.name, slug: before.slug, price: Number(before.basePrice), status: before.status }, after: { name: product.name, slug: product.slug, price: Number(product.basePrice), status: product.status } });
   revalidatePath("/catalog/");
+  for (const category of before.categories) revalidatePath(`/catalog/${category.category.slug}/${before.slug}/`);
   redirect(`/admin/products/${product.id}/?saved=1`);
 }
 

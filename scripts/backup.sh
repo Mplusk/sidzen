@@ -17,7 +17,8 @@ cd "$project_dir"
 
 docker compose --project-name 3dprinta --env-file .env.production exec -T db pg_dump -U 3dprinta -d 3dprinta --format=custom > "${destination}/database.dump"
 docker run --rm -v 3dprinta_model-files:/source:ro -v "${destination}:/backup" alpine:3.20 tar -czf /backup/model-files.tar.gz -C /source .
-sha256sum "${destination}/database.dump" "${destination}/model-files.tar.gz" > "${destination}/SHA256SUMS"
+docker run --rm -v 3dprinta_product-images:/source:ro -v "${destination}:/backup" alpine:3.20 tar -czf /backup/product-images.tar.gz -C /source .
+sha256sum "${destination}/database.dump" "${destination}/model-files.tar.gz" "${destination}/product-images.tar.gz" > "${destination}/SHA256SUMS"
 
 find "$backup_dir" -mindepth 1 -maxdepth 1 -type d -mtime "+${retention_days}" -exec rm -rf -- {} +
 printf 'Backup created: %s\n' "$destination"

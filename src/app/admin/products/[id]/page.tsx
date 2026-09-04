@@ -1,13 +1,52 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { updateProductAction } from "@/app/actions/admin";
+import { AdminProductForm, type ProductFormOptions, type ProductFormValue } from "@/components/admin-product-form";
 import { prisma } from "@/lib/prisma";
 
 export const metadata: Metadata = { title: "Редактирование товара", robots: { index: false, follow: false } };
 
-export default async function AdminProductPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; created?: string }> }) {
+export default async function AdminProductPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; created?: string; error?: string }> }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
-  const product = await prisma.product.findUnique({ where: { id }, include: { categories: { include: { category: true } }, images: true } });
+  const [product, categories, materials, colors, technologies, qualityProfiles, postProcesses] = await Promise.all([
+    prisma.product.findUnique({ where: { id }, include: { categories: { orderBy: { isPrimary: "desc" }, include: { category: { select: { slug: true } } } }, images: { orderBy: { sortOrder: "asc" } }, materials: { select: { id: true } }, colors: { select: { id: true } }, technologies: { select: { id: true } }, qualityProfiles: { select: { id: true } }, postProcesses: { select: { id: true } } } }),
+    prisma.category.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.material.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.color.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, hex: true } }),
+    prisma.technology.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.qualityProfile.findMany({ orderBy: { layerHeightMm: "desc" }, select: { id: true, name: true, layerHeightMm: true } }),
+    prisma.postProcessOption.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, price: true } }),
+  ]);
   if (!product) notFound();
-  return <><div className="admin-header"><div><span className="eyebrow">{product.sku}</span><h1>{product.name}</h1></div></div>{(query.saved || query.created) && <p className="notice notice--success">Изменения сохранены.</p>}<form action={updateProductAction} className="admin-grid"><input type="hidden" name="id" value={product.id} /><div className="admin-card"><h2>Основное</h2><div className="form-grid"><label className="field field--full"><span>Название</span><input name="name" defaultValue={product.name} required /></label><label className="field"><span>Slug</span><input name="slug" defaultValue={product.slug} required /></label><label className="field"><span>Артикул</span><input name="sku" defaultValue={product.sku} required /></label><label className="field"><span>Цена</span><input name="basePrice" type="number" defaultValue={Number(product.basePrice)} /></label><label className="field"><span>Старая цена</span><input name="oldPrice" type="number" defaultValue={product.oldPrice ? Number(product.oldPrice) : ""} /></label><label className="field"><span>Остаток</span><input name="stock" type="number" defaultValue={product.stock} /></label><label className="field"><span>Срок, дней</span><input name="leadDays" type="number" defaultValue={product.leadDays} /></label><label className="field"><span>Статус</span><select name="status" defaultValue={product.status}><option value="DRAFT">Черновик</option><option value="REVIEW">На модерации</option><option value="PUBLISHED">Опубликован</option><option value="HIDDEN">Скрыт</option><option value="ARCHIVED">Архив</option></select></label></div></div><div className="admin-card"><h2>Контент</h2><div className="form-grid"><label className="field field--full"><span>Короткое описание</span><textarea name="shortDescription" defaultValue={product.shortDescription ?? ""} /></label><label className="field field--full"><span>Полное описание</span><textarea name="description" defaultValue={product.description ?? ""} style={{ minHeight: 220 }} /></label></div></div><div className="admin-card admin-card--wide"><h2>SEO</h2><div className="form-grid"><label className="field"><span>Title</span><input name="title" defaultValue={product.title ?? ""} /></label><label className="field"><span>H1</span><input name="h1" defaultValue={product.h1 ?? ""} /></label><label className="field field--full"><span>Description</span><textarea name="metaDescription" defaultValue={product.metaDescription ?? ""} /></label><label className="field"><span>Robots</span><select name="robots" defaultValue={product.robots}><option value="index,follow">index, follow</option><option value="noindex,follow">noindex, follow</option><option value="noindex,nofollow">noindex, nofollow</option></select></label></div><button className="button" style={{ marginTop: 24 }} type="submit">Сохранить товар</button></div></form></>;
+
+  const options: ProductFormOptions = {
+    categories,
+    materials,
+    colors,
+    technologies,
+    qualityProfiles: qualityProfiles.map((item) => ({ ...item, layerHeightMm: Number(item.layerHeightMm) })),
+    postProcesses: postProcesses.map((item) => ({ ...item, price: Number(item.price) })),
+  };
+  const primaryCategory = product.categories.find((item) => item.isPrimary) ?? product.categories[0];
+  const value: ProductFormValue = {
+    ...product,
+    basePrice: Number(product.basePrice),
+    oldPrice: product.oldPrice == null ? null : Number(product.oldPrice),
+    costPrice: product.costPrice == null ? null : Number(product.costPrice),
+    weightGrams: product.weightGrams == null ? null : Number(product.weightGrams),
+    widthMm: product.widthMm == null ? null : Number(product.widthMm),
+    depthMm: product.depthMm == null ? null : Number(product.depthMm),
+    heightMm: product.heightMm == null ? null : Number(product.heightMm),
+    robots: product.robots as ProductFormValue["robots"],
+    primaryCategoryId: primaryCategory?.categoryId ?? categories[0]?.id ?? "",
+    categoryIds: product.categories.map((item) => item.categoryId),
+    materialIds: product.materials.map((item) => item.id),
+    colorIds: product.colors.map((item) => item.id),
+    technologyIds: product.technologies.map((item) => item.id),
+    qualityProfileIds: product.qualityProfiles.map((item) => item.id),
+    postProcessIds: product.postProcesses.map((item) => item.id),
+  };
+  const publicHref = primaryCategory && product.status === "PUBLISHED" ? `/catalog/${primaryCategory.category.slug}/${product.slug}/` : null;
+
+  return <><div className="admin-header"><div><span className="eyebrow">{product.sku}</span><h1>{product.name}</h1></div><div className="admin-header__actions"><Link className="button button--outline" href="/admin/products/">К списку</Link>{publicHref && <Link className="button button--outline" href={publicHref} target="_blank">Открыть на сайте</Link>}</div></div>{(query.saved || query.created) && <p className="notice notice--success">Изменения сохранены.</p>}<AdminProductForm options={options} product={value} error={query.error} /></>;
 }
