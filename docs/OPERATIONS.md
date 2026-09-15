@@ -27,10 +27,10 @@ Workflow `.github/workflows/ci.yml` запускает Prisma validation, ESLint
 2. передаёт его на сервер отдельным SSH-ключом пользователя деплоя;
 3. собирает образы, применяет миграции и запускает release;
 4. проверяет `/api/health/` и состояние БД;
-5. атомарно направляет cron-скрипт `/usr/local/sbin/3dprinta-backup` на `current/scripts/backup.sh` и переключает `/opt/3dprinta/current` на новый release;
+5. проверяет ссылку cron-скрипта `/usr/local/sbin/3dprinta-backup` на `current/scripts/backup.sh` и переключает `/opt/3dprinta/current` на новый release;
 6. только после успешного health check удаляет предыдущие release-каталоги, архивы, Docker build cache, остановленные контейнеры и неиспользуемые образы.
 
-При ошибке сборки, миграции, старта, health check, обновления cron-скрипта или переключения `current` workflow завершается с ошибкой и пытается пересобрать и запустить предыдущий release. Volumes PostgreSQL, пользовательских моделей и изображений товаров никогда не очищаются.
+При ошибке сборки, миграции, старта, health check, проверки cron-скрипта или переключения `current` workflow завершается с ошибкой и пытается пересобрать и запустить предыдущий release. Volumes PostgreSQL, пользовательских моделей и изображений товаров никогда не очищаются.
 
 Repository secrets:
 
@@ -72,7 +72,7 @@ curl --fail http://127.0.0.1:3000/api/health/
 20 3 * * * /usr/local/sbin/3dprinta-backup >> /var/log/3dprinta-backup.log 2>&1
 ```
 
-После успешного health check deploy атомарно делает этот путь ссылкой на `/opt/3dprinta/current/scripts/backup.sh`. Поэтому cron всегда использует скрипт активного release, а удаление прежних release не ломает резервное копирование. При первом переносе установленный ранее wrapper сохраняется как `/opt/3dprinta/shared/3dprinta-backup.legacy`.
+Системный путь настраивается один раз от `root`: установленный wrapper сохраняется как `/opt/3dprinta/shared/3dprinta-backup.legacy`, затем `/usr/local/sbin/3dprinta-backup` атомарно заменяется ссылкой на `/opt/3dprinta/current/scripts/backup.sh`. Deploy-пользователь не получает прав на запись в `/usr/local/sbin`; CI/CD только проверяет ссылку до сборки и после health check. Поэтому cron всегда использует скрипт активного release, а удаление прежних release не ломает резервное копирование.
 
 Проверка после выкладки: `readlink /usr/local/sbin/3dprinta-backup` должен вернуть `/opt/3dprinta/current/scripts/backup.sh`; `test -x /usr/local/sbin/3dprinta-backup` должен завершиться успешно. Саму резервную копию проверяйте отдельным запуском скрипта и сверкой `SHA256SUMS`.
 

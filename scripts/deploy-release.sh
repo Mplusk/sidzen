@@ -94,40 +94,25 @@ cleanup_successful_deploy() {
   docker image prune --all --force
 }
 
-ensure_backup_entrypoint() {
+verify_backup_entrypoint() {
+  local release_dir="${1:-$final_release}"
   local backup_script="${current_link}/scripts/backup.sh"
-  local legacy_copy="${project_root}/shared/3dprinta-backup.legacy"
-  local temporary_entrypoint="/usr/local/sbin/.3dprinta-backup-${release_sha}"
 
-  if [[ ! -x "${final_release}/scripts/backup.sh" ]]; then
+  if [[ ! -x "${release_dir}/scripts/backup.sh" ]]; then
     printf 'Release backup script is missing or not executable.\n' >&2
     return 1
   fi
 
-  if [[ -L "$backup_entrypoint" && "$(readlink "$backup_entrypoint")" == "$backup_script" ]]; then
-    return 0
-  fi
-
-  if [[ ! -d /usr/local/sbin ]]; then
-    printf 'Backup cron directory does not exist: /usr/local/sbin\n' >&2
+  if [[ ! -L "$backup_entrypoint" || "$(readlink "$backup_entrypoint")" != "$backup_script" || ( -n "$previous_release" && ! -x "$backup_entrypoint" ) ]]; then
+    printf 'Backup cron entrypoint must be provisioned by root as a symlink to %s.\n' "$backup_script" >&2
     return 1
   fi
-
-  # Keep the original cron target once, so replacing an installed wrapper is recoverable.
-  if [[ ( -e "$backup_entrypoint" || -L "$backup_entrypoint" ) && ! -e "$legacy_copy" && ! -L "$legacy_copy" ]]; then
-    cp -a -- "$backup_entrypoint" "$legacy_copy" || return 1
-  fi
-
-  rm -f -- "$temporary_entrypoint" || return 1
-  ln -s "$backup_script" "$temporary_entrypoint" || return 1
-  mv -Tf -- "$temporary_entrypoint" "$backup_entrypoint" || return 1
-  printf 'Backup cron entrypoint now follows the active release.\n'
 }
 
 if [[ "$previous_release" == "$final_release" ]]; then
   if wait_for_health; then
     printf 'Release %s is already active and healthy. Cleaning residual caches.\n' "$release_sha"
-    ensure_backup_entrypoint
+    verify_backup_entrypoint
     cleanup_successful_deploy
     compose_for "$final_release" ps
     exit 0
@@ -152,6 +137,10 @@ if [[ ! -f "${staging_release}/compose.yaml" || ! -f "${staging_release}/Dockerf
   exit 2
 fi
 
+if ! verify_backup_entrypoint "$staging_release"; then
+  exit 2
+fi
+
 ln -sfn "$shared_env" "${staging_release}/.env.production"
 rm -rf -- "$final_release"
 mv "$staging_release" "$final_release"
@@ -171,8 +160,8 @@ if ! wait_for_health; then
   rollback "health check"
 fi
 
-if ! ensure_backup_entrypoint; then
-  rollback "backup cron entrypoint migration"
+if ! verify_backup_entrypoint; then
+  rollback "backup cron entrypoint check"
 fi
 
 temporary_link="${project_root}/.current-${release_sha}"
