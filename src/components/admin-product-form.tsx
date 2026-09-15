@@ -112,7 +112,7 @@ export function AdminProductForm({ options, product, error, canPublish = true }:
         <label className="admin-check admin-check--standalone"><input name="madeToOrder" type="checkbox" defaultChecked={product?.madeToOrder ?? false} /><span><strong>Изготавливается под заказ</strong><small>Показывать срок вместо обычного наличия</small></span></label>
       </div></section>
 
-      <section className="admin-card admin-card--wide"><h2>Категории</h2><div className="form-grid">
+      <section className="admin-card admin-card--wide"><div className="catalog-section-heading"><h2>Категории</h2><Link className="text-link" href="/admin/catalog/#category">Создать или удалить категорию</Link></div><div className="form-grid">
         <label className="field"><span>Основная категория *</span><select name="primaryCategoryId" defaultValue={firstCategory} required>{options.categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select></label>
         <div className="field field--full"><span>Дополнительные категории</span><CheckboxGroup name="categoryIds" options={options.categories} selected={product?.categoryIds} /></div>
       </div></section>
@@ -134,7 +134,7 @@ export function AdminProductForm({ options, product, error, canPublish = true }:
 
       <section className="admin-card"><h2>Характеристики</h2><label className="field"><span>JSON-объект</span><textarea className="admin-code-field" name="specificationsText" defaultValue={specificationsText} placeholder={'{\n  "Слой": "0,2 мм",\n  "Допуск": "±0,3 мм"\n}'} /><small>Каждая пара «ключ — значение» появится строкой в таблице характеристик.</small></label></section>
 
-      <section className="admin-card admin-card--wide"><h2>Материалы, цвета и производство</h2><div className="admin-relations">
+      <section className="admin-card admin-card--wide"><div className="catalog-section-heading"><h2>Материалы, цвета и производство</h2><Link className="text-link" href="/admin/catalog/#material">Управлять справочниками</Link></div><div className="admin-relations">
         <div><h3>Материалы</h3><CheckboxGroup name="materialIds" options={options.materials} selected={product?.materialIds} /></div>
         <div><h3>Цвета</h3><CheckboxGroup name="colorIds" options={options.colors} selected={product?.colorIds} renderDetail={(option) => <small className="admin-option-detail"><i className="color-dot" style={{ "--dot": (option as ColorOption).hex } as React.CSSProperties} /></small>} /></div>
         <div><h3>Технологии</h3><CheckboxGroup name="technologyIds" options={options.technologies} selected={product?.technologyIds} /></div>

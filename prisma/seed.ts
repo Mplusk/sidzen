@@ -59,6 +59,21 @@ async function seedAccess() {
 }
 
 async function seedCatalog() {
+  const markerKey = "system.catalogSeeded";
+  if (await prisma.siteSetting.findUnique({ where: { key: markerKey }, select: { id: true } })) return;
+
+  // Existing catalogs belong to administrators. Mark them as initialized rather
+  // than recreating removed defaults or overwriting edited lookup entries.
+  const catalogCounts = await Promise.all([
+    prisma.category.count(), prisma.material.count(), prisma.color.count(),
+    prisma.technology.count(), prisma.qualityProfile.count(),
+    prisma.postProcessOption.count(), prisma.product.count(),
+  ]);
+  if (catalogCounts.some((count) => count > 0)) {
+    await prisma.siteSetting.create({ data: { key: markerKey, value: true, group: "system", label: "Каталог инициализирован" } });
+    return;
+  }
+
   const categories = [
     ["organizers", "Органайзеры", "Порядок на рабочем столе, в мастерской и дома", "/generated/product-organizer.webp"],
     ["fasteners", "Крепления", "Кронштейны, адаптеры и точные технические детали", "/generated/product-mount.webp"],
@@ -113,10 +128,6 @@ async function seedCatalog() {
     { slug: "painting", name: "Покраска", price: 1200, leadDays: 3, description: "Грунт и окраска в согласованный цвет" },
   ];
   for (const option of postProcesses) await prisma.postProcessOption.upsert({ where: { slug: option.slug }, update: option, create: option });
-
-  // Seed examples only for a brand-new catalog. Admin-managed products can change
-  // both their slug and SKU, so neither identifier is safe for repeat seeding.
-  if (await prisma.product.count()) return;
 
   const products = [
     { slug: "modular-desk-organizer", sku: "ORG-MOD-01", name: "Модульный органайзер Axis", category: "organizers", type: ProductType.READY, basePrice: 1290, oldPrice: 1490, stock: 18, badge: "Хит", image: "/generated/product-organizer.webp", shortDescription: "Система лотков, которую можно наращивать под рабочее место.", dimensions: [180, 105, 42], material: "pla" },
@@ -174,6 +185,8 @@ async function seedCatalog() {
       },
     });
   }
+
+  await prisma.siteSetting.create({ data: { key: markerKey, value: true, group: "system", label: "Каталог инициализирован" } });
 }
 
 async function seedContent() {

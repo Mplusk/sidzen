@@ -217,23 +217,6 @@ export async function updateProductAction(formData: FormData) {
   redirect(`/admin/products/${product.id}/?saved=1`);
 }
 
-export async function createCategoryAction(formData: FormData) {
-  const user = await requirePermission(PERMISSIONS.productsWrite);
-  const name = String(formData.get("name") ?? "").trim();
-  if (name.length < 2) redirect("/admin/catalog/?error=category");
-  const category = await prisma.category.create({ data: { name, slug: slugify(String(formData.get("slug") ?? name)), description: String(formData.get("description") ?? ""), title: name, metaDescription: String(formData.get("description") ?? ""), h1: name } });
-  await writeAudit({ actorId: user.id, action: "category.create", entityType: "Category", entityId: category.id, after: { name, slug: category.slug } });
-  revalidatePath("/admin/catalog/");
-}
-
-export async function createMaterialAction(formData: FormData) {
-  const user = await requirePermission(PERMISSIONS.productsWrite);
-  const name = String(formData.get("name") ?? "").trim();
-  const material = await prisma.material.create({ data: { name, slug: slugify(String(formData.get("slug") ?? name)), type: String(formData.get("type") ?? "пластик"), density: Number(formData.get("density")), pricePerGram: Number(formData.get("pricePerGram")), description: String(formData.get("description") ?? "") } });
-  await writeAudit({ actorId: user.id, action: "material.create", entityType: "Material", entityId: material.id, after: { name, pricePerGram: Number(material.pricePerGram) } });
-  revalidatePath("/admin/catalog/");
-}
-
 export async function upsertSeoPageAction(formData: FormData) {
   const user = await requirePermission(PERMISSIONS.seoWrite);
   const path = String(formData.get("path") ?? "").trim();
@@ -260,7 +243,7 @@ export async function updateSettingAction(formData: FormData) {
   const key = String(formData.get("key") ?? "");
   const raw = String(formData.get("value") ?? "");
   const current = await prisma.siteSetting.findUnique({ where: { key } });
-  if (!current) redirect("/admin/settings/?error=key");
+  if (!current || current.group === "system") redirect("/admin/settings/?error=key");
   const value = typeof current.value === "number" ? Number(raw) : raw;
   await prisma.siteSetting.update({ where: { key }, data: { value } });
   await writeAudit({ actorId: user.id, action: "setting.update", entityType: "SiteSetting", entityId: current.id, before: { value: current.value }, after: { value } });

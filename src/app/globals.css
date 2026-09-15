@@ -336,6 +336,17 @@ input[type="range"] { accent-color: var(--blue); }
 .admin-image-preview img { object-fit: cover; }
 .admin-code-field { min-height: 180px !important; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .82rem; }
 .admin-form-actions { display: flex; gap: 12px; padding: 10px 0 28px; }
+.catalog-section-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px 20px; margin-bottom: 16px; }
+.catalog-section-heading h2 { margin: 0; }
+.catalog-section-heading > span, .catalog-admin-intro, .catalog-empty { color: var(--muted); font-size: .88rem; }
+.catalog-admin-intro { max-width: 850px; margin: 0 0 20px; }
+.catalog-admin-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.catalog-admin-nav a { padding: 8px 12px; border: 1px solid var(--line); border-radius: 100px; background: var(--white); font-size: .82rem; font-weight: 700; }
+.catalog-admin-nav a:hover { border-color: var(--blue); color: var(--blue); }
+.catalog-create-form { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--line); }
+.catalog-create-form .button { justify-self: start; }
+.admin-delete-link { border: 0; padding: 0; color: #b52f32; background: transparent; cursor: pointer; font-size: .84rem; }
+.admin-delete-link:disabled { color: var(--muted); cursor: not-allowed; font-weight: 500; }
 
 .empty-state { padding: 60px 24px; border: 1px dashed #b8bdc2; border-radius: var(--radius); text-align: center; color: var(--muted); }
 .error-page { min-height: 520px; display: grid; place-items: center; text-align: center; }
