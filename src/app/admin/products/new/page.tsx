@@ -2,10 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AdminProductForm, type ProductFormOptions } from "@/components/admin-product-form";
 import { prisma } from "@/lib/prisma";
+import { requirePermission } from "@/lib/auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const metadata: Metadata = { title: "Новый товар", robots: { index: false, follow: false } };
 
 export default async function NewProductPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const user = await requirePermission(PERMISSIONS.productsWrite);
   const [query, categories, materials, colors, technologies, qualityProfiles, postProcesses] = await Promise.all([
     searchParams,
     prisma.category.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
@@ -24,5 +27,5 @@ export default async function NewProductPage({ searchParams }: { searchParams: P
     postProcesses: postProcesses.map((item) => ({ ...item, price: Number(item.price) })),
   };
 
-  return <><div className="admin-header"><div><span className="eyebrow">Каталог</span><h1>Новый товар</h1></div><Link className="button button--outline" href="/admin/products/">К списку</Link></div><AdminProductForm options={options} error={query.error} /></>;
+  return <><div className="admin-header"><div><span className="eyebrow">Каталог</span><h1>Новый товар</h1></div><Link className="button button--outline" href="/admin/products/">К списку</Link></div><AdminProductForm options={options} error={query.error} canPublish={user.permissions.has(PERMISSIONS.productsPublish) || user.roles.includes("superadmin")} /></>;
 }

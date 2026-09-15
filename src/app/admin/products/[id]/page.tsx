@@ -3,10 +3,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminProductForm, type ProductFormOptions, type ProductFormValue } from "@/components/admin-product-form";
 import { prisma } from "@/lib/prisma";
+import { requirePermission } from "@/lib/auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const metadata: Metadata = { title: "Редактирование товара", robots: { index: false, follow: false } };
 
 export default async function AdminProductPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; created?: string; error?: string }> }) {
+  const user = await requirePermission(PERMISSIONS.productsWrite);
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const [product, categories, materials, colors, technologies, qualityProfiles, postProcesses] = await Promise.all([
     prisma.product.findUnique({ where: { id }, include: { categories: { orderBy: { isPrimary: "desc" }, include: { category: { select: { slug: true } } } }, images: { orderBy: { sortOrder: "asc" } }, materials: { select: { id: true } }, colors: { select: { id: true } }, technologies: { select: { id: true } }, qualityProfiles: { select: { id: true } }, postProcesses: { select: { id: true } } } }),
@@ -18,6 +21,7 @@ export default async function AdminProductPage({ params, searchParams }: { param
     prisma.postProcessOption.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, price: true } }),
   ]);
   if (!product) notFound();
+  if (product.status === "PUBLISHED") await requirePermission(PERMISSIONS.productsPublish);
 
   const options: ProductFormOptions = {
     categories,
@@ -48,5 +52,5 @@ export default async function AdminProductPage({ params, searchParams }: { param
   };
   const publicHref = primaryCategory && product.status === "PUBLISHED" ? `/catalog/${primaryCategory.category.slug}/${product.slug}/` : null;
 
-  return <><div className="admin-header"><div><span className="eyebrow">{product.sku}</span><h1>{product.name}</h1></div><div className="admin-header__actions"><Link className="button button--outline" href="/admin/products/">К списку</Link>{publicHref && <Link className="button button--outline" href={publicHref} target="_blank">Открыть на сайте</Link>}</div></div>{(query.saved || query.created) && <p className="notice notice--success">Изменения сохранены.</p>}<AdminProductForm options={options} product={value} error={query.error} /></>;
+  return <><div className="admin-header"><div><span className="eyebrow">{product.sku}</span><h1>{product.name}</h1></div><div className="admin-header__actions"><Link className="button button--outline" href="/admin/products/">К списку</Link>{publicHref && <Link className="button button--outline" href={publicHref} target="_blank">Открыть на сайте</Link>}</div></div>{(query.saved || query.created) && <p className="notice notice--success">Изменения сохранены.</p>}<AdminProductForm options={options} product={value} error={query.error} canPublish={user.permissions.has(PERMISSIONS.productsPublish) || user.roles.includes("superadmin")} /></>;
 }

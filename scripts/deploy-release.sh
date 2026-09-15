@@ -7,6 +7,7 @@ release_root="${project_root}/releases"
 incoming_root="${project_root}/incoming"
 shared_env="${project_root}/shared/.env.production"
 current_link="${project_root}/current"
+backup_entrypoint="/usr/local/sbin/3dprinta-backup"
 artifact="${incoming_root}/${release_sha}.tar.gz"
 staging_release="${release_root}/${release_sha}.staging"
 final_release="${release_root}/${release_sha}"
@@ -93,9 +94,40 @@ cleanup_successful_deploy() {
   docker image prune --all --force
 }
 
+ensure_backup_entrypoint() {
+  local backup_script="${current_link}/scripts/backup.sh"
+  local legacy_copy="${project_root}/shared/3dprinta-backup.legacy"
+  local temporary_entrypoint="/usr/local/sbin/.3dprinta-backup-${release_sha}"
+
+  if [[ ! -x "${final_release}/scripts/backup.sh" ]]; then
+    printf 'Release backup script is missing or not executable.\n' >&2
+    return 1
+  fi
+
+  if [[ -L "$backup_entrypoint" && "$(readlink "$backup_entrypoint")" == "$backup_script" ]]; then
+    return 0
+  fi
+
+  if [[ ! -d /usr/local/sbin ]]; then
+    printf 'Backup cron directory does not exist: /usr/local/sbin\n' >&2
+    return 1
+  fi
+
+  # Keep the original cron target once, so replacing an installed wrapper is recoverable.
+  if [[ ( -e "$backup_entrypoint" || -L "$backup_entrypoint" ) && ! -e "$legacy_copy" && ! -L "$legacy_copy" ]]; then
+    cp -a -- "$backup_entrypoint" "$legacy_copy" || return 1
+  fi
+
+  rm -f -- "$temporary_entrypoint" || return 1
+  ln -s "$backup_script" "$temporary_entrypoint" || return 1
+  mv -Tf -- "$temporary_entrypoint" "$backup_entrypoint" || return 1
+  printf 'Backup cron entrypoint now follows the active release.\n'
+}
+
 if [[ "$previous_release" == "$final_release" ]]; then
   if wait_for_health; then
     printf 'Release %s is already active and healthy. Cleaning residual caches.\n' "$release_sha"
+    ensure_backup_entrypoint
     cleanup_successful_deploy
     compose_for "$final_release" ps
     exit 0
@@ -115,7 +147,7 @@ if tar -tzf "$artifact" | grep -Eq '(^|/)\.\.(/|$)|^/'; then
 fi
 
 tar -xzf "$artifact" -C "$staging_release"
-if [[ ! -f "${staging_release}/compose.yaml" || ! -f "${staging_release}/Dockerfile" ]]; then
+if [[ ! -f "${staging_release}/compose.yaml" || ! -f "${staging_release}/Dockerfile" || ! -x "${staging_release}/scripts/backup.sh" ]]; then
   printf 'Release archive is incomplete.\n' >&2
   exit 2
 fi
@@ -139,10 +171,14 @@ if ! wait_for_health; then
   rollback "health check"
 fi
 
+if ! ensure_backup_entrypoint; then
+  rollback "backup cron entrypoint migration"
+fi
+
 temporary_link="${project_root}/.current-${release_sha}"
-rm -f -- "$temporary_link"
-ln -s "$final_release" "$temporary_link"
-mv -Tf "$temporary_link" "$current_link"
+if ! (rm -f -- "$temporary_link" && ln -s "$final_release" "$temporary_link" && mv -Tf "$temporary_link" "$current_link"); then
+  rollback "current release switch"
+fi
 
 printf 'Release %s is healthy. Removing caches and previous versions.\n' "$release_sha"
 cleanup_successful_deploy

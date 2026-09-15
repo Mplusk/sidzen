@@ -114,6 +114,10 @@ async function seedCatalog() {
   ];
   for (const option of postProcesses) await prisma.postProcessOption.upsert({ where: { slug: option.slug }, update: option, create: option });
 
+  // Seed examples only for a brand-new catalog. Admin-managed products can change
+  // both their slug and SKU, so neither identifier is safe for repeat seeding.
+  if (await prisma.product.count()) return;
+
   const products = [
     { slug: "modular-desk-organizer", sku: "ORG-MOD-01", name: "Модульный органайзер Axis", category: "organizers", type: ProductType.READY, basePrice: 1290, oldPrice: 1490, stock: 18, badge: "Хит", image: "/generated/product-organizer.webp", shortDescription: "Система лотков, которую можно наращивать под рабочее место.", dimensions: [180, 105, 42], material: "pla" },
     { slug: "headphone-stand-arc", sku: "ORG-ARC-02", name: "Подставка для наушников Arc", category: "organizers", type: ProductType.READY, basePrice: 1890, stock: 7, badge: "Новинка", image: "/generated/product-headphone-stand.webp", shortDescription: "Устойчивая геометрия и скрытый канал для кабеля.", dimensions: [145, 110, 255], material: "petg" },
@@ -123,8 +127,6 @@ async function seedCatalog() {
     { slug: "custom-model-print", sku: "PRINT-FILE-01", name: "Печать по вашей 3D-модели", category: "prototypes", type: ProductType.PRINT_TEMPLATE, basePrice: 650, stock: 0, badge: "Расчёт онлайн", image: "/generated/product-custom-print.webp", shortDescription: "Загрузите STL или OBJ, выберите материал и получите предварительную цену.", dimensions: [100, 100, 100], material: "pla" },
   ];
   for (const item of products) {
-    const existingProduct = await prisma.product.findUnique({ where: { slug: item.slug }, select: { id: true } });
-    if (existingProduct) continue;
     const [widthMm, depthMm, heightMm] = item.dimensions;
     const product = await prisma.product.create({
       data: {

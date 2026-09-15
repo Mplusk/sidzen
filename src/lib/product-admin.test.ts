@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseGallery, parseProductForm, parseSpecifications, serializeGallery } from "./product-admin";
+import { assertImageCapacity, parseGallery, parseProductForm, parseSpecifications, serializeGallery, storedProductImageName } from "./product-admin";
 
 function validForm() {
   const form = new FormData();
@@ -39,5 +39,18 @@ describe("product admin form", () => {
 
   it("serializes editable gallery rows", () => {
     expect(serializeGallery([{ path: "/a.webp", alt: "A", caption: "Вид" }])).toBe("/a.webp | A | Вид");
+  });
+
+  it("enforces the total gallery limit before and after uploads", () => {
+    expect(() => assertImageCapacity(19, 1)).not.toThrow();
+    expect(() => assertImageCapacity(19, 2)).toThrow("images");
+    expect(() => parseGallery(Array.from({ length: 21 }, (_, index) => `/generated/${index}.webp`).join("\n"), "Alt")).toThrow("images");
+  });
+
+  it("only identifies product-upload paths with generated UUID names for cleanup", () => {
+    const name = "cab33247-58f7-4c6c-a8ff-19035ea60b31.webp";
+    expect(storedProductImageName(`/uploads/products/${name}`)).toBe(name);
+    expect(storedProductImageName("/uploads/products/../../private/file.webp")).toBeNull();
+    expect(storedProductImageName("/generated/product.webp")).toBeNull();
   });
 });

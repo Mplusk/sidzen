@@ -3,6 +3,7 @@ import { z } from "zod";
 export const PRODUCT_STATUSES = ["DRAFT", "REVIEW", "PUBLISHED", "HIDDEN", "ARCHIVED"] as const;
 export const PRODUCT_TYPES = ["READY", "PARAMETRIC", "PRINT_TEMPLATE"] as const;
 export const ROBOTS_VALUES = ["index,follow", "noindex,follow", "noindex,nofollow"] as const;
+export const MAX_PRODUCT_IMAGES = 20;
 
 const optionalNumber = (maximum: number) => z.preprocess(
   (value) => value === "" || value == null ? undefined : Number(value),
@@ -74,7 +75,7 @@ export function parseSpecifications(value: string) {
 export function parseGallery(value: string, fallbackAlt: string): ProductGalleryEntry[] {
   if (!value.trim()) return [];
   const entries = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  if (entries.length > 20) throw new Error("images");
+  if (entries.length > MAX_PRODUCT_IMAGES) throw new Error("images");
 
   return entries.map((line, sortOrder) => {
     const [rawPath, rawAlt, ...captionParts] = line.split("|");
@@ -86,6 +87,15 @@ export function parseGallery(value: string, fallbackAlt: string): ProductGallery
     }
     return { path, alt, caption: caption || undefined, sortOrder };
   });
+}
+
+export function assertImageCapacity(existingCount: number, addedCount: number) {
+  if (existingCount + addedCount > MAX_PRODUCT_IMAGES) throw new Error("images");
+}
+
+export function storedProductImageName(path: string) {
+  const match = /^\/uploads\/products\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:jpg|png|webp|avif))$/i.exec(path);
+  return match?.[1] ?? null;
 }
 
 export function serializeGallery(entries: Array<{ path: string; alt: string; caption?: string | null }>) {

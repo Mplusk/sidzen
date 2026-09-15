@@ -81,7 +81,7 @@ function CheckboxGroup({ name, options, selected, renderDetail }: { name: string
   return <div className="admin-options-grid">{options.map((option) => <label className="admin-check" key={option.id}><input type="checkbox" name={name} value={option.id} defaultChecked={checked(selected, option.id)} /><span><strong>{option.name}</strong>{renderDetail?.(option)}</span></label>)}</div>;
 }
 
-export function AdminProductForm({ options, product, error }: { options: ProductFormOptions; product?: ProductFormValue; error?: string }) {
+export function AdminProductForm({ options, product, error, canPublish = true }: { options: ProductFormOptions; product?: ProductFormValue; error?: string; canPublish?: boolean }) {
   const isEdit = Boolean(product);
   const firstCategory = product?.primaryCategoryId || options.categories[0]?.id || "";
   const imagesText = product ? serializeGallery(product.images) : "";
@@ -99,7 +99,7 @@ export function AdminProductForm({ options, product, error }: { options: Product
         <label className="field"><span>Slug</span><input name="slug" defaultValue={product?.slug} maxLength={200} placeholder="создастся из названия" /></label>
         <label className="field"><span>Артикул *</span><input name="sku" defaultValue={product?.sku} maxLength={80} required /></label>
         <label className="field"><span>Тип товара</span><select name="type" defaultValue={product?.type ?? "READY"}>{PRODUCT_TYPES.map((type) => <option value={type} key={type}>{typeLabels[type]}</option>)}</select></label>
-        <label className="field"><span>Статус</span><select name="status" defaultValue={product?.status ?? "DRAFT"}>{PRODUCT_STATUSES.map((status) => <option value={status} key={status}>{statusLabels[status]}</option>)}</select></label>
+        <label className="field"><span>Статус</span><select name="status" defaultValue={product?.status ?? "DRAFT"}>{PRODUCT_STATUSES.filter((status) => canPublish || status !== "PUBLISHED").map((status) => <option value={status} key={status}>{statusLabels[status]}</option>)}</select></label>
         <label className="field field--full"><span>Бейдж на карточке</span><input name="badge" defaultValue={product?.badge ?? ""} maxLength={80} placeholder="Хит, Новинка, Под заказ" /></label>
       </div></section>
 
