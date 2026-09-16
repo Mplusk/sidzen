@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Image from "next/image";
+import { ProductGallery } from "@/components/product-gallery";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -44,7 +44,6 @@ export default async function ProductPage({ params }: { params: Params }) {
   const category = product.categories.find((item) => item.category.slug === categorySlug)?.category ?? product.categories.find((item) => item.isPrimary)?.category ?? product.categories[0]?.category;
   if (!category) notFound();
   const rating = product.reviews.length ? product.reviews.reduce((sum, review) => sum + review.rating, 0) / product.reviews.length : 5;
-  const image = product.images[0];
   const schema = {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -63,27 +62,7 @@ export default async function ProductPage({ params }: { params: Params }) {
       <div className="container"><Breadcrumbs items={[{ label: "Каталог", href: "/catalog/" }, { label: category.name, href: `/catalog/${category.slug}/` }, { label: product.name }]} /></div>
       <article className="container product-detail">
         <div className="product-detail__grid">
-          <div className="product-gallery">
-            <figure className="product-gallery__primary">
-              <div className="product-gallery__main">
-                {product.badge && <span className="badge">{product.badge}</span>}
-                {image && <Image src={image.path} alt={image.alt} fill priority sizes="(max-width: 820px) 100vw, 50vw" />}
-              </div>
-              {image?.caption && <figcaption>{image.caption}</figcaption>}
-            </figure>
-            {product.images.length > 1 && (
-              <div className="product-gallery__extras">
-                {product.images.slice(1).map((item) => (
-                  <figure className="product-gallery__extra" key={item.id}>
-                    <div className="product-gallery__extra-image">
-                      <Image src={item.path} alt={item.alt} fill sizes="(max-width: 560px) 42vw, (max-width: 820px) 28vw, 15vw" />
-                    </div>
-                    {item.caption && <figcaption>{item.caption}</figcaption>}
-                  </figure>
-                ))}
-              </div>
-            )}
-          </div>
+          <ProductGallery key={product.id} images={product.images.map(({ path, alt, caption }) => ({ path, alt, caption }))} name={product.name} badge={product.badge} />
           <div className="product-summary">
             <span className="eyebrow">{category.name} · {product.sku}</span>
             <h1>{product.h1 ?? product.name}</h1>

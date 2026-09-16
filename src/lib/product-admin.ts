@@ -48,6 +48,7 @@ const productSchema = z.object({
   postProcessIds: z.array(z.string().trim().min(1)).max(100),
   specificationsText: z.string().trim().max(30_000),
   imagesText: z.string().trim().max(30_000),
+  imageLayout: z.string().max(30_000),
 });
 
 export type ProductGalleryEntry = {
@@ -93,13 +94,20 @@ export function assertImageCapacity(existingCount: number, addedCount: number) {
   if (existingCount + addedCount > MAX_PRODUCT_IMAGES) throw new Error("images");
 }
 
+export function arrangeProductImages<T extends ProductGalleryEntry>(images: T[], value: string): T[] {
+  if (!value) return images;
+  const layout = z.array(z.object({ index: z.number().int().min(0), alt: z.string().trim().max(250), caption: z.string().trim().max(500) })).max(MAX_PRODUCT_IMAGES).parse(JSON.parse(value));
+  if (layout.length !== images.length || new Set(layout.map((entry) => entry.index)).size !== images.length || layout.some((entry) => entry.index >= images.length)) throw new Error("images");
+  return layout.map((entry, sortOrder) => ({ ...images[entry.index], alt: entry.alt || images[entry.index].alt, caption: entry.caption || undefined, sortOrder }));
+}
+
 export function storedProductImageName(path: string) {
   const match = /^\/uploads\/products\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:jpg|png|webp|avif))$/i.exec(path);
   return match?.[1] ?? null;
 }
 
 export function serializeGallery(entries: Array<{ path: string; alt: string; caption?: string | null }>) {
-  return entries.map((entry) => [entry.path, entry.alt, entry.caption].filter((part) => part != null && part !== "").join(" | ")).join("\n");
+  return entries.map((entry) => [entry.path, entry.alt, ...(entry.caption ? [entry.caption] : [])].join(" | ")).join("\n");
 }
 
 export function parseProductForm(formData: FormData) {
@@ -141,6 +149,7 @@ export function parseProductForm(formData: FormData) {
     postProcessIds: selectedValues(formData, "postProcessIds"),
     specificationsText: stringValue(formData, "specificationsText"),
     imagesText: stringValue(formData, "imagesText"),
+    imageLayout: stringValue(formData, "imageLayout"),
   });
   if (!result.success) return { success: false as const, error: "invalid" };
 

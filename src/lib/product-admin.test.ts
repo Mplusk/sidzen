@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertImageCapacity, parseGallery, parseProductForm, parseSpecifications, serializeGallery, storedProductImageName } from "./product-admin";
+import { arrangeProductImages, assertImageCapacity, parseGallery, parseProductForm, parseSpecifications, serializeGallery, storedProductImageName } from "./product-admin";
 
 function validForm() {
   const form = new FormData();
@@ -39,6 +39,23 @@ describe("product admin form", () => {
 
   it("serializes editable gallery rows", () => {
     expect(serializeGallery([{ path: "/a.webp", alt: "A", caption: "Вид" }])).toBe("/a.webp | A | Вид");
+  });
+
+  it("keeps a caption separate when the alt text is empty", () => {
+    expect(parseGallery(serializeGallery([{ path: "/a.webp", alt: "", caption: "Вид сбоку" }]), "Товар")[0]).toMatchObject({ alt: "Товар", caption: "Вид сбоку" });
+  });
+
+  it("can make an uploaded photo the cover and preserve metadata and dimensions", () => {
+    const images = [{ path: "/old.webp", alt: "Старое", sortOrder: 0, width: 400 }, { path: "/new.webp", alt: "Товар", sortOrder: 1, width: 800 }];
+    const arranged = arrangeProductImages(images, JSON.stringify([{ index: 1, alt: "", caption: "Новый вид" }, { index: 0, alt: "Сбоку", caption: "" }]));
+    expect(arranged).toEqual([{ path: "/new.webp", alt: "Товар", caption: "Новый вид", sortOrder: 0, width: 800 }, { path: "/old.webp", alt: "Сбоку", caption: undefined, sortOrder: 1, width: 400 }]);
+  });
+
+  it("rejects a gallery order that duplicates, omits or invents photos", () => {
+    const images = [{ path: "/a.webp", alt: "A", sortOrder: 0 }, { path: "/b.webp", alt: "B", sortOrder: 1 }];
+    for (const indices of [[0, 0], [0], [0, 2], [-1, 1]]) {
+      expect(() => arrangeProductImages(images, JSON.stringify(indices.map((index) => ({ index, alt: "", caption: "" }))))).toThrow();
+    }
   });
 
   it("enforces the total gallery limit before and after uploads", () => {

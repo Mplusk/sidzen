@@ -2,6 +2,8 @@
 .next
 node_modules
 private-uploads
+public/uploads/products/*
+!public/uploads/products/.gitkeep
 backups
 .env*
 *.log

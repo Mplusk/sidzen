@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { ProductCard } from "@/components/product-card";
-import { Breadcrumbs } from "@/components/breadcrumbs";
 import { getCatalog, type CatalogParams } from "@/lib/catalog";
 
 export async function CatalogView({ category, searchParams }: { category?: { slug: string; name: string; description?: string | null; h1?: string | null }; searchParams: CatalogParams }) {
@@ -13,8 +12,7 @@ export async function CatalogView({ category, searchParams }: { category?: { slu
   };
   return (
     <>
-      <div className="container"><Breadcrumbs items={[{ label: "Каталог" }, ...(category ? [{ label: category.name }] : [])]} /></div>
-      <header className="page-hero page-hero--compact"><div className="container"><span className="eyebrow">Каталог 3DPRINTA</span><h1>{category?.h1 ?? category?.name ?? "Каталог изделий"}</h1><p>{category?.description ?? "Выберите категорию, материал и характеристики — товар можно добавить в корзину из его карточки."}</p></div></header>
+      <h1 className="visually-hidden">{category?.h1 ?? category?.name ?? "Каталог изделий"}</h1>
       <div className="container catalog-layout">
         <aside className="filters">
           <form action={category ? `/catalog/${category.slug}/` : "/catalog/"}>
@@ -26,7 +24,7 @@ export async function CatalogView({ category, searchParams }: { category?: { slu
           </form>
         </aside>
         <section className="catalog-products">
-          <div className="catalog-toolbar"><span>Найдено: <strong>{data.count}</strong></span><form><input name="q" defaultValue={searchParams.q} placeholder="Поиск по каталогу" aria-label="Поиск по каталогу" /><select name="sort" defaultValue={searchParams.sort ?? "popular"} aria-label="Сортировка"><option value="popular">Сначала популярные</option><option value="new">Сначала новые</option><option value="price-asc">Цена по возрастанию</option><option value="price-desc">Цена по убыванию</option></select><button className="button button--small button--ghost" type="submit">Найти</button></form></div>
+          <div className="catalog-toolbar"><span>{category?.name ?? "Все товары"}<small className="catalog-count">Найдено: {data.count}</small></span><form><input name="q" defaultValue={searchParams.q} placeholder="Поиск по каталогу" aria-label="Поиск по каталогу" /><select name="sort" defaultValue={searchParams.sort ?? "popular"} aria-label="Сортировка"><option value="popular">Сначала популярные</option><option value="new">Сначала новые</option><option value="price-asc">Цена по возрастанию</option><option value="price-desc">Цена по убыванию</option></select><button className="button button--small button--ghost" type="submit">Найти</button></form></div>
           {data.products.length ? <div className="product-grid">{data.products.map((product) => <ProductCard key={product.id} product={product} />)}</div> : <div className="empty-state"><h3>По этим условиям товаров пока нет</h3><p>Измените запрос или сбросьте выбранные фильтры.</p><Link className="button" href={category ? `/catalog/${category.slug}/` : "/catalog/"}>Сбросить фильтры</Link></div>}
           {data.pages > 1 && <nav className="pagination" aria-label="Страницы каталога">{Array.from({ length: data.pages }, (_, index) => index + 1).map((page) => page === data.page ? <span className="active" key={page}>{page}</span> : <Link key={page} href={makeUrl({ page: String(page) })}>{page}</Link>)}</nav>}
         </section>

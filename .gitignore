@@ -8,6 +8,8 @@ coverage
 .DS_Store
 private-uploads/*
 !private-uploads/.gitkeep
+public/uploads/products/*
+!public/uploads/products/.gitkeep
 backups/*
 !backups/.gitkeep
 tsconfig.tsbuildinfo

@@ -34,7 +34,7 @@ export async function getCatalog(params: CatalogParams) {
     { stock: "desc" };
 
   const [products, count, categories, materials, technologies, colors] = await Promise.all([
-    prisma.product.findMany({ where, include: { images: { orderBy: { sortOrder: "asc" }, take: 1 }, categories: { include: { category: true } } }, orderBy, skip: (page - 1) * take, take }),
+    prisma.product.findMany({ where, include: { images: { orderBy: { sortOrder: "asc" }, take: 20 }, categories: { include: { category: true } } }, orderBy, skip: (page - 1) * take, take }),
     prisma.product.count({ where }),
     prisma.category.findMany({ where: { visible: true }, orderBy: { sortOrder: "asc" } }),
     prisma.material.findMany({ where: { active: true }, orderBy: { name: "asc" } }),

@@ -1,7 +1,7 @@
-import Image from "next/image";
 import Link from "next/link";
+import { AdminProductImages } from "@/components/admin-product-images";
 import { createProductAction, updateProductAction } from "@/app/actions/admin";
-import { PRODUCT_STATUSES, PRODUCT_TYPES, ROBOTS_VALUES, serializeGallery } from "@/lib/product-admin";
+import { PRODUCT_STATUSES, PRODUCT_TYPES, ROBOTS_VALUES } from "@/lib/product-admin";
 
 type Option = { id: string; name: string };
 type ColorOption = Option & { hex: string };
@@ -84,9 +84,7 @@ function CheckboxGroup({ name, options, selected, renderDetail }: { name: string
 export function AdminProductForm({ options, product, error, canPublish = true }: { options: ProductFormOptions; product?: ProductFormValue; error?: string; canPublish?: boolean }) {
   const isEdit = Boolean(product);
   const firstCategory = product?.primaryCategoryId || options.categories[0]?.id || "";
-  const imagesText = product ? serializeGallery(product.images) : "";
   const specificationsText = product?.specifications ? JSON.stringify(product.specifications, null, 2) : "";
-  const previewImage = product?.images[0];
   const errorMessage = error === "duplicate" ? "Slug или артикул уже используются другим товаром." : error === "images" ? "Проверьте список изображений и формат загружаемых файлов." : error === "specifications" ? "Характеристики должны быть корректным JSON-объектом." : error ? "Проверьте заполнение полей товара." : null;
 
   return <>
@@ -142,13 +140,7 @@ export function AdminProductForm({ options, product, error, canPublish = true }:
         <div><h3>Постобработка</h3><CheckboxGroup name="postProcessIds" options={options.postProcesses} selected={product?.postProcessIds} renderDetail={(option) => <small>{(option as ProductFormOptions["postProcesses"][number]).price} ₽</small>} /></div>
       </div></section>
 
-      <section className="admin-card admin-card--wide"><h2>Изображения</h2><div className="admin-gallery-editor">
-        {previewImage && <div className="admin-image-preview"><Image src={previewImage.path} alt={previewImage.alt} fill sizes="180px" /></div>}
-        <div className="form-grid">
-          <label className="field field--full"><span>Загрузить новые изображения</span><input type="file" name="newImages" accept="image/jpeg,image/png,image/webp,image/avif" multiple /><small>JPG, PNG, WebP или AVIF, до 10 МБ каждый. Новые файлы добавятся в конец галереи.</small></label>
-          <label className="field field--full"><span>Галерея</span><textarea className="admin-code-field" name="imagesText" defaultValue={imagesText} placeholder="/generated/product.webp | Описание изображения | Подпись" /><small>Одно изображение на строку: путь | alt-текст | подпись. Первая строка — главное изображение.</small></label>
-        </div>
-      </div></section>
+      <section className="admin-card admin-card--wide"><h2>Фотографии товара</h2><AdminProductImages key={JSON.stringify(product?.images ?? [])} initialImages={product?.images ?? []} /></section>
 
       <section className="admin-card admin-card--wide"><h2>SEO и публикация</h2><div className="form-grid">
         <label className="field"><span>Title</span><input name="title" defaultValue={product?.title ?? ""} maxLength={180} /></label>
