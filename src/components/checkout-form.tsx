@@ -5,19 +5,12 @@ import { useState } from "react";
 import { useFormStatus } from "react-dom";
 import { createOrderAction } from "@/app/actions/checkout";
 import { formatPrice } from "@/lib/format";
+import { phoneMask } from "@/lib/phone-input";
 
 type Delivery = { code: string; name: string; description: string | null; basePrice: number };
 function Submit({ total, online }: { total: number; online: boolean }) {
   const { pending } = useFormStatus();
   return <button className="button" type="submit" disabled={pending}>{pending ? "Оформляем…" : `${online ? "Перейти к оплате" : "Оформить заказ"} · ${formatPrice(total)}`}</button>;
-}
-
-function phoneMask(raw: string) {
-  let value = raw.replace(/\D/g, "");
-  if (!value) return "";
-  if (value.startsWith("8") || value.startsWith("7")) value = value.slice(1);
-  value = value.slice(0, 10);
-  return "+7" + (value ? ` (${value.slice(0, 3)}` : "") + (value.length >= 3 ? ") " : "") + value.slice(3, 6) + (value.length > 6 ? `-${value.slice(6, 8)}` : "") + (value.length > 8 ? `-${value.slice(8, 10)}` : "");
 }
 
 export function CheckoutForm({ items, methods, user, onlinePayment, error }: {
