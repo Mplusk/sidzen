@@ -1,35 +1,31 @@
 import Link from "next/link";
 import { ProductCard } from "@/components/product-card";
-import { getCatalog, type CatalogParams } from "@/lib/catalog";
-
+import { CatalogFilters } from "@/components/catalog-filters";
+import { JsonLd } from "@/components/json-ld";
+import { Breadcrumbs } from "@/components/breadcrumbs";
+import { getCatalog, normalizeCatalogParams, type CatalogParams } from "@/lib/catalog";
+import { filterValues } from "@/lib/catalog-search";
+import { pluralRu } from "@/lib/format";
 export async function CatalogView({ category, searchParams }: { category?: { slug: string; name: string; description?: string | null; h1?: string | null }; searchParams: CatalogParams }) {
-  const data = await getCatalog({ ...searchParams, category: category?.slug });
-  const makeUrl = (patch: Record<string, string | undefined>) => {
-    const query = new URLSearchParams();
-    for (const [key, value] of Object.entries({ ...searchParams, ...patch })) if (value) query.set(key, value);
-    const base = category ? `/catalog/${category.slug}/` : "/catalog/";
-    return `${base}${query.size ? `?${query}` : ""}`;
-  };
-  return (
-    <>
-      <h1 className="visually-hidden">{category?.h1 ?? category?.name ?? "Каталог изделий"}</h1>
-      <div className="container catalog-layout">
-        <aside className="filters">
-          <form action={category ? `/catalog/${category.slug}/` : "/catalog/"}>
-            <div className="filter-group"><h3>Категория</h3>{data.categories.map((item) => <Link className="filter-option" href={`/catalog/${item.slug}/`} key={item.id}>{item.name}</Link>)}</div>
-            <div className="filter-group"><h3>Материал</h3>{data.materials.map((material) => <label className="filter-option" key={material.id}><input type="radio" name="material" value={material.slug} defaultChecked={searchParams.material === material.slug} />{material.name}</label>)}</div>
-            <div className="filter-group"><h3>Технология</h3>{data.technologies.map((technology) => <label className="filter-option" key={technology.id}><input type="radio" name="technology" value={technology.slug} defaultChecked={searchParams.technology === technology.slug} />{technology.name}</label>)}</div>
-            <div className="filter-group"><h3>Наличие</h3><label className="filter-option"><input type="checkbox" name="availability" value="stock" defaultChecked={searchParams.availability === "stock"} />В наличии</label></div>
-            <div style={{ display: "flex", gap: 8, marginTop: 18 }}><button className="button button--small" type="submit">Применить</button><Link className="button button--small button--ghost" href={category ? `/catalog/${category.slug}/` : "/catalog/"}>Сбросить</Link></div>
-          </form>
-        </aside>
-        <section className="catalog-products">
-          <div className="catalog-toolbar"><span>{category?.name ?? "Все товары"}<small className="catalog-count">Найдено: {data.count}</small></span><form><input name="q" defaultValue={searchParams.q} placeholder="Поиск по каталогу" aria-label="Поиск по каталогу" /><select name="sort" defaultValue={searchParams.sort ?? "popular"} aria-label="Сортировка"><option value="popular">Сначала популярные</option><option value="new">Сначала новые</option><option value="price-asc">Цена по возрастанию</option><option value="price-desc">Цена по убыванию</option></select><button className="button button--small button--ghost" type="submit">Найти</button></form></div>
-          {data.products.length ? <div className="product-grid">{data.products.map((product) => <ProductCard key={product.id} product={product} />)}</div> : <div className="empty-state"><h3>По этим условиям товаров пока нет</h3><p>Измените запрос или сбросьте выбранные фильтры.</p><Link className="button" href={category ? `/catalog/${category.slug}/` : "/catalog/"}>Сбросить фильтры</Link></div>}
-          {data.pages > 1 && <nav className="pagination" aria-label="Страницы каталога">{Array.from({ length: data.pages }, (_, index) => index + 1).map((page) => page === data.page ? <span className="active" key={page}>{page}</span> : <Link key={page} href={makeUrl({ page: String(page) })}>{page}</Link>)}</nav>}
-        </section>
-      </div>
-      {category?.description && <section className="section section--white"><div className="container rich-text"><h2>О разделе «{category.name}»</h2><p>{category.description}</p><p>Материал, цвет и качество выбираются внутри карточки товара перед добавлением в корзину.</p></div></section>}
-    </>
-  );
+  const params = normalizeCatalogParams(searchParams);
+  const data = await getCatalog({ ...params, category: category?.slug });
+  const base = category ? `/catalog/${category.slug}/` : "/catalog/";
+  const makeUrl = (patch: Record<string, string | undefined>) => { const query = new URLSearchParams(); for (const [key, value] of Object.entries({ ...params, ...patch })) if (value) query.set(key, value); return base + (query.size ? "?" + query : ""); };
+  const groups = ([ ["material", "Материал", data.materials], ["color", "Цвет", data.colors], ["technology", "Технология", data.technologies] ] as const).map(([key, label, options]) => ({ key, label, options: options.map((item) => ({ slug: item.slug, name: item.name, count: item._count.products })) }));
+  const chips = groups.flatMap((group) => filterValues(params[group.key]).map((slug) => ({ label: group.options.find((option) => option.slug === slug)?.name ?? slug, href: makeUrl({ [group.key]: filterValues(params[group.key]).filter((value) => value !== slug).join(","), page: undefined }) })));
+  for (const [key, label] of [["q", "Поиск"], ["min", "Цена от"], ["max", "Цена до"], ["availability", "Наличие"]] as const) if (params[key]) chips.push({ label: label + ": " + (key === "availability" ? "в наличии" : params[key]), href: makeUrl({ [key]: undefined, page: undefined }) });
+  return <>
+    <JsonLd data={{ "@context": "https://schema.org", "@type": "ItemList", numberOfItems: data.count, itemListElement: data.products.map((product, index) => ({ "@type": "ListItem", position: (data.page - 1) * 12 + index + 1, name: product.name, url: `https://3dprinta.shop/catalog/${(product.categories.find((item) => item.isPrimary) ?? product.categories[0])?.category.slug ?? "products"}/${product.slug}/` })) }} />
+    <h1 className="visually-hidden">{category?.h1 ?? category?.name ?? "Каталог изделий"}</h1>
+    <div className="container catalog-shell">
+      {category && <Breadcrumbs items={[{ label: category.name, href: base }]} />}
+      <CatalogFilters base={base} params={params} categories={data.categories.map((item) => ({ slug: item.slug, name: item.name, count: item._count.products }))} groups={groups} suggestions={data.suggestions.map((item) => item.name)} count={data.count} />
+      <section className="catalog-results" aria-label="Товары">
+        <div className="catalog-result-heading"><span>{category?.name ?? "Все товары"}</span><small>{data.count} {pluralRu(data.count, ["товар", "товара", "товаров"])}</small></div>
+        {chips.length > 0 && <nav className="filter-chips" aria-label="Выбранные фильтры">{chips.map((chip) => <Link key={chip.label} href={chip.href} scroll={false} aria-label={"Убрать фильтр " + chip.label}>{chip.label} ×</Link>)}<Link href={base}>Сбросить всё</Link></nav>}
+        {data.products.length ? <div className="product-grid">{data.products.map((product) => <ProductCard key={product.id} product={product} />)}</div> : <><div className="empty-state"><h2>По этим условиям товаров пока нет</h2><p>Попробуйте другое название или назначение изделия. Например: «подставка», «органайзер», «крепление».</p><Link className="button" href={base}>Сбросить фильтры</Link></div>{data.related.length > 0 && <><h2>Другие товары из каталога</h2><div className="product-grid">{data.related.map((product) => <ProductCard key={product.id} product={product} />)}</div></>}</>}
+        {data.pages > 1 && <nav className="pagination" aria-label="Страницы каталога">{Array.from({ length: data.pages }, (_, index) => index + 1).filter((page) => page === 1 || page === data.pages || Math.abs(page - data.page) < 3).map((page) => page === data.page ? <span className="active" aria-current="page" key={page}>{page}</span> : <Link key={page} href={makeUrl({ page: String(page) })}>{page}</Link>)}</nav>}
+      </section>
+    </div>
+  </>;
 }

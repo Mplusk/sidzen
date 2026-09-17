@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
     },
   },
   async redirects() {
-    const catalogOnlySections = ["print", "materials", "technologies", "blog", "faq", "delivery", "about", "contacts", "compare", "search"];
+    const catalogOnlySections = ["print", "technologies", "blog", "compare", "search"];
     return [
       { source: "/", destination: "/catalog/", permanent: true },
       ...catalogOnlySections.map((section) => ({ source: `/${section}/:path*`, destination: "/catalog/", permanent: true })),

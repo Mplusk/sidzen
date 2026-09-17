@@ -135,7 +135,7 @@ async function seedCatalog() {
     { slug: "gopro-universal-mount", sku: "FIX-GP-03", name: "Универсальное крепление GoPro", category: "fasteners", type: ProductType.PARAMETRIC, basePrice: 790, stock: 0, badge: "Под заказ", image: "/generated/product-mount.webp", shortDescription: "Адаптер с выбором угла, длины плеча и типа основания.", dimensions: [68, 34, 22], material: "petg" },
     { slug: "voronoi-lamp", sku: "DEC-VOR-04", name: "Светильник Voronoi", category: "decor", type: ProductType.READY, basePrice: 3490, stock: 4, badge: "Хит", image: "/generated/product-lamp.webp", shortDescription: "Мягкий свет сквозь органическую ячеистую структуру.", dimensions: [160, 160, 245], material: "pla" },
     { slug: "electronics-enclosure", sku: "PRO-BOX-05", name: "Корпус электроники Prototype Box", category: "prototypes", type: ProductType.PARAMETRIC, basePrice: 2190, stock: 0, badge: "Под заказ", image: "/generated/product-enclosure.webp", shortDescription: "Корпус по вашим габаритам с окнами, стойками и вентиляцией.", dimensions: [120, 80, 40], material: "abs" },
-    { slug: "custom-model-print", sku: "PRINT-FILE-01", name: "Печать по вашей 3D-модели", category: "prototypes", type: ProductType.PRINT_TEMPLATE, basePrice: 650, stock: 0, badge: "Расчёт онлайн", image: "/generated/product-custom-print.webp", shortDescription: "Загрузите STL или OBJ, выберите материал и получите предварительную цену.", dimensions: [100, 100, 100], material: "pla" },
+
   ];
   for (const item of products) {
     const [widthMm, depthMm, heightMm] = item.dimensions;
@@ -211,16 +211,23 @@ async function seedContent() {
     ["Доставляете по России?", "Да, отправляем СДЭК или Почтой России. Для вашего города стоимость показывается при оформлении."],
     ["Можно заказать серию?", "Да, для тиражей действует автоматическая оптовая сетка и индивидуальная проверка сроков."],
   ];
-  await prisma.faqItem.deleteMany({ where: { scope: "general" } });
-  await prisma.faqItem.createMany({ data: faq.map(([question, answer], sortOrder) => ({ question, answer, sortOrder, scope: "general" })) });
+  if (!await prisma.faqItem.count({ where: { scope: "general" } })) await prisma.faqItem.createMany({ data: faq.map(([question, answer], sortOrder) => ({ question, answer, sortOrder, scope: "general" })) });
 
   const settings = [
     ["site.name", "3DPRINTA", "general", "Название"],
     ["site.domain", "https://3dprinta.shop", "general", "Домен"],
     ["site.tagline", "Печатаем идеи в точных деталях", "general", "Слоган"],
-    ["contacts.phone", "+7 (800) 301-30-03", "contacts", "Телефон"],
-    ["contacts.email", "hello@3dprinta.shop", "contacts", "Email"],
+    ["contacts.phone", "", "contacts", "Телефон"],
+    ["contacts.email", "", "contacts", "Email"],
     ["contacts.city", "Россия", "contacts", "География"],
+    ["contacts.address", "", "contacts", "Адрес самовывоза"],
+    ["contacts.hours", "", "contacts", "Часы работы"],
+    ["legal.seller", "", "legal", "Наименование продавца"],
+    ["legal.inn", "", "legal", "ИНН"],
+    ["legal.ogrn", "", "legal", "ОГРН / ОГРНИП"],
+    ["legal.address", "", "legal", "Юридический адрес"],
+    ["legal.bank", "", "legal", "Банковские реквизиты"],
+    ["store.about", "", "general", "О магазине — подтверждённые факты"],
     ["print.minimumOrder", 650, "pricing", "Минимальный заказ"],
     ["print.maxUploadMb", 100, "files", "Лимит файла"],
     ["analytics.yandexMetrika", "", "analytics", "Яндекс Метрика"],
@@ -228,7 +235,7 @@ async function seedContent() {
     ["cookie.message", "Мы используем необходимые cookies для работы корзины и личного кабинета.", "legal", "Cookie-баннер"],
   ] as const;
   for (const [key, value, group, label] of settings) {
-    await prisma.siteSetting.upsert({ where: { key }, update: { value, group, label }, create: { key, value, group, label } });
+    await prisma.siteSetting.upsert({ where: { key }, update: { group, label }, create: { key, value, group, label } });
   }
 
   const priceRules = [
@@ -236,14 +243,14 @@ async function seedContent() {
     ["setup_fee", "Подготовка задания", 250, "RUB"],
     ["machine_hour", "Машино-час FDM", 120, "RUB/hour"],
   ] as const;
-  for (const [code, name, value, unit] of priceRules) await prisma.priceRule.upsert({ where: { code }, update: { name, value, unit }, create: { code, name, value, unit } });
+  for (const [code, name, value, unit] of priceRules) await prisma.priceRule.upsert({ where: { code }, update: {}, create: { code, name, value, unit } });
 
   const deliveryMethods = [
     ["cdek", "СДЭК", "До пункта выдачи или курьером", 490],
     ["russian-post", "Почта России", "Посылка с отслеживанием", 390],
     ["pickup", "Самовывоз", "По предварительному согласованию", 0],
   ] as const;
-  for (const [code, name, description, basePrice] of deliveryMethods) await prisma.deliveryMethod.upsert({ where: { code }, update: { name, description, basePrice }, create: { code, name, description, basePrice } });
+  for (const [code, name, description, basePrice] of deliveryMethods) await prisma.deliveryMethod.upsert({ where: { code }, update: {}, create: { code, name, description, basePrice } });
 
   const seoPages = [
     ["/", "3D-печать на заказ и готовые изделия", "Интернет-магазин готовых изделий и 3D-печать по вашей модели с доставкой по России.", "3D-печать, которая решает задачу"],

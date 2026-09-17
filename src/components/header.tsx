@@ -1,16 +1,18 @@
 import Link from "next/link";
+import { getStoreContacts } from "@/lib/settings";
 import { Logo } from "@/components/logo";
 import { CartIcon, UserIcon } from "@/components/icons";
 
 const navigation = [["Каталог", "/catalog/"]];
 
-export function Header() {
+export async function Header() {
+  const contacts = await getStoreContacts();
   return (
     <header className="site-header">
       <div className="utility-bar">
         <div className="container utility-bar__inner">
           <span>Интернет-магазин изделий с доставкой по России</span>
-          <div><a href="mailto:hello@3dprinta.shop">hello@3dprinta.shop</a><a href="tel:+78003013003">8 800 301-30-03</a></div>
+          <div><Link href="/delivery/">Доставка и оплата</Link><Link href="/contacts/">Контакты</Link>{contacts.email && <a href={"mailto:" + contacts.email}>{contacts.email}</a>}</div>
         </div>
       </div>
       <div className="container header-main">

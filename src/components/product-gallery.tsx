@@ -19,7 +19,7 @@ export function ProductGallery({ images, name, badge, href, compact = false }: {
   const swiped = useRef(false);
   const current = images[active] ?? images[0];
   const change = (step: number) => setActive((index) => (index + step + images.length) % images.length);
-  const photo = current ? <Image src={current.path} alt={current.alt || name} fill priority={!compact && active === 0} sizes={compact ? "(max-width: 560px) 92vw, (max-width: 1100px) 42vw, 300px" : "(max-width: 560px) 92vw, 460px"} /> : <span className="image-placeholder">3D</span>;
+  const photo = current ? <Image src={current.path} alt={`${current.alt || name} — фото ${active + 1}`} fill priority={!compact && active === 0} sizes={compact ? "(max-width: 760px) 45vw, (max-width: 1100px) 34vw, 300px" : "(max-width: 560px) 92vw, 460px"} /> : <span className="image-placeholder">3D</span>;
 
   return <div className={`product-gallery${compact ? " product-gallery--compact" : ""}`} role="region" aria-roledescription="карусель" aria-label={`Фотографии: ${name}`}>
     <div className="product-gallery__main" tabIndex={images.length > 1 ? 0 : undefined}
@@ -48,7 +48,7 @@ export function ProductGallery({ images, name, badge, href, compact = false }: {
     {!compact && current?.caption && <p className="product-gallery__caption">{current.caption}</p>}
     {!compact && images.length > 1 && <div className="gallery-thumbnails" aria-label="Выбор фотографии">
       {images.map((item, index) => <button key={`${item.path}-${index}`} className="gallery-thumbnail" type="button" aria-label={`Фото ${index + 1}`} aria-pressed={active === index} onClick={() => setActive(index)}>
-        <Image src={item.path} alt={item.alt || name} fill sizes="72px" />
+        <Image src={item.path} alt={`${item.alt || name} — фото ${index + 1}`} fill sizes="72px" />
       </button>)}
     </div>}
   </div>;

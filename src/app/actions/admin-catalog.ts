@@ -1,7 +1,7 @@
 "use server";
 
 import { Prisma } from "@prisma/client";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
@@ -29,6 +29,7 @@ function catalogErrorCode(error: unknown, operation: "create" | "delete") {
 function refreshCatalogPages() {
   revalidatePath("/admin/catalog/");
   revalidatePath("/admin/products/new/");
+  updateTag("catalog");
   revalidatePath("/catalog/");
   revalidatePath("/materials/");
   revalidatePath("/technologies/");

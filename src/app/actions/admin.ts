@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Prisma, type Product } from "@prisma/client";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requirePermission } from "@/lib/auth";
@@ -167,6 +167,7 @@ export async function createProductAction(formData: FormData) {
     redirect(`/admin/products/new/?error=${productErrorCode(error)}`);
   }
   await writeAudit({ actorId: user.id, action: "product.create", entityType: "Product", entityId: product.id, after: { name: product.name, slug: product.slug, price: Number(product.basePrice), status: product.status } });
+  updateTag("catalog");
   revalidatePath("/catalog/");
   redirect(`/admin/products/${product.id}/?created=1`);
 }
@@ -212,6 +213,7 @@ export async function updateProductAction(formData: FormData) {
       console.error("Could not clean up an unused product image", error);
     }
   }
+  updateTag("catalog");
   revalidatePath("/catalog/");
   for (const category of before.categories) revalidatePath(`/catalog/${category.category.slug}/${before.slug}/`);
   redirect(`/admin/products/${product.id}/?saved=1`);
@@ -247,7 +249,7 @@ export async function updateSettingAction(formData: FormData) {
   const value = typeof current.value === "number" ? Number(raw) : raw;
   await prisma.siteSetting.update({ where: { key }, data: { value } });
   await writeAudit({ actorId: user.id, action: "setting.update", entityType: "SiteSetting", entityId: current.id, before: { value: current.value }, after: { value } });
-  revalidatePath("/admin/settings/");
+  revalidatePath("/", "layout");
 }
 
 export async function assignRoleAction(formData: FormData) {

@@ -2,7 +2,8 @@ export function formatPrice(value: number | string | { toString(): string }) {
   return new Intl.NumberFormat("ru-RU", {
     style: "currency",
     currency: "RUB",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(Number(value));
 }
 
@@ -12,6 +13,17 @@ export function formatDate(value: Date | string) {
     month: "long",
     year: "numeric",
   }).format(new Date(value));
+}
+
+export function pluralRu(value: number, forms: [string, string, string]) {
+  const count = Math.abs(value) % 100;
+  return forms[count > 10 && count < 20 ? 2 : count % 10 === 1 ? 0 : count % 10 >= 2 && count % 10 <= 4 ? 1 : 2];
+}
+
+export function translatedSpecifications(value: unknown) {
+  const labels: Record<string, string> = { layer: "Высота слоя", tolerance: "Допуск", weight: "Вес", dimensions: "Габариты", material: "Материал", color: "Цвет", infill: "Заполнение" };
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !["technology", "Технология"].includes(key)).map(([key, item]) => [labels[key] ?? key, String(item)]));
 }
 
 export function slugify(value: string) {
