@@ -18,7 +18,7 @@ type Params = Promise<{ category: string; product: string }>;
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { product: slug, category } = await params;
   const product = await prisma.product.findUnique({ where: { slug }, include: { images: { orderBy: { sortOrder: "asc" }, take: 1 } } });
-  if (!product || product.status !== "PUBLISHED" || product.type === "PRINT_TEMPLATE") return { title: "Товар не найден", robots: { index: false } };
+  if (!product || product.status !== "PUBLISHED" || (product.type !== "READY" && product.type !== "PARAMETRIC")) return { title: "Товар не найден", robots: { index: false } };
   const title = normalizePageTitle(product.title ?? product.name);
   return {
     title,
@@ -44,10 +44,10 @@ export default async function ProductPage({ params }: { params: Params }) {
       reviews: { where: { approved: true }, orderBy: { createdAt: "desc" }, take: 8 },
     },
   });
-  if (!product || product.status !== "PUBLISHED" || product.type === "PRINT_TEMPLATE") notFound();
+  if (!product || product.status !== "PUBLISHED" || (product.type !== "READY" && product.type !== "PARAMETRIC")) notFound();
   const category = product.categories.find((item) => item.category.slug === categorySlug)?.category ?? product.categories.find((item) => item.isPrimary)?.category ?? product.categories[0]?.category;
   if (!category || !category.visible || !product.categories.some((item) => item.category.slug === categorySlug)) notFound();
-  const related = await prisma.product.findMany({ where: { status: "PUBLISHED", type: { not: "PRINT_TEMPLATE" }, id: { not: product.id }, categories: { some: { categoryId: category.id } } }, include: { images: { orderBy: { sortOrder: "asc" } }, categories: { include: { category: true } } }, take: 4 });
+  const related = await prisma.product.findMany({ where: { status: "PUBLISHED", type: { in: ["READY", "PARAMETRIC"] }, id: { not: product.id }, categories: { some: { categoryId: category.id } } }, include: { images: { orderBy: { sortOrder: "asc" } }, categories: { include: { category: true } } }, take: 4 });
   const options = productOptions(product);
   const defaultPrice = priceProduct(options, defaultSelection(options)).unitPrice;
   const rating = product.reviews.length ? product.reviews.reduce((sum, review) => sum + review.rating, 0) / product.reviews.length : 5;

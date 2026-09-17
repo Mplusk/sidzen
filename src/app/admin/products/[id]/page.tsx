@@ -20,7 +20,7 @@ export default async function AdminProductPage({ params, searchParams }: { param
     prisma.qualityProfile.findMany({ orderBy: { layerHeightMm: "desc" }, select: { id: true, name: true, layerHeightMm: true } }),
     prisma.postProcessOption.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, price: true } }),
   ]);
-  if (!product) notFound();
+  if (!product || (product.type !== "READY" && product.type !== "PARAMETRIC")) notFound();
   if (product.status === "PUBLISHED") await requirePermission(PERMISSIONS.productsPublish);
 
   const options: ProductFormOptions = {
@@ -34,6 +34,7 @@ export default async function AdminProductPage({ params, searchParams }: { param
   const primaryCategory = product.categories.find((item) => item.isPrimary) ?? product.categories[0];
   const value: ProductFormValue = {
     ...product,
+    type: product.type,
     basePrice: Number(product.basePrice),
     oldPrice: product.oldPrice == null ? null : Number(product.oldPrice),
     costPrice: product.costPrice == null ? null : Number(product.costPrice),

@@ -66,7 +66,6 @@ const statusLabels: Record<(typeof PRODUCT_STATUSES)[number], string> = {
 const typeLabels: Record<(typeof PRODUCT_TYPES)[number], string> = {
   READY: "Готовый товар",
   PARAMETRIC: "Товар с параметрами",
-  PRINT_TEMPLATE: "Шаблон печати",
 };
 
 function checked(selected: string[] | undefined, id: string) {

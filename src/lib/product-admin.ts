@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const PRODUCT_STATUSES = ["DRAFT", "REVIEW", "PUBLISHED", "HIDDEN", "ARCHIVED"] as const;
-export const PRODUCT_TYPES = ["READY", "PARAMETRIC", "PRINT_TEMPLATE"] as const;
+export const PRODUCT_TYPES = ["READY", "PARAMETRIC"] as const;
 export const ROBOTS_VALUES = ["index,follow", "noindex,follow", "noindex,nofollow"] as const;
 export const MAX_PRODUCT_IMAGES = 20;
 

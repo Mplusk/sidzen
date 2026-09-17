@@ -17,6 +17,11 @@ function validForm() {
 }
 
 describe("product admin form", () => {
+  it("does not allow recreating a retired custom-print service", () => {
+    const form = validForm();
+    form.set("type", "PRINT_TEMPLATE");
+    expect(parseProductForm(form).success).toBe(false);
+  });
   it("normalizes categories and structured fields", () => {
     const form = validForm();
     form.append("categoryIds", "category-2");

@@ -8,11 +8,12 @@ import { prisma } from "@/lib/prisma";
 import { checkoutSchema } from "@/lib/checkout-validation";
 import { grantOrderAccess } from "@/lib/order-access";
 import { createOnlinePayment, onlinePaymentReady } from "@/lib/payments";
+import { getPaymentConfig } from "@/lib/integrations";
 
 export async function createOrderAction(formData: FormData) {
   const parsed = checkoutSchema.safeParse(Object.fromEntries(["name", "email", "phone", "city", "address", "postalCode", "delivery", "comment", "legal", "payment", "expectedTotal"].map((key) => [key, formData.get(key) ?? ""])));
   if (!parsed.success) redirect("/checkout/?error=invalid");
-  if (parsed.data.payment === "yookassa" && !onlinePaymentReady()) redirect("/checkout/?error=payment");
+  if (parsed.data.payment === "yookassa" && !await onlinePaymentReady()) redirect("/checkout/?error=payment");
   const cart = await getCart();
   if (!cart?.items.length) redirect("/cart/?error=empty");
   if (cart.items.some((item) => !item.available || !item.quote)) redirect("/cart/?error=unavailable");
@@ -27,6 +28,11 @@ export async function createOrderAction(formData: FormData) {
   let order;
   try {
     order = await prisma.$transaction(async (tx) => {
+      if (parsed.data.payment === "yookassa") {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412026)`;
+        const config = await getPaymentConfig(tx);
+        if (!config.enabled || !config.shopId || !config.secret) throw new Error("payment-config-changed");
+      }
       // Claim the cart rows atomically so a double click cannot create two orders.
       const claimed = await tx.cartItem.deleteMany({ where: { cartId: cart.id, OR: cart.items.map((item) => ({ id: item.id, quantity: item.quantity, updatedAt: item.updatedAt })) } });
       if (claimed.count !== cart.items.length) throw new Error("cart-changed");

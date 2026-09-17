@@ -78,7 +78,7 @@ async function seedCatalog() {
     ["organizers", "Органайзеры", "Порядок на рабочем столе, в мастерской и дома", "/generated/product-organizer.webp"],
     ["fasteners", "Крепления", "Кронштейны, адаптеры и точные технические детали", "/generated/product-mount.webp"],
     ["decor", "Декор", "Фактуры и формы, созданные послойно", "/generated/product-lamp.webp"],
-    ["prototypes", "Прототипы", "Функциональные образцы перед запуском серии", "/generated/product-custom-print.webp"],
+    ["prototypes", "Прототипы", "Функциональные образцы перед запуском серии", "/generated/product-enclosure.webp"],
   ] as const;
   for (const [slug, name, description, image] of categories) {
     await prisma.category.upsert({
@@ -193,8 +193,6 @@ async function seedContent() {
   const rubric = await prisma.rubric.upsert({ where: { slug: "guides" }, update: { name: "Гайды" }, create: { slug: "guides", name: "Гайды", description: "Практические материалы о 3D-печати" } });
   const articles = [
     { slug: "pla-ili-petg", title: "PLA или PETG: что выбрать для вашей детали", excerpt: "Сравниваем прочность, температуру, внешний вид и стоимость двух популярных пластиков.", content: "PLA лучше подходит для макетов, декора и интерьерных деталей. PETG выбирают для креплений, корпусов и изделий, которые контактируют с влагой. При выборе важны не только прочность, но и температура эксплуатации, точность посадок и требуемая обработка." },
-    { slug: "kak-podgotovit-stl", title: "Как подготовить STL к печати без сюрпризов", excerpt: "Пять проверок сетки, которые экономят время до запуска принтера.", content: "Проверьте единицы измерения, замкнутость сетки, толщину стенок, ориентацию нормалей и физические габариты. Наш загрузчик автоматически оценивает размеры и объём STL, но финальную технологичность подтверждает оператор." },
-    { slug: "stoimost-3d-pechati", title: "Из чего складывается стоимость 3D-печати", excerpt: "Материал — только часть цены: объясняем влияние времени, слоя, заполнения и обработки.", content: "Цена зависит от объёма модели, плотности материала, заполнения, высоты слоя, времени работы оборудования и постобработки. Для серии учитывается подготовка задания и оптовый коэффициент. Предварительный расчёт на сайте помогает оценить порядок стоимости." },
   ];
   for (const article of articles) {
     await prisma.article.upsert({
@@ -205,11 +203,7 @@ async function seedContent() {
   }
 
   const faq = [
-    ["Какие форматы моделей принимаете?", "STL и OBJ анализируются автоматически. 3MF и STEP принимаются на ручную проверку оператором."],
-    ["Расчёт на сайте окончательный?", "Нет, это предварительная оценка. Финальную цену и срок оператор подтверждает после проверки технологичности модели."],
-    ["Можно напечатать одну деталь?", "Да. Минимальная стоимость заказа покрывает подготовку задания и запуск оборудования."],
     ["Доставляете по России?", "Да, отправляем СДЭК или Почтой России. Для вашего города стоимость показывается при оформлении."],
-    ["Можно заказать серию?", "Да, для тиражей действует автоматическая оптовая сетка и индивидуальная проверка сроков."],
   ];
   if (!await prisma.faqItem.count({ where: { scope: "general" } })) await prisma.faqItem.createMany({ data: faq.map(([question, answer], sortOrder) => ({ question, answer, sortOrder, scope: "general" })) });
 
@@ -228,8 +222,6 @@ async function seedContent() {
     ["legal.address", "", "legal", "Юридический адрес"],
     ["legal.bank", "", "legal", "Банковские реквизиты"],
     ["store.about", "", "general", "О магазине — подтверждённые факты"],
-    ["print.minimumOrder", 650, "pricing", "Минимальный заказ"],
-    ["print.maxUploadMb", 100, "files", "Лимит файла"],
     ["analytics.yandexMetrika", "", "analytics", "Яндекс Метрика"],
     ["analytics.ga4", "", "analytics", "Google Analytics"],
     ["cookie.message", "Мы используем необходимые cookies для работы корзины и личного кабинета.", "legal", "Cookie-баннер"],
@@ -253,9 +245,8 @@ async function seedContent() {
   for (const [code, name, description, basePrice] of deliveryMethods) await prisma.deliveryMethod.upsert({ where: { code }, update: {}, create: { code, name, description, basePrice } });
 
   const seoPages = [
-    ["/", "3D-печать на заказ и готовые изделия", "Интернет-магазин готовых изделий и 3D-печать по вашей модели с доставкой по России.", "3D-печать, которая решает задачу"],
+    ["/", "Каталог изделий 3DPRINTA", "Интернет-магазин изделий с выбором материала и цвета.", "Каталог изделий"],
     ["/catalog/", "Каталог изделий 3D-печати", "Готовые органайзеры, крепления, декор и прототипы. Выбор материала и цвета.", "Каталог изделий"],
-    ["/print/", "3D-печать по вашей модели — расчёт онлайн", "Загрузите STL или OBJ, выберите материал и получите предварительную стоимость печати.", "Напечатать свою модель"],
   ] as const;
   for (const [path, title, metaDescription, h1] of seoPages) await prisma.seoPage.upsert({ where: { path }, update: { title, metaDescription, h1 }, create: { path, title, metaDescription, h1, schemaTypes: path === "/" ? ["Organization", "WebSite", "FAQPage"] : ["BreadcrumbList"] } });
 }

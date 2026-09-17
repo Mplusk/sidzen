@@ -12,7 +12,7 @@ export const getCatalog = unstable_cache(async (params: CatalogParams) => {
   const requestedPage = Math.min(10000, Math.max(1, Math.floor(Number(params.page) || 1))), take = 12;
   const min = priceBound(params.min), max = priceBound(params.max);
   const where: Prisma.ProductWhereInput = {
-    status: "PUBLISHED", type: { not: "PRINT_TEMPLATE" },
+    status: "PUBLISHED", type: { in: ["READY", "PARAMETRIC"] },
     ...(params.category ? { categories: { some: { category: { slug: params.category, visible: true } } } } : {}),
     ...(filterValues(params.material).length ? { materials: { some: { active: true, slug: { in: filterValues(params.material) } } } } : {}),
     ...(filterValues(params.technology).length ? { technologies: { some: { active: true, slug: { in: filterValues(params.technology) } } } } : {}),
@@ -28,7 +28,7 @@ export const getCatalog = unstable_cache(async (params: CatalogParams) => {
   const orderBy: Prisma.ProductOrderByWithRelationInput[] = [params.sort === "price-asc" ? { basePrice: "asc" } : params.sort === "price-desc" ? { basePrice: "desc" } : params.sort === "new" ? { publishedAt: "desc" } : { stock: "desc" }, { id: "asc" }];
   const count = await prisma.product.count({ where });
   const pages = Math.max(1, Math.ceil(count / take)), page = Math.min(requestedPage, pages);
-  const visibleProducts = { status: "PUBLISHED" as const, type: { not: "PRINT_TEMPLATE" as const } };
+  const visibleProducts = { status: "PUBLISHED" as const, type: { in: ["READY" as const, "PARAMETRIC" as const] } };
   const include = { ...productOptionInclude, images: { orderBy: { sortOrder: "asc" as const }, take: 20 }, categories: { include: { category: true } } };
   const [products, categories, materials, technologies, colors, suggestions, related] = await Promise.all([
     prisma.product.findMany({ where, include, orderBy, skip: (page - 1) * take, take }),

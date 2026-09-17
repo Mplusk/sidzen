@@ -11,11 +11,10 @@ const nextConfig: NextConfig = {
     },
   },
   async redirects() {
-    const catalogOnlySections = ["print", "technologies", "blog", "compare", "search"];
+    const catalogOnlySections = ["technologies", "blog", "compare", "search"];
     return [
       { source: "/", destination: "/catalog/", permanent: true },
       ...catalogOnlySections.map((section) => ({ source: `/${section}/:path*`, destination: "/catalog/", permanent: true })),
-      { source: "/account/models/:path*", destination: "/account/", permanent: true },
       { source: "/account/favorites/:path*", destination: "/account/", permanent: true },
     ];
   },

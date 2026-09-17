@@ -2,7 +2,7 @@ import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 
 export const getSettings = cache(async () => {
-  const rows = await prisma.siteSetting.findMany();
+  const rows = await prisma.siteSetting.findMany({ where: { group: { not: "integrations" } } });
   return Object.fromEntries(rows.map((row) => [row.key, row.value])) as Record<string, unknown>;
 });
 

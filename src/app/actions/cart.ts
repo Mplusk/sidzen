@@ -22,14 +22,13 @@ export async function getOrCreateCart() {
   return prisma.cart.upsert({ where: { sessionKey: key }, update: {}, create: { sessionKey: key } });
 }
 
-export async function addModelToCart() { redirect("/catalog/"); }
 
 function selectionFromForm(form: FormData): ProductSelection {
   return { material: String(form.get("material") ?? ""), color: String(form.get("color") ?? ""), quality: String(form.get("quality") ?? ""), quantity: Number(form.get("quantity")) };
 }
 
 async function saveProduct(formData: FormData, editing: boolean) {
-  const product = await prisma.product.findFirst({ where: { id: String(formData.get("productId") ?? ""), status: "PUBLISHED", type: { not: "PRINT_TEMPLATE" } }, include: productOptionInclude });
+  const product = await prisma.product.findFirst({ where: { id: String(formData.get("productId") ?? ""), status: "PUBLISHED", type: { in: ["READY", "PARAMETRIC"] } }, include: productOptionInclude });
   if (!product) redirect("/cart/?error=unavailable");
   const selection = selectionFromForm(formData);
   let quote;
@@ -60,7 +59,7 @@ export async function getCart() {
   if (!user && !key) return null;
   const cart = await prisma.cart.findFirst({
     where: user ? { userId: user.id } : { sessionKey: key },
-    include: { items: { where: { product: { type: { not: "PRINT_TEMPLATE" } } }, include: { product: { include: { ...productOptionInclude, images: { orderBy: { sortOrder: "asc" }, take: 1 }, categories: { include: { category: true } } } } }, orderBy: { createdAt: "asc" } } },
+    include: { items: { where: { product: { type: { in: ["READY", "PARAMETRIC"] } } }, include: { product: { include: { ...productOptionInclude, images: { orderBy: { sortOrder: "asc" }, take: 1 }, categories: { include: { category: true } } } } }, orderBy: { createdAt: "asc" } } },
   });
   if (!cart) return null;
   return { ...cart, items: cart.items.map((item) => {

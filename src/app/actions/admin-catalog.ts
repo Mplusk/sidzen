@@ -33,7 +33,6 @@ function refreshCatalogPages() {
   revalidatePath("/catalog/");
   revalidatePath("/materials/");
   revalidatePath("/technologies/");
-  revalidatePath("/print/");
 }
 
 export async function createCatalogOptionAction(formData: FormData) {

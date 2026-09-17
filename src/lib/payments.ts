@@ -1,16 +1,19 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { getPaymentConfig } from "@/lib/integrations";
 
-export function onlinePaymentReady() {
-  return process.env.PAYMENT_PROVIDER === "yookassa" && Boolean(process.env.YOOKASSA_SHOP_ID && process.env.YOOKASSA_SECRET_KEY) && (process.env.YOOKASSA_RECEIPT_MODE === "external" || /^(?:[1-9]|1[0-2])$/.test(process.env.YOOKASSA_VAT_CODE ?? ""));
+export async function onlinePaymentReady() {
+  const config = await getPaymentConfig();
+  return config.enabled && Boolean(config.shopId && config.secret) && (config.receiptMode === "external" || /^(?:[1-9]|1[0-2])$/.test(config.vatCode));
 }
 
 const paymentSchema = z.object({ id: z.string().uuid(), status: z.enum(["pending", "waiting_for_capture", "succeeded", "canceled"]), paid: z.boolean(), test: z.boolean().optional(), amount: z.object({ value: z.string(), currency: z.literal("RUB") }), metadata: z.object({ orderId: z.string() }), confirmation: z.object({ confirmation_url: z.url().optional() }).optional(), recipient: z.object({ account_id: z.string() }).optional() });
 export type VerifiedPayment = z.infer<typeof paymentSchema>;
 
 async function requestPayment(path: string, options?: { body: object; key: string }) {
-  if (!onlinePaymentReady()) throw new Error("payment-not-configured");
-  const response = await fetch(`https://api.yookassa.ru/v3/${path}`, { method: options ? "POST" : "GET", cache: "no-store", signal: AbortSignal.timeout(15_000), headers: { Authorization: `Basic ${Buffer.from(`${process.env.YOOKASSA_SHOP_ID}:${process.env.YOOKASSA_SECRET_KEY}`).toString("base64")}`, "Content-Type": "application/json", ...(options ? { "Idempotence-Key": options.key } : {}) }, ...(options ? { body: JSON.stringify(options.body) } : {}) });
+  const config = await getPaymentConfig();
+  if (!config.shopId || !config.secret || (options && !await onlinePaymentReady())) throw new Error("payment-not-configured");
+  const response = await fetch(`https://api.yookassa.ru/v3/${path}`, { method: options ? "POST" : "GET", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(15_000), headers: { Authorization: `Basic ${Buffer.from(`${config.shopId}:${config.secret}`).toString("base64")}`, "Content-Type": "application/json", ...(options ? { "Idempotence-Key": options.key } : {}) }, ...(options ? { body: JSON.stringify(options.body) } : {}) });
   if (!response.ok) throw new Error(`payment-provider-${response.status}`);
   return paymentSchema.parse(await response.json());
 }
@@ -27,10 +30,11 @@ export async function createOnlinePayment(orderId: string) {
   // The provider keeps idempotency keys for 24 hours. Never repeat an ambiguous
   // create request outside that window: an operator must reconcile it first.
   if (Date.now() - order.createdAt.getTime() > 23 * 60 * 60 * 1000) throw new Error("payment-reconciliation-required");
-  const vatCode = Number(process.env.YOOKASSA_VAT_CODE);
-  const receipt = process.env.YOOKASSA_RECEIPT_MODE === "external" ? undefined : {
+  const config = await getPaymentConfig();
+  const vatCode = Number(config.vatCode);
+  const receipt = config.receiptMode === "external" ? undefined : {
     customer: { email: order.customerEmail },
-    ...(process.env.YOOKASSA_TAX_SYSTEM_CODE ? { tax_system_code: Number(process.env.YOOKASSA_TAX_SYSTEM_CODE) } : {}),
+    ...(config.taxSystemCode ? { tax_system_code: Number(config.taxSystemCode) } : {}),
     items: [...order.items.map((item) => ({ description: item.productName.slice(0, 128), quantity: String(item.quantity), amount: { value: Number(item.unitPrice).toFixed(2), currency: "RUB" }, vat_code: vatCode, payment_mode: "full_payment", payment_subject: "commodity" })), ...(Number(order.deliveryPrice) > 0 ? [{ description: "Доставка", quantity: "1", amount: { value: Number(order.deliveryPrice).toFixed(2), currency: "RUB" }, vat_code: vatCode, payment_mode: "full_payment", payment_subject: "service" }] : [])],
   };
   const remote = await requestPayment("payments", { key: payment.id, body: { amount: { value: Number(order.total).toFixed(2), currency: "RUB" }, capture: true, confirmation: { type: "redirect", return_url: `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://3dprinta.shop"}/checkout/success/${order.number}/` }, description: `Заказ ${order.number}`, metadata: { orderId: order.id }, ...(receipt ? { receipt } : {}) } });
@@ -55,7 +59,8 @@ export async function refreshPayment(id: string) {
 
 export async function applyVerifiedPayment(remote: VerifiedPayment) {
   if (remote.test && process.env.YOOKASSA_ALLOW_TEST !== "true") throw new Error("test-payment-rejected");
-  if (remote.recipient && remote.recipient.account_id !== process.env.YOOKASSA_SHOP_ID) throw new Error("payment-recipient");
+  const config = await getPaymentConfig();
+  if (remote.recipient && remote.recipient.account_id !== config.shopId) throw new Error("payment-recipient");
   return prisma.$transaction(async (tx) => {
     const payment = await tx.payment.findUnique({ where: { orderId: remote.metadata.orderId }, include: { order: true } });
     if (!payment) return;

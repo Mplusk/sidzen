@@ -245,7 +245,7 @@ export async function updateSettingAction(formData: FormData) {
   const key = String(formData.get("key") ?? "");
   const raw = String(formData.get("value") ?? "");
   const current = await prisma.siteSetting.findUnique({ where: { key } });
-  if (!current || current.group === "system") redirect("/admin/settings/?error=key");
+  if (!current || ["system", "integrations"].includes(current.group)) redirect("/admin/settings/?error=key");
   const value = typeof current.value === "number" ? Number(raw) : raw;
   await prisma.siteSetting.update({ where: { key }, data: { value } });
   await writeAudit({ actorId: user.id, action: "setting.update", entityType: "SiteSetting", entityId: current.id, before: { value: current.value }, after: { value } });
