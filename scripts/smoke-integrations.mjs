@@ -23,18 +23,19 @@ async function form(path, containing) {
   return body;
 }
 const path = "/account/integrations/";
+const deliveryName = `QA courier ${Date.now()}`;
 try {
   assert.match((await request(path)).headers.get("location"), /^\/login/);
   const login = await form("/login/", 'name="email"');
   login.set("email", "qa@example.test"); login.set("password", "LocalGalleryQA-2026");
   assert.equal((await request("/login/", login)).headers.get("location"), "/account/");
   const shipping = await form(path, "Добавить доставку");
-  for (const [key, value] of Object.entries({ name: "QA courier", description: "Local only", basePrice: "125.50", sortOrder: "9", active: "on" })) shipping.set(key, value);
+  for (const [key, value] of Object.entries({ name: deliveryName, description: "Local only", basePrice: "125.50", sortOrder: "9", active: "on" })) shipping.set(key, value);
   assert.equal((await request(path, shipping)).headers.get("location"), path + "?result=saved");
-  const method = await db.deliveryMethod.findFirstOrThrow({ where: { name: "QA courier" } });
+  const method = await db.deliveryMethod.findFirstOrThrow({ where: { name: deliveryName } });
   assert.equal(Number(method.basePrice), 125.5);
   const edit = await form(path, method.id);
-  for (const [key, value] of Object.entries({ name: "QA courier", description: "Local only", basePrice: "150", sortOrder: "9" })) edit.set(key, value);
+  for (const [key, value] of Object.entries({ name: deliveryName, description: "Local only", basePrice: "150", sortOrder: "9" })) edit.set(key, value);
   assert.equal((await request(path, edit)).headers.get("location"), path + "?result=saved");
   assert.equal((await db.deliveryMethod.findUniqueOrThrow({ where: { id: method.id } })).active, false);
   const payment = await form(path, 'name="shopId"');
