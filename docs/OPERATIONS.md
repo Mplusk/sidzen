@@ -54,9 +54,19 @@ curl --fail http://127.0.0.1:3000/api/health/
 Контейнер `migrate` применяет миграции и идемпотентный seed до запуска приложения.
 Демонстрационный каталог и справочники заполняются только при первом запуске пустой БД. Последующие деплои не восстанавливают удалённые категории, материалы, цвета и другие записи, которыми управляют в `/admin/catalog/`.
 
-## Nginx и HTTPS
+## Новый сервер: Docker и HTTPS
 
-До получения сертификата установите `deploy/nginx/bootstrap.conf`. После успешного Certbot замените его на `deploy/nginx/3dprinta.conf` и выполните `nginx -t && systemctl reload nginx`. Запросы к `www` перенаправляются на основной домен, HTTP — на HTTPS. Nginx разрешает загрузки до 105 МБ.
+С 28 сентября 2026 приложение, PostgreSQL и Caddy работают в одном Docker Compose проекте `3dprinta`. Контейнер Caddy принимает порты 80/443, получает и продлевает TLS-сертификаты автоматически. Приложение доступно с хоста только на `127.0.0.1:3000`, PostgreSQL не публикует порт наружу. Сертификаты, база и фотографии хранятся в постоянных volumes.
+
+На чистом Ubuntu 24.04 выполните от root `bash scripts/provision-server.sh`. Скрипт установит Docker Engine и Compose из официального apt-репозитория, создаст deploy-пользователя, каталог проекта, cron резервных копий и случайные production-секреты. Повторный запуск не заменяет существующий `.env.production`. Добавьте SSH-ключ деплоя в `/home/deploy/.ssh/authorized_keys` и обновите repository secrets GitHub.
+
+DNS `3dprinta.shop` и `www.3dprinta.shop` должен указывать на сервер. Caddy настраивается в `deploy/caddy/Caddyfile`; отдельные Nginx и Certbot для нового развёртывания не нужны. Проверка: `docker compose exec -T proxy caddy validate --config /etc/caddy/Caddyfile`, затем `curl --fail https://3dprinta.shop/api/health/`.
+
+Первый администратор: `admin@3dprinta.shop`; автоматически сгенерированный пароль находится в `BOOTSTRAP_ADMIN_PASSWORD` production env. Секреты не попадают в репозиторий или журналы CI. После переустановки ОС старые товары, заказы и фотографии можно вернуть только из отдельной сохранённой резервной копии. Исходный код содержит демонстрационный каталог для пустой базы.
+
+## Прежняя конфигурация Nginx
+
+Файлы `deploy/nginx/` сохранены для совместимости прежней установки. При использовании контейнера Caddy их устанавливать не нужно.
 
 ## Резервное копирование
 
@@ -99,8 +109,7 @@ cd /opt/3dprinta/current
 docker compose --project-name 3dprinta --env-file .env.production ps
 docker compose --project-name 3dprinta --env-file .env.production logs --tail=200 app
 docker compose --project-name 3dprinta --env-file .env.production logs --tail=200 db
-nginx -t
-certbot certificates
+docker compose --project-name 3dprinta --env-file .env.production logs --tail=100 proxy
 ```
 
 ## Обновление секретов

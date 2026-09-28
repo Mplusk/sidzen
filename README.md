@@ -12,14 +12,14 @@ Production-ready SSR интернет-магазин готовых издели
 - удаление заказов сотрудниками с правом управления заказами: подтверждение, удаление связанных записей и журнал аудита в одной транзакции;
 - постоянное хранилище фотографий, которое не удаляется при деплое;
 - PostgreSQL, Prisma migrations/seed, приватное файловое хранилище;
-- Docker Compose, Nginx, TLS, health-check, ротация логов, резервное копирование и CI/CD с rollback и очисткой прошлых версий.
+- Docker Compose, Caddy с автоматическим HTTPS, health-check, ротация логов, резервное копирование и CI/CD с rollback и очисткой прошлых версий.
 
 ## Стек
 
 - Next.js 16, React 19, TypeScript;
 - PostgreSQL 16 и Prisma 6;
 - Vitest и ESLint;
-- Docker Compose и Nginx.
+- Docker Compose и Caddy.
 
 ## Локальный запуск
 
@@ -54,13 +54,13 @@ Production-процедуры, переменные, резервное копи
 ```text
 src/app/          страницы, server actions и API
 src/components/   UI-компоненты storefront
-src/lib/          auth, RBAC, pricing, анализ и storage
+src/lib/          auth, RBAC, расчёт товаров и платёжные подключения
 prisma/           схема, миграции и seed
 public/generated/ изображения проекта
-deploy/nginx/     bootstrap и production-конфигурации
+deploy/caddy/     HTTPS-прокси в контейнере
 scripts/          деплой и резервное копирование
 ```
 
 ## Безопасность
 
-Секреты не коммитятся. Пользовательские 3D-файлы лежат вне `public`, выдаются только после проверки сессии/гостевого ключа/роли и получают `no-store`. Пароли хешируются через scrypt, сессии хранят только SHA-256 токена, cookies — `HttpOnly`, `SameSite=Lax`, `Secure` в production. Загрузки проверяются по расширению, сигнатуре, размеру, источнику и rate limit.
+Секреты не коммитятся. Пароли хешируются через scrypt, сессии хранят только SHA-256 токена, cookies — `HttpOnly`, `SameSite=Lax`, `Secure` в production. Загрузки фотографий проверяются по типу, сигнатуре, размеру, источнику и rate limit. Секреты платёжного подключения в базе зашифрованы.

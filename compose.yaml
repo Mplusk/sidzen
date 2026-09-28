@@ -1,6 +1,25 @@
 name: 3dprinta
 
 services:
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -57,6 +76,8 @@ services:
         max-file: "3"
 
 volumes:
+  caddy-data:
+  caddy-config:
   postgres-data:
   model-files:
   product-images:

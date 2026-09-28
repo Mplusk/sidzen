@@ -1,0 +1,12 @@
+3dprinta.shop {
+    encode zstd gzip
+    request_body {
+        max_size 105MB
+    }
+    header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    reverse_proxy app:3000
+}
+
+www.3dprinta.shop {
+    redir https://3dprinta.shop{uri} permanent
+}
