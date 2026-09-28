@@ -6,4 +6,5 @@ public/uploads/products/*
 !public/uploads/products/.gitkeep
 backups
 .env*
+.deployment
 *.log
