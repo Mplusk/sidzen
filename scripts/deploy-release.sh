@@ -91,7 +91,8 @@ cleanup_successful_deploy() {
 
   docker builder prune --all --force
   docker container prune --force
-  docker image prune --all --force
+  # Keep tagged ERP images for rollback; prune only dangling layers.
+  docker image prune --force
 }
 
 verify_backup_entrypoint() {
