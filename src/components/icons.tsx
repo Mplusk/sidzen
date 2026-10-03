@@ -16,6 +16,10 @@ export function SearchIcon(props: IconProps) {
   return <svg {...base} {...props}><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>;
 }
 
+export function CatalogIcon(props: IconProps) {
+  return <svg {...base} {...props}><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>;
+}
+
 export function ArrowIcon(props: IconProps) {
   return <svg {...base} {...props}><path d="M5 12h14M14 6l6 6-6 6"/></svg>;
 }

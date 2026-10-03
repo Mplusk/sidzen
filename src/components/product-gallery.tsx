@@ -19,7 +19,7 @@ export function ProductGallery({ images, name, badge, href, compact = false }: {
   const swiped = useRef(false);
   const current = images[active] ?? images[0];
   const change = (step: number) => setActive((index) => (index + step + images.length) % images.length);
-  const photo = current ? <Image src={current.path} alt={`${current.alt || name} — фото ${active + 1}`} fill priority={!compact && active === 0} sizes={compact ? "(max-width: 760px) 45vw, (max-width: 1100px) 34vw, 300px" : "(max-width: 560px) 92vw, 460px"} /> : <span className="image-placeholder">3D</span>;
+  const photo = current ? <Image src={current.path} alt={`${current.alt || name} — фото ${active + 1}`} fill priority={!compact && active === 0} sizes={compact ? "(max-width: 600px) 48vw, (max-width: 900px) 32vw, (max-width: 1200px) 24vw, (max-width: 1600px) 19vw, 250px" : "(max-width: 560px) 92vw, 460px"} /> : <span className="image-placeholder">3D</span>;
 
   return <div className={`product-gallery${compact ? " product-gallery--compact" : ""}`} role="region" aria-roledescription="карусель" aria-label={`Фотографии: ${name}`}>
     <div className="product-gallery__main" tabIndex={images.length > 1 ? 0 : undefined}
@@ -42,9 +42,12 @@ export function ProductGallery({ images, name, badge, href, compact = false }: {
       {images.length > 1 && <>
         <button className="gallery-arrow gallery-arrow--previous" type="button" aria-label="Предыдущее фото" onClick={() => change(-1)}><ArrowIcon aria-hidden="true" /></button>
         <button className="gallery-arrow gallery-arrow--next" type="button" aria-label="Следующее фото" onClick={() => change(1)}><ArrowIcon aria-hidden="true" /></button>
-        <span className="gallery-counter" aria-live="polite" aria-atomic="true">{active + 1} / {images.length}</span>
+        <span className={compact ? "visually-hidden" : "gallery-counter"} aria-live="polite" aria-atomic="true">{active + 1} / {images.length}</span>
       </>}
     </div>
+    {compact && <div className="gallery-dots" aria-label="Выбор фотографии">
+      {images.length > 1 && images.map((item, index) => <button key={`${item.path}-${index}`} type="button" aria-label={`Фото ${index + 1}`} aria-pressed={active === index} onClick={() => setActive(index)}><span /></button>)}
+    </div>}
     {!compact && current?.caption && <p className="product-gallery__caption">{current.caption}</p>}
     {!compact && images.length > 1 && <div className="gallery-thumbnails" aria-label="Выбор фотографии">
       {images.map((item, index) => <button key={`${item.path}-${index}`} className="gallery-thumbnail" type="button" aria-label={`Фото ${index + 1}`} aria-pressed={active === index} onClick={() => setActive(index)}>

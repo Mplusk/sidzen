@@ -26,8 +26,17 @@ try {
   const prefix = `qa-card-${randomUUID().slice(0, 8)}`;
   const category = await prisma.category.create({ data: { name: "QA Категория", slug: `${prefix}-category`, visible: true } });
   categoryId = category.id;
-  const product = await prisma.product.create({ data: { name: "QA Салфетница Вершина", sku: prefix, slug: prefix, type: "READY", status: "PUBLISHED", publishedAt: new Date(), basePrice: 240, stock: 0, madeToOrder: false, description: "Первый абзац.\n\nВторой абзац.", specifications: { "Материал": "PLA пластик", "Цвет товара": "черный", "Вес с упаковкой, г": "85", "Ozon · 22232": "legacy technical", "Пустая строка": "" }, categories: { create: { categoryId: category.id, isPrimary: true } }, images: { create: [{ path: "/generated/product-organizer.webp", alt: "Фото 1", sortOrder: 0 }, { path: "/generated/product-mount.webp", alt: "Фото 2", sortOrder: 1 }] } } });
+  const product = await prisma.product.create({ data: { name: "QA Салфетница Вершина", sku: prefix, slug: prefix, type: "READY", status: "PUBLISHED", publishedAt: new Date(), basePrice: 240, oldPrice: 300, stock: 0, madeToOrder: false, shortDescription: "QA description must not crowd the catalog card", description: "Первый абзац.\n\nВторой абзац.", specifications: { "Материал": "PLA пластик", "Цвет товара": "черный", "Вес с упаковкой, г": "85", "Ozon · 22232": "legacy technical", "Пустая строка": "" }, categories: { create: { categoryId: category.id, isPrimary: true } }, images: { create: [{ path: "/generated/product-organizer.webp", alt: "Фото 1", sortOrder: 0 }, { path: "/generated/product-mount.webp", alt: "Фото 2", sortOrder: 1 }] } } });
   productId = product.id;
+  const catalog = await request(`/catalog/${category.slug}/?q=${prefix}`); assert.equal(catalog.status, 200);
+  const catalogHtml = await catalog.text();
+  const card = catalogHtml.match(/<article class="product-card">[\s\S]*?<\/article>/)?.[0]?.replace(/<!--[\s\S]*?-->/g, "");
+  assert(card && card.includes(product.name));
+  assert(card.indexOf('product-card__price') < card.indexOf('<h3>'));
+  assert(card.includes('product-card__discount') && card.includes('−20') && card.includes('Нет в наличии'));
+  assert(!card.includes(product.shortDescription!) && !card.includes('Базовая цена') && !card.includes('round-link'));
+  assert(card.includes('gallery-dots') && card.includes('aria-pressed="true"'));
+  assert(catalogHtml.includes('role="search"') && catalogHtml.includes('action="/catalog/"') && catalogHtml.includes('catalog-category-strip'));
   const path = `/catalog/${category.slug}/${product.slug}/`;
   const response = await request(path); assert.equal(response.status, 200);
   let html = await response.text();
@@ -59,7 +68,7 @@ try {
   item = await prisma.cartItem.findFirstOrThrow({ where: { productId } }); assert.equal(item.cartId, cartId);
   html = await (await request("/cart/")).text();
   assert.equal((await request("/cart/", actionForm(html, ">Удалить</button>"))).headers.get("location"), "/cart/");
-  console.log("PASS: real product HTML, readable specifications, absent empty/legacy rows, description paragraphs, two-photo gallery controls, out-of-stock purchase rejection, in-stock cart addition/removal, quantity limit, made-to-order purchase. Isolated QA data only; no orders or payments.");
+  console.log("PASS: dense catalog cards, price before title, real discount/availability, photo dots, header search, product HTML, readable specifications, absent empty/legacy rows, description paragraphs, two-photo gallery controls, out-of-stock purchase rejection, in-stock cart addition/removal, quantity limit, made-to-order purchase. Isolated QA data only; no orders or payments.");
 } finally {
   if (cartId) await prisma.cart.deleteMany({ where: { id: cartId } });
   if (productId) await prisma.product.deleteMany({ where: { id: productId } });

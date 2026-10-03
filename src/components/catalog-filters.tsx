@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { CatalogParams } from "@/lib/catalog";
 import { filterValues } from "@/lib/catalog-search";
 type Option = { slug: string; name: string; count: number };
-export function CatalogFilters({ base, params, categories, groups, suggestions, count }: { base: string; params: CatalogParams; categories: Option[]; groups: Array<{ key: "material" | "technology" | "color"; label: string; options: Option[] }>; suggestions: string[]; count: number }) {
+export function CatalogFilters({ base, params, categories, groups, count }: { base: string; params: CatalogParams; categories: Option[]; groups: Array<{ key: "material" | "technology" | "color"; label: string; options: Option[] }>; count: number }) {
   const router = useRouter(), [pending, startTransition] = useTransition();
   const dialog = useRef<HTMLDialogElement>(null), form = useRef<HTMLFormElement>(null);
   function apply() {
@@ -16,8 +16,9 @@ export function CatalogFilters({ base, params, categories, groups, suggestions, 
   }
   const active = Object.keys(params).some((key) => !["sort", "page", "category"].includes(key) && params[key as keyof CatalogParams]);
   return <form ref={form} className={"catalog-controls" + (pending ? " is-pending" : "")} onSubmit={(event) => { event.preventDefault(); apply(); }}>
-    <div className="catalog-search"><label className="visually-hidden" htmlFor="catalog-query">Поиск по каталогу</label><input key={params.q ?? ""} id="catalog-query" name="q" placeholder="Название или назначение" list="catalog-suggestions" defaultValue={params.q} /><datalist id="catalog-suggestions">{suggestions.map((name) => <option key={name} value={name} />)}</datalist><button className="button button--small" type="submit">Найти</button><select key={params.sort ?? ""} name="sort" defaultValue={params.sort ?? "popular"} aria-label="Сортировка" onChange={apply}><option value="popular">Сначала в наличии</option><option value="new">Сначала новые</option><option value="price-asc">Дешевле</option><option value="price-desc">Дороже</option></select></div>
-    <button className="button button--ghost mobile-filter-toggle" type="button" onClick={() => dialog.current?.showModal()}>Фильтры{active ? " · выбраны" : ""}</button>
+    <input type="hidden" name="q" value={params.q ?? ""} />
+    <nav className="catalog-category-strip" aria-label="Категории товаров"><Link href="/catalog/" aria-current={base === "/catalog/" ? "page" : undefined}>Все товары</Link>{categories.filter((item) => item.count > 0 || base === `/catalog/${item.slug}/`).map((item) => <Link key={item.slug} href={`/catalog/${item.slug}/`} aria-current={base === `/catalog/${item.slug}/` ? "page" : undefined}>{item.name}</Link>)}</nav>
+    <div className="catalog-search"><button className="button button--ghost mobile-filter-toggle" type="button" onClick={() => dialog.current?.showModal()}>Фильтры{active ? " · выбраны" : ""}</button><select key={params.sort ?? ""} name="sort" defaultValue={params.sort ?? "popular"} aria-label="Сортировка" onChange={apply}><option value="popular">Сначала в наличии</option><option value="new">Сначала новые</option><option value="price-asc">Дешевле</option><option value="price-desc">Дороже</option></select></div>
     <dialog ref={dialog} className="filter-dialog" aria-label="Фильтры каталога" onClick={(event) => { if (event.target === dialog.current) dialog.current.close(); }}>
       <div className="filter-dialog__content"><div className="filter-dialog__heading"><h2>Фильтры</h2><button type="button" className="button button--ghost button--small" onClick={() => dialog.current?.close()} aria-label="Закрыть фильтры">✕</button></div>
         <fieldset className="filter-group"><legend>Категория</legend><Link className="filter-option" href="/catalog/" onClick={() => dialog.current?.close()}>Все категории</Link>{categories.map((item) => <Link className="filter-option" href={"/catalog/" + item.slug + "/"} key={item.slug} onClick={() => dialog.current?.close()}>{item.name}<small>{item.count}</small></Link>)}</fieldset>

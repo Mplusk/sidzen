@@ -9,7 +9,7 @@ export function normalizeCatalogParams(input: Record<string, unknown>): CatalogP
   return Object.fromEntries(["category", "material", "technology", "color", "min", "max", "availability", "sort", "page", "q"].flatMap((key) => typeof input[key] === "string" ? [[key, (input[key] as string).slice(0, 160)]] : []));
 }
 export const getCatalog = unstable_cache(async (params: CatalogParams) => {
-  const requestedPage = Math.min(10000, Math.max(1, Math.floor(Number(params.page) || 1))), take = 12;
+  const requestedPage = Math.min(10000, Math.max(1, Math.floor(Number(params.page) || 1))), take = 30;
   const min = priceBound(params.min), max = priceBound(params.max);
   const where: Prisma.ProductWhereInput = {
     status: "PUBLISHED", type: { in: ["READY", "PARAMETRIC"] },
@@ -30,14 +30,13 @@ export const getCatalog = unstable_cache(async (params: CatalogParams) => {
   const pages = Math.max(1, Math.ceil(count / take)), page = Math.min(requestedPage, pages);
   const visibleProducts = { status: "PUBLISHED" as const, type: { in: ["READY" as const, "PARAMETRIC" as const] } };
   const include = { ...productOptionInclude, images: { orderBy: { sortOrder: "asc" as const }, take: 20 }, categories: { include: { category: true } } };
-  const [products, categories, materials, technologies, colors, suggestions, related] = await Promise.all([
+  const [products, categories, materials, technologies, colors, related] = await Promise.all([
     prisma.product.findMany({ where, include, orderBy, skip: (page - 1) * take, take }),
     prisma.category.findMany({ where: { visible: true }, include: { _count: { select: { products: { where: { product: visibleProducts } } } } }, orderBy: { sortOrder: "asc" } }),
     prisma.material.findMany({ where: { active: true }, include: { _count: { select: { products: { where: visibleProducts } } } }, orderBy: { name: "asc" } }),
     prisma.technology.findMany({ where: { active: true }, include: { _count: { select: { products: { where: visibleProducts } } } }, orderBy: { name: "asc" } }),
     prisma.color.findMany({ where: { active: true }, include: { _count: { select: { products: { where: visibleProducts } } } }, orderBy: { name: "asc" } }),
-    prisma.product.findMany({ where: visibleProducts, select: { name: true }, take: 50, orderBy: { stock: "desc" } }),
     count ? Promise.resolve([]) : prisma.product.findMany({ where: visibleProducts, include, take: 4, orderBy: { stock: "desc" } }),
   ]);
-  return { products, count, categories, materials, technologies, colors, suggestions, related, page, pages };
-}, ["catalog-v2"], { revalidate: 60, tags: ["catalog"] });
+  return { products, count, categories, materials, technologies, colors, related, page, pages, pageSize: take };
+}, ["catalog-v3"], { revalidate: 60, tags: ["catalog"] });

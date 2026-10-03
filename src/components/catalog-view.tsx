@@ -15,11 +15,11 @@ export async function CatalogView({ category, searchParams }: { category?: { slu
   const chips = groups.flatMap((group) => filterValues(params[group.key]).map((slug) => ({ label: group.options.find((option) => option.slug === slug)?.name ?? slug, href: makeUrl({ [group.key]: filterValues(params[group.key]).filter((value) => value !== slug).join(","), page: undefined }) })));
   for (const [key, label] of [["q", "Поиск"], ["min", "Цена от"], ["max", "Цена до"], ["availability", "Наличие"]] as const) if (params[key]) chips.push({ label: label + ": " + (key === "availability" ? "в наличии" : params[key]), href: makeUrl({ [key]: undefined, page: undefined }) });
   return <>
-    <JsonLd data={{ "@context": "https://schema.org", "@type": "ItemList", numberOfItems: data.count, itemListElement: data.products.map((product, index) => ({ "@type": "ListItem", position: (data.page - 1) * 12 + index + 1, name: product.name, url: `https://3dprinta.shop/catalog/${(product.categories.find((item) => item.isPrimary) ?? product.categories[0])?.category.slug ?? "products"}/${product.slug}/` })) }} />
+    <JsonLd data={{ "@context": "https://schema.org", "@type": "ItemList", numberOfItems: data.count, itemListElement: data.products.map((product, index) => ({ "@type": "ListItem", position: (data.page - 1) * data.pageSize + index + 1, name: product.name, url: `https://3dprinta.shop/catalog/${(product.categories.find((item) => item.isPrimary) ?? product.categories[0])?.category.slug ?? "products"}/${product.slug}/` })) }} />
     <h1 className="visually-hidden">{category?.h1 ?? category?.name ?? "Каталог изделий"}</h1>
     <div className="container catalog-shell">
       {category && <Breadcrumbs items={[{ label: category.name, href: base }]} />}
-      <CatalogFilters base={base} params={params} categories={data.categories.map((item) => ({ slug: item.slug, name: item.name, count: item._count.products }))} groups={groups} suggestions={data.suggestions.map((item) => item.name)} count={data.count} />
+      <CatalogFilters base={base} params={params} categories={data.categories.map((item) => ({ slug: item.slug, name: item.name, count: item._count.products }))} groups={groups} count={data.count} />
       <section className="catalog-results" aria-label="Товары">
         <div className="catalog-result-heading"><span>{category?.name ?? "Все товары"}</span><small>{data.count} {pluralRu(data.count, ["товар", "товара", "товаров"])}</small></div>
         {chips.length > 0 && <nav className="filter-chips" aria-label="Выбранные фильтры">{chips.map((chip) => <Link key={chip.label} href={chip.href} scroll={false} aria-label={"Убрать фильтр " + chip.label}>{chip.label} ×</Link>)}<Link href={base}>Сбросить всё</Link></nav>}
