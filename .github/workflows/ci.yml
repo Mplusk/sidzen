@@ -68,6 +68,7 @@ jobs:
             sleep 1
           done
           pnpm exec tsx scripts/smoke-marketplaces-http.ts
+          pnpm exec tsx scripts/smoke-product-card-http.ts
 
   deploy:
     name: Deploy production

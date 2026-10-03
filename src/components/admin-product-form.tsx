@@ -88,6 +88,7 @@ export function AdminProductForm({ options, product, error, canPublish = true }:
 
   return <>
     {errorMessage && <p className="notice notice--danger">{errorMessage}</p>}
+    {product?.status === "PUBLISHED" && product.stock <= 0 && !product.madeToOrder && <p className="notice" role="status">Товар виден в каталоге, но недоступен для покупки: остаток равен нулю, изготовление под заказ выключено. Укажите реальный остаток или включите «Изготавливается под заказ», если вы принимаете такие заказы.</p>}
     {product && <p className="muted">Если товар привязан к маркетплейсу, изменение названия, описания, цены, характеристик или фотографий защищает данные сайта от перезаписи. Возобновить импорт этих полей можно в <Link className="text-link" href="/account/marketplaces/">ЛК → Маркетплейсы</Link>.</p>}
     <form action={isEdit ? updateProductAction : createProductAction} className="admin-grid">
       {product && <input type="hidden" name="id" value={product.id} />}

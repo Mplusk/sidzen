@@ -21,9 +21,13 @@ export function pluralRu(value: number, forms: [string, string, string]) {
 }
 
 export function translatedSpecifications(value: unknown) {
-  const labels: Record<string, string> = { layer: "Высота слоя", tolerance: "Допуск", weight: "Вес", dimensions: "Габариты", material: "Материал", color: "Цвет", infill: "Заполнение" };
+  const labels: Record<string, string> = { layer: "Высота слоя", tolerance: "Допуск", weight: "Вес", dimensions: "Габариты", material: "Материал", color: "Цвет", technology: "Технология", infill: "Заполнение", "Цвет товара": "Цвет" };
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return Object.fromEntries(Object.entries(value).filter(([key]) => !["technology", "Технология"].includes(key)).map(([key, item]) => [labels[key] ?? key, String(item)]));
+  return Object.fromEntries(Object.entries(value).flatMap(([key, item]) => {
+    if (/^Ozon\s*[·.]\s*\d+$/i.test(key) || !key.trim() || item == null || typeof item === "object") return [];
+    const text = typeof item === "boolean" ? item ? "Да" : "Нет" : String(item).trim();
+    return text ? [[labels[key] ?? key.trim(), text]] : [];
+  }));
 }
 
 export function slugify(value: string) {

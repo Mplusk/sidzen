@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { snapshotSchema, type Connection, type Provider, type Snapshot } from "./model";
+import { ozonAttributesSchema, ozonAttributeDictionarySchema, ozonSpecifications, type OzonAttributeCache } from "./ozon-attributes";
 
 export class MarketplaceError extends Error {}
 const id = z.union([z.number().int().positive().safe(), z.string().regex(/^\d+$/)]).transform(String);
@@ -22,9 +23,6 @@ const ozonInfoSchema = z.object({ items: z.array(z.object({
 const ozonPricesSchema = z.object({ items: z.array(z.object({ product_id: id, price: z.object({
   price: z.union([z.string(), z.number()]), old_price: z.union([z.string(), z.number()]).nullish(), currency_code: z.string(),
 }) })) });
-const ozonAttributesSchema = z.object({ result: z.array(z.object({
-  id, attributes: z.array(z.object({ id: z.number(), name: z.string().optional(), values: z.array(z.object({ value: z.string() })) })).default([]),
-})) });
 export type Page = { items: Snapshot[]; cursor: Record<string, string | number>; done: boolean };
 export type Transport = typeof fetch;
 type WbPrice = z.infer<typeof wbPricesSchema>["data"]["listGoods"][number];
@@ -108,7 +106,29 @@ function checkedSnapshot(value: Snapshot): Snapshot {
   return { ...value, name: value.name.trim().slice(0, 180) || "Без названия", sku: value.sku.trim().slice(0, 80) || `ID-${value.externalId}`, price: 1, oldPrice: null, issue: "data" };
 }
 
-export async function fetchPage(provider: Provider, connection: Connection, cursor: Record<string, unknown>, transport: Transport = fetch, wbPrices?: Map<string, WbPrice>): Promise<Page> {
+export async function fetchOzonAttributes(connection: Connection, ids: string[], transport: Transport = fetch, cache: OzonAttributeCache = new Map()) {
+  const attributes = ozonAttributesSchema.parse(await apiJson("https://api-seller.ozon.ru/v4/product/info/attributes", connection, "POST", { filter: { product_id: ids, visibility: "ALL" }, limit: 100, sort_dir: "ASC" }, transport));
+  const result = new Map<string, { item: typeof attributes.result[number]; labels: Map<number, string> }>();
+  for (const item of attributes.result) {
+    let labels = new Map(item.attributes.filter(attribute => attribute.name?.trim()).map(attribute => [attribute.id, attribute.name!.trim()]));
+    if (item.attributes.some(attribute => attribute.id !== 4191 && !labels.has(attribute.id))) {
+      if (!item.description_category_id || !item.type_id) throw new MarketplaceError("format");
+      const key = `${item.description_category_id}:${item.type_id}`;
+      const saved = cache.get(key);
+      if (saved) labels = saved;
+      else {
+        const dictionary = ozonAttributeDictionarySchema.parse(await apiJson("https://api-seller.ozon.ru/v1/description-category/attribute", connection, "POST", { description_category_id: item.description_category_id, type_id: item.type_id, language: "DEFAULT" }, transport));
+        labels = new Map(dictionary.result.map(attribute => [attribute.id, attribute.name]));
+        if (cache.size >= 500) cache.clear();
+        cache.set(key, labels);
+      }
+    }
+    result.set(item.id, { item, labels });
+  }
+  return result;
+}
+
+export async function fetchPage(provider: Provider, connection: Connection, cursor: Record<string, unknown>, transport: Transport = fetch, wbPrices?: Map<string, WbPrice>, ozonAttributeCache?: OzonAttributeCache): Promise<Page> {
   try {
     if (provider === "wb") {
       const paging = { limit: 20, ...(cursor.updatedAt && cursor.nmID ? { updatedAt: cursor.updatedAt, nmID: cursor.nmID } : {}) };
@@ -135,9 +155,8 @@ export async function fetchPage(provider: Provider, connection: Connection, curs
     const ids = page.items.map((item) => item.product_id);
     const info = ozonInfoSchema.parse(await apiJson("https://api-seller.ozon.ru/v3/product/info/list", connection, "POST", { product_id: ids }, transport));
     const priceInfo = ozonPricesSchema.parse(await apiJson("https://api-seller.ozon.ru/v5/product/info/prices", connection, "POST", { filter: { product_id: ids, visibility: "ALL" }, limit: 100 }, transport));
-    const attributes = ozonAttributesSchema.parse(await apiJson("https://api-seller.ozon.ru/v4/product/info/attributes", connection, "POST", { filter: { product_id: ids, visibility: "ALL" }, limit: 100, sort_dir: "ASC" }, transport));
+    const byAttributes = await fetchOzonAttributes(connection, ids, transport, ozonAttributeCache);
     const byId = new Map(info.items.map((item) => [item.id, item]));
-    const byAttributes = new Map(attributes.result.map((item) => [item.id, item]));
     const byPrices = new Map(priceInfo.items.map((item) => [item.product_id, item.price]));
     const done = page.items.length < 20;
     if (!done && (!page.last_id || page.last_id === cursor.last_id)) throw new MarketplaceError("format");
@@ -149,8 +168,8 @@ export async function fetchPage(provider: Provider, connection: Connection, curs
       const primary = Array.isArray(item.primary_image) ? item.primary_image : item.primary_image ? [item.primary_image] : [];
       const price = Number(priceData.price), oldPrice = Number(priceData.old_price);
       return checkedSnapshot({ externalId: item.id, sku: item.offer_id, name: item.name.trim().slice(0, 180), barcodes: [...new Set(item.barcodes)],
-        description: plainText(attr.attributes.find((attribute) => attribute.id === 4191)?.values.map((value) => value.value).join("\n") ?? "") || null,
-        specifications: Object.fromEntries(attr.attributes.filter((attribute) => attribute.id !== 4191).map((attribute) => [attribute.name ?? `Ozon · ${attribute.id}`, attribute.values.map((value) => value.value).join(", ")])),
+        description: plainText(attr.item.attributes.find((attribute) => attribute.id === 4191)?.values.map((value) => value.value).join("\n") ?? "") || null,
+        specifications: ozonSpecifications(attr.item, attr.labels),
         price, oldPrice: oldPrice > price ? oldPrice : null, images: [...new Set([...primary, ...item.images])].slice(0, 20), issue: priceData.currency_code !== "RUB" ? "currency" : null,
       });
     }) };
