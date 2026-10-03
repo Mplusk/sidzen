@@ -14,7 +14,7 @@ import { mapListing, marketplaceLock } from "@/lib/marketplaces/sync";
 
 const path = "/account/marketplaces/";
 function result(code: string): never { redirect(`${path}?result=${code}`); }
-async function authorized() { await requirePermission("products.write"); return requirePermission("settings.write"); }
+async function authorized() { await requirePermission("products.write"); await requirePermission("products.publish"); return requirePermission("settings.write"); }
 const activeWhere = { status: { in: ["QUEUED", "RUNNING"] } };
 function providerFrom(form: FormData) {
   const parsed = z.enum(providers).safeParse(form.get("provider"));

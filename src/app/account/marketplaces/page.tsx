@@ -19,7 +19,7 @@ const messages: Record<string, string> = {
 };
 
 export default async function MarketplacesPage({ searchParams }: { searchParams: Promise<{ result?: string; q?: string; page?: string }> }) {
-  await requirePermission("settings.write"); await requirePermission("products.write");
+  await requirePermission("settings.write"); await requirePermission("products.write"); await requirePermission("products.publish");
   const params = await searchParams;
   const query = (params.q ?? "").trim().slice(0, 100);
   const page = Math.min(10000, Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1));
