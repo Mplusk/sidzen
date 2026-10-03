@@ -106,6 +106,12 @@ export function storedProductImageName(path: string) {
   return match?.[1] ?? null;
 }
 
+// Imported content-addressed files are also served, but are retained while
+// marketplace snapshots can still refer to them (not ordinary editor uploads).
+export function servedProductImageName(path: string) {
+  return storedProductImageName(path) ?? /^\/uploads\/products\/(mp-[0-9a-f]{64}\.(?:jpg|png|webp|avif))$/.exec(path)?.[1] ?? null;
+}
+
 export function serializeGallery(entries: Array<{ path: string; alt: string; caption?: string | null }>) {
   return entries.map((entry) => [entry.path, entry.alt, ...(entry.caption ? [entry.caption] : [])].join(" | ")).join("\n");
 }

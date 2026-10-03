@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getPaymentConfig } from "@/lib/integrations";
@@ -31,6 +32,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
   const [config, methods, params] = await Promise.all([getPaymentConfig(), prisma.deliveryMethod.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }), searchParams]);
   return <>
     <h1>Доставка и оплата</h1><p className="muted">Подключения магазина. Доступны только администраторам с правом изменения настроек.</p>
+    <p><Link className="text-link" href="/account/marketplaces/">Подключить Ozon / Wildberries и синхронизировать товары →</Link></p>
     {params.result && messages[params.result] && <p role="status" className="content-card">{messages[params.result]}</p>}
     <section className="content-card"><h2>ЮKassa</h2>
       <p>{config.enabled ? "Онлайн-оплата включена" : "Онлайн-оплата выключена"}. Ключ: {config.secret ? "сохранён, скрыт" : "не задан"}.</p>

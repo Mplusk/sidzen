@@ -1,4 +1,5 @@
 FROM node:22-bookworm-slim AS base
+LABEL com.3dprinta.project="shop"
 
 ENV PNPM_HOME="/pnpm" \
     PATH="$PNPM_HOME:$PATH"
@@ -31,6 +32,12 @@ COPY . .
 ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build"
 RUN pnpm prisma generate
 CMD ["sh", "-c", "pnpm prisma migrate deploy && pnpm db:seed"]
+
+FROM migrator AS marketplace-worker
+ENV NODE_ENV=production
+RUN mkdir -p /app/public/uploads/products && chown 1001:1001 /app/public/uploads/products
+USER 1001:1001
+CMD ["./node_modules/.bin/tsx", "scripts/marketplace-worker.ts"]
 
 FROM base AS runner
 

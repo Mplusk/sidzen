@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { storedProductImageName } from "@/lib/product-admin";
+import { servedProductImageName } from "@/lib/product-admin";
 
 export const runtime = "nodejs";
 
@@ -8,7 +8,7 @@ const contentTypes: Record<string, string> = { jpg: "image/jpeg", png: "image/pn
 
 export async function GET(_request: Request, { params }: { params: Promise<{ name: string }> }) {
   const { name } = await params;
-  const storedName = storedProductImageName(`/uploads/products/${name}`);
+  const storedName = servedProductImageName(`/uploads/products/${name}`);
   if (!storedName) return new Response(null, { status: 404 });
   try {
     const bytes = await readFile(join(process.cwd(), "public", "uploads", "products", storedName));

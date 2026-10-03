@@ -84,10 +84,11 @@ export function AdminProductForm({ options, product, error, canPublish = true }:
   const isEdit = Boolean(product);
   const firstCategory = product?.primaryCategoryId || options.categories[0]?.id || "";
   const specificationsText = product?.specifications ? JSON.stringify(product.specifications, null, 2) : "";
-  const errorMessage = error === "duplicate" ? "Slug или артикул уже используются другим товаром." : error === "images" ? "Проверьте список изображений и формат загружаемых файлов." : error === "specifications" ? "Характеристики должны быть корректным JSON-объектом." : error ? "Проверьте заполнение полей товара." : null;
+  const errorMessage = error === "marketplace-busy" ? "Сейчас идёт синхронизация маркетплейсов. Дождитесь завершения или остановите её в ЛК → Маркетплейсы, затем сохраните товар." : error === "duplicate" ? "Slug или артикул уже используются другим товаром, в том числе в привязках маркетплейсов." : error === "images" ? "Проверьте список изображений и формат загружаемых файлов." : error === "specifications" ? "Характеристики должны быть корректным JSON-объектом." : error ? "Проверьте заполнение полей товара." : null;
 
   return <>
     {errorMessage && <p className="notice notice--danger">{errorMessage}</p>}
+    {product && <p className="muted">Если товар привязан к маркетплейсу, изменение названия, описания, цены, характеристик или фотографий защищает данные сайта от перезаписи. Возобновить импорт этих полей можно в <Link className="text-link" href="/account/marketplaces/">ЛК → Маркетплейсы</Link>.</p>}
     <form action={isEdit ? updateProductAction : createProductAction} className="admin-grid">
       {product && <input type="hidden" name="id" value={product.id} />}
 

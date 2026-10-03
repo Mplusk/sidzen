@@ -13,6 +13,7 @@ import { slugify } from "@/lib/format";
 import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { arrangeProductImages, assertImageCapacity, parseProductForm, storedProductImageName, type ProductGalleryEntry } from "@/lib/product-admin";
+import { guardProductWrite } from "@/lib/marketplaces/sync";
 
 const orderStatuses = ["NEW", "ESTIMATING", "APPROVED", "AWAITING_PAYMENT", "PAID", "QUEUED", "PRINTING", "POST_PROCESSING", "PACKED", "SHIPPED", "DELIVERED", "CANCELED", "REFUNDED"] as const;
 
@@ -139,7 +140,7 @@ function productMutationData(input: Extract<ReturnType<typeof parseProductForm>,
 }
 
 function productErrorCode(error: unknown) {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" ? "duplicate" : error instanceof Error && ["images", "specifications"].includes(error.message) ? error.message : "invalid";
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" ? "duplicate" : error instanceof Error && error.message === "duplicate-sku" ? "duplicate" : error instanceof Error && ["images", "specifications", "marketplace-busy"].includes(error.message) ? error.message : "invalid";
 }
 
 export async function createProductAction(formData: FormData) {
@@ -158,10 +159,13 @@ export async function createProductAction(formData: FormData) {
   try {
     const data = productMutationData(parsed.data, upload.entries, [], undefined, true);
     if (!data.slug) throw new Error("invalid");
-    product = await prisma.product.create({ data: {
+    product = await prisma.$transaction(async (tx) => {
+      await guardProductWrite(tx, data.sku);
+      return tx.product.create({ data: {
       name: data.name, slug: data.slug, sku: data.sku, type: data.type, status: data.status, badge: data.badge, shortDescription: data.shortDescription, description: data.description, usage: data.usage, instructions: data.instructions, specifications: data.specifications, basePrice: data.basePrice, oldPrice: data.oldPrice, costPrice: data.costPrice, stock: data.stock, madeToOrder: data.madeToOrder, leadDays: data.leadDays, weightGrams: data.weightGrams, widthMm: data.widthMm, depthMm: data.depthMm, heightMm: data.heightMm, modelAsset: data.modelAsset, title: data.title, h1: data.h1, metaDescription: data.metaDescription, canonical: data.canonical, robots: data.robots, publishedAt: data.publishedAt,
       categories: { create: data.categoryRows }, images: { create: data.images }, materials: { connect: data.materialLinks }, colors: { connect: data.colorLinks }, technologies: { connect: data.technologyLinks }, qualityProfiles: { connect: data.qualityLinks }, postProcesses: { connect: data.postProcessLinks },
-    } });
+      } });
+    });
   } catch (error) {
     await removeStoredImages(upload.storedPaths);
     redirect(`/admin/products/new/?error=${productErrorCode(error)}`);
@@ -194,10 +198,16 @@ export async function updateProductAction(formData: FormData) {
     if (!data.slug) throw new Error("invalid");
     const keptPaths = new Set(data.images.map((image) => image.path));
     removedUploadedPaths = before.images.map((image) => image.path).filter((path) => !keptPaths.has(path) && storedProductImageName(path) !== null);
-    product = await prisma.product.update({ where: { id }, data: {
+    const importedFieldsChanged = data.name !== before.name || data.description !== before.description || Number(data.basePrice) !== Number(before.basePrice) || (data.oldPrice == null ? null : Number(data.oldPrice)) !== (before.oldPrice == null ? null : Number(before.oldPrice)) || JSON.stringify(parsed.data.specifications) !== JSON.stringify(before.specifications) || JSON.stringify(data.images.map((image) => image.path)) !== JSON.stringify([...before.images].sort((a, b) => a.sortOrder - b.sortOrder).map((image) => image.path));
+    product = await prisma.$transaction(async (tx) => {
+      await guardProductWrite(tx, data.sku, id);
+      const linked = importedFieldsChanged && await tx.marketplaceListing.count({ where: { productId: id } });
+      return tx.product.update({ where: { id }, data: {
+      ...(linked ? { marketplaceMode: "SITE" } : {}),
       name: data.name, slug: data.slug, sku: data.sku, type: data.type, status: data.status, badge: data.badge, shortDescription: data.shortDescription, description: data.description, usage: data.usage, instructions: data.instructions, specifications: data.specifications, basePrice: data.basePrice, oldPrice: data.oldPrice, costPrice: data.costPrice, stock: data.stock, madeToOrder: data.madeToOrder, leadDays: data.leadDays, weightGrams: data.weightGrams, widthMm: data.widthMm, depthMm: data.depthMm, heightMm: data.heightMm, modelAsset: data.modelAsset, title: data.title, h1: data.h1, metaDescription: data.metaDescription, canonical: data.canonical, robots: data.robots, publishedAt: data.publishedAt,
       categories: { deleteMany: {}, create: data.categoryRows }, images: { deleteMany: {}, create: data.images }, materials: { set: data.materialLinks }, colors: { set: data.colorLinks }, technologies: { set: data.technologyLinks }, qualityProfiles: { set: data.qualityLinks }, postProcesses: { set: data.postProcessLinks },
-    } });
+      } });
+    });
   } catch (error) {
     await removeStoredImages(upload.storedPaths);
     redirect(`/admin/products/${id}/?error=${productErrorCode(error)}`);

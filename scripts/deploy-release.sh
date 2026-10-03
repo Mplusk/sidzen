@@ -36,16 +36,22 @@ if ! flock -n 9; then
 fi
 
 previous_release=""
+previous_image_ids="$(docker ps -aq --filter label=com.docker.compose.project=3dprinta | xargs -r docker inspect --format '{{.Image}}' | sort -u)"
 if [[ -L "$current_link" ]]; then
   previous_release="$(readlink -f "$current_link")"
 fi
 
 compose_for() {
   local release_dir="$1"
+  local overlay=()
+  if [[ -f "${release_dir}/.compose-proxy-networks.yaml" ]]; then
+    overlay=(--file "${release_dir}/.compose-proxy-networks.yaml")
+  fi
   COMPOSE_PARALLEL_LIMIT=1 docker compose \
     --project-name "$compose_project" \
     --env-file "$shared_env" \
     --file "${release_dir}/compose.yaml" \
+    "${overlay[@]}" \
     "${@:2}"
 }
 
@@ -56,6 +62,7 @@ rollback() {
   if [[ -n "$previous_release" && -f "${previous_release}/compose.yaml" ]]; then
     printf 'Rolling back to %s.\n' "$previous_release" >&2
     ln -sfn "$shared_env" "${previous_release}/.env.production"
+    python3 "${final_release}/scripts/preserve-proxy-config.py" "$final_release" "$previous_release"
     compose_for "$previous_release" build
     compose_for "$previous_release" up -d --remove-orphans
   else
@@ -82,6 +89,9 @@ wait_for_health() {
 
 cleanup_successful_deploy() {
   local old_release
+  local old_image
+  local current_image_ids
+  current_image_ids="$(compose_for "$final_release" images -q | xargs -r docker image inspect --format '{{.Id}}' | sort -u)"
 
   while IFS= read -r -d '' old_release; do
     rm -rf -- "$old_release"
@@ -89,10 +99,16 @@ cleanup_successful_deploy() {
 
   find "$incoming_root" -mindepth 1 -maxdepth 1 -type f -name '*.tar.gz' -delete
 
-  docker builder prune --all --force
-  docker container prune --force
-  # Keep tagged ERP images for rollback; prune only dangling layers.
-  docker image prune --force
+  # The host also serves other projects. Never globally delete their stopped
+  # containers, rollback images or shared build caches. Old shop runtime caches
+  # disappear with the replaced containers/releases; prune only our images.
+  docker container prune --force --filter label=com.docker.compose.project=3dprinta
+  while IFS= read -r old_image; do
+    if [[ -n "$old_image" ]] && ! grep -Fxq "$old_image" <<< "$current_image_ids" && [[ -z "$(docker ps -aq --filter "ancestor=$old_image")" ]]; then
+      docker image rm "$old_image" || true
+    fi
+  done <<< "$previous_image_ids"
+  docker image prune --force --filter label=com.3dprinta.project=shop
 }
 
 verify_backup_entrypoint() {
@@ -146,12 +162,17 @@ ln -sfn "$shared_env" "${staging_release}/.env.production"
 rm -rf -- "$final_release"
 mv "$staging_release" "$final_release"
 
+python3 "${final_release}/scripts/preserve-proxy-config.py" "$previous_release" "$final_release"
+
 printf 'Building release %s.\n' "$release_sha"
 if ! compose_for "$final_release" build; then
   rollback "image build"
 fi
 
 printf 'Starting release %s.\n' "$release_sha"
+if ! compose_for "$final_release" run --rm --no-deps proxy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile; then
+  rollback "proxy configuration validation"
+fi
 if ! compose_for "$final_release" up -d --remove-orphans; then
   rollback "container start or migration"
 fi
@@ -159,6 +180,20 @@ fi
 if ! wait_for_health; then
   compose_for "$final_release" logs --tail=200 app >&2 || true
   rollback "health check"
+fi
+
+worker_id="$(compose_for "$final_release" ps -q marketplace-worker)"
+worker_healthy=false
+for attempt in $(seq 1 20); do
+  if [[ -n "$worker_id" && "$(docker inspect --format '{{.State.Health.Status}}' "$worker_id")" == "healthy" ]]; then
+    worker_healthy=true
+    break
+  fi
+  sleep 3
+done
+if [[ "$worker_healthy" != true ]]; then
+  compose_for "$final_release" logs --tail=100 marketplace-worker >&2 || true
+  rollback "marketplace worker health check"
 fi
 
 if ! verify_backup_entrypoint; then

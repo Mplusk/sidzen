@@ -14,3 +14,4 @@ public/uploads/products/*
 backups/*
 !backups/.gitkeep
 tsconfig.tsbuildinfo
+.compose-proxy-networks.yaml

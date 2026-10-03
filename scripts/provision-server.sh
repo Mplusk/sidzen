@@ -7,7 +7,7 @@ source /etc/os-release
 if [[ "$ID" != ubuntu || "$VERSION_ID" != 24.04 ]]; then printf 'Ubuntu 24.04 is required.\n' >&2; exit 1; fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y ca-certificates curl openssl cron
+apt-get install -y ca-certificates curl openssl cron python3
 install -d -m 0755 /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
 chmod 0644 /etc/apt/keyrings/docker.asc

@@ -75,6 +75,33 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  marketplace-worker:
+    build:
+      context: .
+      target: marketplace-worker
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      MARKETPLACE_APP_URL: http://app:3000
+      NODE_OPTIONS: --max-old-space-size=256
+      SHOP_DB_CONNECTION_LIMIT: "4"
+    depends_on:
+      app:
+        condition: service_healthy
+    volumes:
+      - product-images:/app/public/uploads/products
+    healthcheck:
+      test: ["CMD", "node", "-e", "const fs=require('fs');if(Date.now()-Number(fs.readFileSync('/tmp/3dprinta-marketplace-heartbeat','utf8'))>60000)process.exit(1)"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    stop_grace_period: 30s
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   caddy-data:
   caddy-config:

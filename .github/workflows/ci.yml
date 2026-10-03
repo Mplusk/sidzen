@@ -14,6 +14,19 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: ci-qa-only
+          POSTGRES_DB: shop_qa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d shop_qa"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     env:
       DATABASE_URL: postgresql://build:build@127.0.0.1:5432/build
       AUTH_SECRET: build-only-secret
@@ -33,7 +46,28 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - name: Verify marketplace database synchronization with fixture APIs
+        env:
+          DATABASE_URL: postgresql://postgres:ci-qa-only@127.0.0.1:5432/shop_qa
+        run: |
+          pnpm prisma migrate deploy
+          pnpm exec tsx scripts/smoke-marketplaces.ts
       - run: pnpm build
+      - name: Verify administrator marketplace controls over HTTP
+        env:
+          DATABASE_URL: postgresql://postgres:ci-qa-only@127.0.0.1:5432/shop_qa
+          BOOTSTRAP_ADMIN_EMAIL: qa@example.test
+          BOOTSTRAP_ADMIN_PASSWORD: LocalGalleryQA-2026
+        run: |
+          pnpm db:seed
+          pnpm exec next start -p 3101 > "${RUNNER_TEMP}/marketplace-http.log" 2>&1 &
+          app_pid=$!
+          trap 'kill "$app_pid" || true' EXIT
+          for attempt in $(seq 1 40); do
+            if curl --silent --fail http://localhost:3101/api/health/ > /dev/null; then break; fi
+            sleep 1
+          done
+          pnpm exec tsx scripts/smoke-marketplaces-http.ts
 
   deploy:
     name: Deploy production

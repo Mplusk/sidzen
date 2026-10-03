@@ -1,0 +1,31 @@
+import { writeFile } from "node:fs/promises";
+import { prisma } from "../src/lib/prisma";
+import { claimRun, processRun } from "../src/lib/marketplaces/sync";
+import { catalogInvalidationToken } from "../src/lib/marketplaces/cache-token";
+
+let stopping = false;
+process.on("SIGTERM", () => { stopping = true; });
+process.on("SIGINT", () => { stopping = true; });
+async function heartbeat() { await writeFile("/tmp/3dprinta-marketplace-heartbeat", String(Date.now())); }
+await heartbeat();
+const pulse = setInterval(() => { void heartbeat().catch(() => {}); }, 10_000);
+console.log("Marketplace worker ready. Only administrator-requested jobs are processed.");
+try {
+  while (!stopping) {
+    try {
+      const run = await claimRun();
+      if (run) {
+        await processRun(run);
+        try {
+          const base = process.env.MARKETPLACE_APP_URL || "http://app:3000";
+          const response = await fetch(`${base}/api/internal/catalog-invalidate/`, { method: "POST", headers: { Authorization: `Bearer ${catalogInvalidationToken()}` }, redirect: "error", signal: AbortSignal.timeout(5000) });
+          if (!response.ok) console.warn("Catalog cache will refresh using its normal TTL.");
+        } catch { console.warn("Catalog cache will refresh using its normal TTL."); }
+        console.log("Marketplace job processed", run.id);
+      } else await new Promise((resolve) => setTimeout(resolve, 2000));
+    } catch {
+      console.warn("Marketplace worker temporarily unavailable; retrying without losing queued jobs.");
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+    }
+  }
+} finally { clearInterval(pulse); await prisma.$disconnect(); }

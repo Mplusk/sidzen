@@ -331,6 +331,11 @@ input[type="range"] { accent-color: var(--blue); }
 .content-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
 .content-card { padding: 28px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--white); }
 .content-card__number { color: var(--orange); font-size: 2.5rem; font-weight: 850; }
+.marketplace-page .content-card { margin: 18px 0; }
+.marketplace-page .content-card h2 { font-size: 1.6rem; margin: 0 0 18px; }
+.marketplace-page .content-card h3 { font-size: 1.05rem; overflow-wrap: anywhere; }
+.marketplace-page p { overflow-wrap: anywhere; }
+.marketplace-page .button { margin-top: 8px; }
 .content-card p { color: var(--muted); }
 .prose-page { max-width: 840px; padding: 46px 0 96px; }
 .prose-page h1 { font-size: clamp(2.5rem, 5vw, 4.8rem); }

@@ -206,9 +206,62 @@ model Product {
   favorites        ProductFavorite[]
   cartItems        CartItem[]
   orderItems       OrderItem[]
+  marketplaceMode  String              @default("AUTO")
+  marketplaceListings MarketplaceListing[]
+  marketplaceIdentities MarketplaceIdentity[]
 
   @@index([status, publishedAt])
   @@index([basePrice])
+}
+
+// Stable cross-marketplace identities. Names alone are never sufficient to merge.
+model MarketplaceIdentity {
+  key       String  @id
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  @@index([productId])
+}
+
+model MarketplaceListing {
+  id          String   @id @default(cuid())
+  provider    String
+  accountId   String
+  externalId  String
+  sellerSku   String
+  normalizedSku String
+  barcodes    String[]
+  snapshot    Json
+  productId   String?
+  conflict    String?
+  lastRunId   String?
+  updatedAt   DateTime @updatedAt
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  @@unique([provider, accountId, externalId])
+  @@unique([provider, accountId, productId])
+  @@index([normalizedSku])
+  @@index([productId])
+  @@index([conflict])
+}
+
+// A durable, explicitly requested import. No scheduled marketplace writes.
+model MarketplaceSyncRun {
+  id          String   @id @default(cuid())
+  provider    String
+  accountId   String
+  status      String   @default("QUEUED")
+  actorId     String?
+  cursor      Json?
+  processed   Int      @default(0)
+  created     Int      @default(0)
+  updated     Int      @default(0)
+  conflicts   Int      @default(0)
+  error       String?
+  leaseToken  String?
+  leaseUntil  DateTime?
+  createdAt   DateTime @default(now())
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  @@index([status, createdAt])
 }
 
 model ProductCategory {
