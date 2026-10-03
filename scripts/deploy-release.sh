@@ -47,12 +47,15 @@ compose_for() {
   if [[ -f "${release_dir}/.compose-proxy-networks.yaml" ]]; then
     overlay=(--file "${release_dir}/.compose-proxy-networks.yaml")
   fi
+  # CI streams this script into `bash -s` over SSH. Compose run otherwise
+  # consumes the remaining script through stdin and bash exits successfully
+  # before starting containers or activating the release.
   COMPOSE_PARALLEL_LIMIT=1 docker compose \
     --project-name "$compose_project" \
     --env-file "$shared_env" \
     --file "${release_dir}/compose.yaml" \
     "${overlay[@]}" \
-    "${@:2}"
+    "${@:2}" < /dev/null
 }
 
 rollback() {

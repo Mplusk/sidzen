@@ -115,6 +115,14 @@ jobs:
           ssh_options=(-i "${HOME}/.ssh/3dprinta_deploy" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=20)
           ssh "${ssh_options[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" "bash -s -- '${GITHUB_SHA}'" < scripts/deploy-release.sh
 
+      - name: Verify the active release and marketplace worker
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          ssh_options=(-i "${HOME}/.ssh/3dprinta_deploy" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15)
+          ssh "${ssh_options[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" "test \"\$(readlink -f /opt/3dprinta/current)\" = '/opt/3dprinta/releases/${GITHUB_SHA}' && test \"\$(docker inspect --format '{{.State.Health.Status}}' 3dprinta-marketplace-worker-1)\" = healthy" < /dev/null
+
       - name: Remove runner credentials
         if: always()
         run: rm -f -- "${HOME}/.ssh/3dprinta_deploy"
