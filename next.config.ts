@@ -31,6 +31,10 @@ const nextConfig: NextConfig = {
         ]
       },
       {
+        source: "/checkout/:path*",
+        headers: [{ key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(self)" }]
+      },
+      {
         source: "/:section(account|admin|checkout|cart|login|register|api/account)/:path*",
         headers: [{ key: "Cache-Control", value: "private, no-store, max-age=0" }, { key: "X-Robots-Tag", value: "noindex, nofollow" }]
       }
