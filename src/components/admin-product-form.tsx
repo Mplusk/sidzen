@@ -38,6 +38,10 @@ export type ProductFormValue = {
   widthMm: number | null;
   depthMm: number | null;
   heightMm: number | null;
+  shippingWeightG: number | null;
+  shippingLengthMm: number | null;
+  shippingWidthMm: number | null;
+  shippingHeightMm: number | null;
   modelAsset: string | null;
   title: string | null;
   metaDescription: string | null;
@@ -128,6 +132,11 @@ export function AdminProductForm({ options, product, error, canPublish = true }:
         <label className="field"><span>Глубина, мм</span><input name="depthMm" type="number" min="0" step="0.001" defaultValue={product?.depthMm ?? ""} /></label>
         <label className="field"><span>Высота, мм</span><input name="heightMm" type="number" min="0" step="0.001" defaultValue={product?.heightMm ?? ""} /></label>
         <label className="field"><span>Вес, г</span><input name="weightGrams" type="number" min="0" step="0.001" defaultValue={product?.weightGrams ?? ""} /></label>
+        <p className="field--full muted">Для Ozon Доставки: одна единица товара — отдельная упакованная посылка. Введите измеренные вес и размеры с упаковкой. Они не заменяют характеристики изделия и не перезаписываются синхронизацией товаров.</p>
+        <label className="field"><span>Вес с упаковкой, г</span><input name="shippingWeightG" type="number" min="1" max="1000000" step="1" defaultValue={product?.shippingWeightG ?? ""} /></label>
+        <label className="field"><span>Длина упаковки, мм</span><input name="shippingLengthMm" type="number" min="1" max="10000" step="1" defaultValue={product?.shippingLengthMm ?? ""} /></label>
+        <label className="field"><span>Ширина упаковки, мм</span><input name="shippingWidthMm" type="number" min="1" max="10000" step="1" defaultValue={product?.shippingWidthMm ?? ""} /></label>
+        <label className="field"><span>Высота упаковки, мм</span><input name="shippingHeightMm" type="number" min="1" max="10000" step="1" defaultValue={product?.shippingHeightMm ?? ""} /></label>
         <label className="field field--full"><span>Путь к файлу модели</span><input name="modelAsset" defaultValue={product?.modelAsset ?? ""} maxLength={500} placeholder="/private/..." /></label>
       </div></section>
 

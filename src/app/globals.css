@@ -700,3 +700,11 @@ body:has(.admin-shell) > .cookie-banner { display: none; }
   .product-buy-panel { padding: 16px; }
   .product-detail .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 }
+/* API delivery: compact, readable point search without horizontal overflow. */
+.ozon-delivery-picker { padding: 16px; background: var(--surface, #f2f4f7); border-radius: 12px; margin: 12px 0 20px; }
+.ozon-delivery-picker .field { min-width: 0; margin-bottom: 12px; }
+.ozon-delivery-picker select { width: 100%; max-width: 100%; }
+.ozon-point-search { display: flex; align-items: end; gap: 12px; }
+.ozon-point-search .field { flex: 1; margin-bottom: 0; }
+.ozon-point-search { margin-bottom: 12px; }
+@media (max-width: 600px) { .ozon-point-search { flex-direction: column; align-items: stretch; } }

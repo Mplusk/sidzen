@@ -1,0 +1,28 @@
+import { saveOzonDelivery } from "@/app/actions/ozon-delivery";
+import { prisma } from "@/lib/prisma";
+import { getOzonDeliveryConfig } from "@/lib/delivery/ozon-config";
+
+export async function OzonDeliverySettings() {
+  const [config, sync] = await Promise.all([getOzonDeliveryConfig(), prisma.ozonDeliverySync.findUnique({ where: { id: "ozon" } })]);
+  const count = config.shipmentMethodId ? await prisma.ozonDeliveryPoint.count({ where: { clientId: config.clientId, methodId: BigInt(config.shipmentMethodId), active: true } }) : 0;
+  return <section className="content-card" id="ozon-delivery"><h2>Ozon Доставка · Delivery API</h2>
+    <p>{config.enabled ? "Доставка включена" : "Доставка выключена"}. Секрет: {config.clientSecret ? "сохранён, скрыт" : "не задан"}.</p>
+    <p className="muted">Это отдельное подключение Ozon Доставки для бизнеса, не Seller API для товаров. Создайте частное приложение в <a className="text-link" href="https://seller.ozon.ru/app/settings/private-apps" target="_blank" rel="noreferrer">кабинете Ozon Доставки</a> и скопируйте client_id / client_secret.</p>
+    <p>Права приложения: <code>delivery-api.shipment-method</code>, <code>delivery-api.delivery</code>, <code>delivery-api.delivery-point</code>, <code>delivery-api.order</code>, <code>delivery-api.posting</code>. В Ozon заранее настройте активный метод отгрузки, пункт передачи заказов и возвратов.</p>
+    {config.checkedAt && <p className="muted">Проверено: {new Date(config.checkedAt).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })} МСК. {config.methodName}</p>}
+    <form action={saveOzonDelivery} className="form-grid" autoComplete="off">
+      <label className="field">Client ID<input name="clientId" maxLength={200} defaultValue={config.clientId} /></label>
+      <label className="field">Client Secret<input name="clientSecret" type="password" maxLength={4000} autoComplete="new-password" placeholder={config.clientSecret ? "Пустое поле сохранит прежний секрет" : "Секрет частного приложения"} /></label>
+      <label className="field">ID метода отгрузки Ozon<input name="shipmentMethodId" type="number" min="1" step="1" defaultValue={config.shipmentMethodId ?? ""} /><small>shipment_method_id активного метода, не ID ПВЗ покупателя</small></label>
+      <label className="field">Подготовка к отгрузке, дней<input name="dispatchDays" type="number" min="1" max="30" step="1" defaultValue={config.dispatchDays} /><small>Для изделий под заказ учитывается также срок изготовления товара.</small></label>
+      <label><input name="enabled" type="checkbox" defaultChecked={config.enabled} /> Предлагать Ozon Доставку покупателям</label>
+      <button className="button" type="submit">Сохранить Delivery API</button>
+      <button className="button button--outline" type="submit" name="intent" value="check">Проверить подключение</button>
+      <button className="button button--outline" type="submit" name="intent" value="points">Обновить список ПВЗ</button>
+    </form>
+    <p>ПВЗ в справочнике: {count}. {sync ? `Обновление: ${{ PENDING: "в очереди", RUNNING: "загружается", SUCCEEDED: "завершено", FAILED: "ошибка — проверьте доступ и повторите обновление" }[sync.status] || sync.status}. Обработано страниц: ${sync.pages}.` : "После подключения список загрузится в фоне."}</p>
+    <p className="muted">Проверка не создаёт отправлений. Доставка пока подключается до ПВЗ и постаматов, без курьера. Тариф и страховка рассчитываются Ozon; нужен зарегистрированный на Ozon номер покупателя. В каждом товаре заполните вес и размеры упаковки. Каждая единица товара оформляется отдельной посылкой; объединение в одну коробку не выполняется.</p>
+    <p className="muted">Оплаченные заказы передаются автоматически. Для оплаты по счёту сначала подтвердите оплату или заказ в управлении заказами. Там же доступны статусы Ozon и этикетки. Отключение скрывает способ для новых заказов, но сохраняет обработку уже созданных.</p>
+    <a className="text-link" href="https://docs.ozon.ru/api/ozon-delivery/" target="_blank" rel="noreferrer">Документация Ozon Delivery API →</a>
+  </section>;
+}

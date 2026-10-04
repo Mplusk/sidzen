@@ -16,15 +16,18 @@ export async function deleteOrderAction(formData: FormData) {
   let number: string | null;
   try {
     number = await prisma.$transaction(async (tx) => {
-      const order = await tx.order.findUnique({ where: { id: input.data.orderId }, select: { id: true, number: true, status: true, total: true } });
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412027)`;
+      const order = await tx.order.findUnique({ where: { id: input.data.orderId }, select: { id: true, number: true, status: true, total: true, shipment: { select: { ozonJob: { select: { status: true } } } } } });
       if (!order) return null;
       if (order.number !== input.data.confirmation) throw new Error("confirmation");
+      if (order.shipment?.ozonJob && !["CANCELED", "FINISHED"].includes(order.shipment.ozonJob.status)) throw new Error("delivery-active");
       await tx.order.delete({ where: { id: order.id } });
       await tx.auditLog.create({ data: { actorId: user.id, action: "order.delete", entityType: "Order", entityId: order.id, ip, before: { number: order.number, status: order.status, total: String(order.total) } } });
       return order.number;
     });
   } catch (error) {
     if (error instanceof Error && error.message === "confirmation") redirect("/admin/orders/?error=confirmation");
+    if (error instanceof Error && error.message === "delivery-active") redirect("/admin/orders/?error=delivery-active");
     console.error("Could not delete order", error);
     redirect("/admin/orders/?error=delete");
   }

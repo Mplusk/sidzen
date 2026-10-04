@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { prisma } from "../src/lib/prisma";
 import { claimRun, processRun } from "../src/lib/marketplaces/sync";
 import { catalogInvalidationToken } from "../src/lib/marketplaces/cache-token";
+import { processOzonJob, refreshOzonJob, syncOzonPointsPage } from "../src/lib/delivery/ozon-worker";
 
 let stopping = false;
 process.on("SIGTERM", () => { stopping = true; });
@@ -9,7 +10,7 @@ process.on("SIGINT", () => { stopping = true; });
 async function heartbeat() { await writeFile("/tmp/3dprinta-marketplace-heartbeat", String(Date.now())); }
 await heartbeat();
 const pulse = setInterval(() => { void heartbeat().catch(() => {}); }, 10_000);
-console.log("Marketplace worker ready. Only administrator-requested jobs are processed.");
+console.log("Marketplace and delivery worker ready. Catalog sync runs on request; confirmed deliveries run automatically.");
 try {
   while (!stopping) {
     try {
@@ -22,7 +23,11 @@ try {
           if (!response.ok) console.warn("Catalog cache will refresh using its normal TTL.");
         } catch { console.warn("Catalog cache will refresh using its normal TTL."); }
         console.log("Marketplace job processed", run.id);
-      } else await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+      await processOzonJob();
+      await refreshOzonJob();
+      await syncOzonPointsPage();
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     } catch {
       console.warn("Marketplace worker temporarily unavailable; retrying without losing queued jobs.");
       await new Promise((resolve) => setTimeout(resolve, 5000));

@@ -21,7 +21,7 @@ describe("order deletion", () => {
     vi.resetAllMocks();
     mocks.permission.mockResolvedValue({ id: "admin-1" });
     mocks.find.mockResolvedValue({ id: "order-1", number: "3DP-123", status: "NEW", total: "1200" });
-    mocks.transaction.mockImplementation((callback) => callback({ order: { findUnique: mocks.find, delete: mocks.remove }, auditLog: { create: mocks.audit } }));
+    mocks.transaction.mockImplementation((callback) => callback({ $executeRaw: vi.fn(), order: { findUnique: mocks.find, delete: mocks.remove }, auditLog: { create: mocks.audit } }));
   });
 
   it("requires order management permission before accessing the order", async () => {
@@ -49,6 +49,11 @@ describe("order deletion", () => {
   it("handles an already deleted order without deleting anything else", async () => {
     mocks.find.mockResolvedValue(null);
     await expect(deleteOrderAction(form("3DP-123"))).rejects.toThrow("error=missing");
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+  it("does not orphan an active or ambiguously created Ozon delivery", async () => {
+    mocks.find.mockResolvedValue({ id: "order-1", number: "3DP-123", status: "NEW", total: "1200", shipment: { ozonJob: { status: "PENDING" } } });
+    await expect(deleteOrderAction(form("3DP-123"))).rejects.toThrow("error=delivery-active");
     expect(mocks.remove).not.toHaveBeenCalled();
   });
 

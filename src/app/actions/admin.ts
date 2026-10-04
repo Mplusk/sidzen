@@ -122,6 +122,10 @@ function productMutationData(input: Extract<ReturnType<typeof parseProductForm>,
     widthMm: input.widthMm ?? null,
     depthMm: input.depthMm ?? null,
     heightMm: input.heightMm ?? null,
+    shippingWeightG: input.shippingWeightG ?? null,
+    shippingLengthMm: input.shippingLengthMm ?? null,
+    shippingWidthMm: input.shippingWidthMm ?? null,
+    shippingHeightMm: input.shippingHeightMm ?? null,
     modelAsset: optionalText(input.modelAsset),
     title: optionalText(input.title) ?? (fillSeoDefaults ? input.name : null),
     h1: optionalText(input.h1) ?? (fillSeoDefaults ? input.name : null),
@@ -164,6 +168,7 @@ export async function createProductAction(formData: FormData) {
       return tx.product.create({ data: {
       name: data.name, slug: data.slug, sku: data.sku, type: data.type, status: data.status, badge: data.badge, shortDescription: data.shortDescription, description: data.description, usage: data.usage, instructions: data.instructions, specifications: data.specifications, basePrice: data.basePrice, oldPrice: data.oldPrice, costPrice: data.costPrice, stock: data.stock, madeToOrder: data.madeToOrder, leadDays: data.leadDays, weightGrams: data.weightGrams, widthMm: data.widthMm, depthMm: data.depthMm, heightMm: data.heightMm, modelAsset: data.modelAsset, title: data.title, h1: data.h1, metaDescription: data.metaDescription, canonical: data.canonical, robots: data.robots, publishedAt: data.publishedAt,
       categories: { create: data.categoryRows }, images: { create: data.images }, materials: { connect: data.materialLinks }, colors: { connect: data.colorLinks }, technologies: { connect: data.technologyLinks }, qualityProfiles: { connect: data.qualityLinks }, postProcesses: { connect: data.postProcessLinks },
+      shippingWeightG: data.shippingWeightG, shippingLengthMm: data.shippingLengthMm, shippingWidthMm: data.shippingWidthMm, shippingHeightMm: data.shippingHeightMm,
       } });
     });
   } catch (error) {
@@ -206,6 +211,7 @@ export async function updateProductAction(formData: FormData) {
       ...(linked ? { marketplaceMode: "SITE" } : {}),
       name: data.name, slug: data.slug, sku: data.sku, type: data.type, status: data.status, badge: data.badge, shortDescription: data.shortDescription, description: data.description, usage: data.usage, instructions: data.instructions, specifications: data.specifications, basePrice: data.basePrice, oldPrice: data.oldPrice, costPrice: data.costPrice, stock: data.stock, madeToOrder: data.madeToOrder, leadDays: data.leadDays, weightGrams: data.weightGrams, widthMm: data.widthMm, depthMm: data.depthMm, heightMm: data.heightMm, modelAsset: data.modelAsset, title: data.title, h1: data.h1, metaDescription: data.metaDescription, canonical: data.canonical, robots: data.robots, publishedAt: data.publishedAt,
       categories: { deleteMany: {}, create: data.categoryRows }, images: { deleteMany: {}, create: data.images }, materials: { set: data.materialLinks }, colors: { set: data.colorLinks }, technologies: { set: data.technologyLinks }, qualityProfiles: { set: data.qualityLinks }, postProcesses: { set: data.postProcessLinks },
+      shippingWeightG: data.shippingWeightG, shippingLengthMm: data.shippingLengthMm, shippingWidthMm: data.shippingWidthMm, shippingHeightMm: data.shippingHeightMm,
       } });
     });
   } catch (error) {

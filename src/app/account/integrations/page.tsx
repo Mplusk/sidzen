@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getPaymentConfig } from "@/lib/integrations";
 import { saveDeliveryMethod, savePaymentIntegration } from "@/app/actions/integrations";
+import { OzonDeliverySettings } from "@/components/ozon-delivery-settings";
 
 export const metadata: Metadata = { title: "Подключения — доставка и оплата", robots: { index: false, follow: false } };
 const messages: Record<string, string> = {
@@ -13,6 +14,11 @@ const messages: Record<string, string> = {
   connection: "Проверка не пройдена. Проверьте ключ и Shop ID действующего магазина ЮKassa. Тестовый магазин на рабочем сайте не допускается. Настройки не изменены.",
   pending: "Нельзя менять платёжный магазин или ключ, пока есть незавершённые платежи. Сначала сверьте их в ЮKassa.",
   rate: "Слишком много проверок. Повторите через минуту.",
+  "ozon-invalid": "Проверьте Client ID, секрет, ID метода отгрузки и срок подготовки.",
+  "ozon-incomplete": "Для включения Ozon Доставки заполните Client ID, Client Secret и ID метода отгрузки.",
+  "ozon-connection": "Проверка Delivery API не пройдена. Нужны ключи частного приложения Ozon Доставки с указанными правами и активный shipment_method_id. Настройки не изменены.",
+  "ozon-verified": "Настройки Ozon Доставки сохранены, подключение проверено. При первом подключении ПВЗ загружаются в фоне — обновите страницу чуть позже.",
+  "ozon-pending": "Настройки изменились параллельно либо есть незавершённые доставки. Нельзя сменить Client ID до их завершения.",
 };
 
 function DeliveryForm({ method }: { method?: { id: string; name: string; description: string | null; basePrice: number; sortOrder: number; active: boolean } }) {
@@ -50,7 +56,8 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
       <p>В кабинете ЮKassa настройте уведомления payment.succeeded и payment.canceled на адрес <code>https://3dprinta.shop/api/payments/yookassa/</code>. Карты и СБП включаются в ЮKassa. Коды для чеков выберите согласно настройкам вашей кассы: <a className="text-link" href="https://yookassa.ru/developers/api" target="_blank" rel="noreferrer">справочник ЮKassa</a>.</p>
     </section>
     <section className="content-card"><h2>Оплата по счёту</h2><p>Доступна без платёжного сервиса. Реквизиты передаются покупателю после подтверждения заказа. Онлайн-списаний этот способ не выполняет.</p></section>
-    <h2>Службы доставки</h2><p className="muted">Управляйте способами и фиксированными тарифами. Это не подключение API перевозчика: автоматический расчёт по адресу, выбор ПВЗ и создание накладных здесь пока не поддерживаются. Отключённый способ исчезает из оформления новых заказов; старые заказы не меняются.</p>
+    <OzonDeliverySettings />
+    <h2>Другие способы доставки</h2><p className="muted">Управляйте способами с фиксированными тарифами. Эти способы не используют API перевозчика. Ozon Delivery API подключается отдельно выше. Отключённый способ исчезает из оформления новых заказов; старые заказы не меняются.</p>
     {methods.map((method) => <section className="content-card" key={method.id}><h3>{method.name} · {method.active ? "включён" : "выключен"}</h3><DeliveryForm method={{ ...method, basePrice: Number(method.basePrice) }} /></section>)}
     <section className="content-card"><h3>Новый способ доставки</h3><DeliveryForm /></section>
   </>;
