@@ -4,6 +4,7 @@ import { getStoreContacts } from "@/lib/settings";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { CookieBanner } from "@/components/cookie-banner";
+import "leaflet/dist/leaflet.css";
 import "./globals.css";
 
 export const dynamic = "force-dynamic";

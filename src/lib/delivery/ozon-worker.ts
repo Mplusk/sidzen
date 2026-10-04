@@ -32,7 +32,7 @@ export async function syncOzonPointsPage() {
       const claimed = await tx.ozonDeliverySync.updateMany({ where: { id: sync.id, generation: sync.generation, lockToken }, data: { cursor: page.next_cursor || null, pages: { increment: 1 }, points: { increment: points.length }, status: page.next_cursor ? "RUNNING" : "SUCCEEDED", error: null, lockToken: null, lockedUntil: null } });
       if (!claimed.count) return;
       for (const point of points) {
-        const data = { name: point.name, address: point.full_address, type: point.type, active: point.is_active, clientId: sync.clientId, methodId: sync.methodId, generation: sync.generation };
+        const data = { name: point.name, address: point.full_address, type: point.type, active: point.is_active, clientId: sync.clientId, methodId: sync.methodId, generation: sync.generation, latitude: point.coordinates?.latitude ?? null, longitude: point.coordinates?.longitude ?? null };
         await tx.ozonDeliveryPoint.upsert({ where: { id: String(point.delivery_point_id) }, create: { id: String(point.delivery_point_id), ...data }, update: data });
       }
       if (!page.next_cursor) await tx.ozonDeliveryPoint.updateMany({ where: { generation: { not: sync.generation } }, data: { active: false } });

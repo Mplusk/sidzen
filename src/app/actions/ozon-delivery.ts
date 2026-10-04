@@ -16,6 +16,7 @@ import { buildOzonPostings, cartDeliveryFingerprint, signOzonQuote } from "@/lib
 import { consentDocument, privacySubject, operatorReady } from "@/lib/privacy";
 import { CONSENT_VERSION } from "@/lib/privacy-documents";
 import { getCurrentUser } from "@/lib/auth";
+import { customerDeliveryPrice } from "@/lib/delivery/pricing";
 
 function finish(code: string): never { redirect(`/account/integrations/?result=${code}#ozon-delivery`); }
 export async function saveOzonDelivery(form: FormData) {
@@ -82,7 +83,7 @@ export async function quoteOzonDelivery(phoneInput: string, pointInput: string, 
     const user = await getCurrentUser();
     const consent = await prisma.privacyConsent.create({ data: { userId: user?.id, subjectHash: privacySubject(cart.id, phone), purpose: "ozon", version: CONSENT_VERSION, document: await consentDocument("ozon"), expiresAt: new Date(Date.now() + 15 * 60000) } });
     const calculation = await api.checkout(request);
-    return { ...calculation, address: point.full_address, token: signOzonQuote({ ...calculation, consentId: consent.id, address: point.full_address, request, cart: cartDeliveryFingerprint(cart), config: deliveryConfigFingerprint(config), expires: consent.expiresAt!.getTime() }) };
+    return { ...calculation, cost: customerDeliveryPrice(), address: point.full_address, token: signOzonQuote({ ...calculation, consentId: consent.id, address: point.full_address, request, cart: cartDeliveryFingerprint(cart), config: deliveryConfigFingerprint(config), expires: consent.expiresAt!.getTime() }) };
   } catch (error) {
     const code = error instanceof OzonDeliveryError ? error.code : "provider";
     return { error: code === "packaging" ? "Для товаров не заполнены параметры упаковки. Выберите другую доставку или свяжитесь с магазином." : code === "recipient" ? "Ozon Доставка доступна для номера телефона, зарегистрированного на Ozon. Проверьте номер или выберите другую доставку." : code === "parcels" ? "Для Ozon Доставки можно оформить не более 100 отдельных посылок." : "Не удалось рассчитать доставку. Проверьте выбранный ПВЗ или выберите другой способ." };

@@ -3,6 +3,7 @@ import { z } from "zod";
 // Official contract: https://docs.ozon.ru/api/ozon-delivery/
 export const OZON_DELIVERY_SCOPES = ["delivery-api.shipment-method", "delivery-api.delivery", "delivery-api.delivery-point", "delivery-api.order", "delivery-api.posting"];
 export const positiveId = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
+export const pointCoordinatesSchema = z.object({ latitude: z.number().finite().min(-90).max(90), longitude: z.number().finite().min(-180).max(180) });
 export const shipmentMethodSchema = z.object({ shipment_method_id: positiveId, name: z.string().max(500), status: z.string().max(80) });
 const money = z.object({ amount: z.string().regex(/^\d+(?:\.\d{1,2})?$/), currency_code: z.literal("RUB") });
 export const parcelSchema = z.object({ weight_g: z.number().int().positive().max(1_000_000), length_mm: z.number().int().positive().max(10_000), width_mm: z.number().int().positive().max(10_000), height_mm: z.number().int().positive().max(10_000) });
@@ -80,7 +81,7 @@ export class OzonDeliveryClient {
     throw new OzonDeliveryError("pagination");
   }
   async pointInfo(ids: number[]) {
-    return z.object({ delivery_points: z.array(z.object({ delivery_point_id: positiveId, name: z.string(), full_address: z.string(), is_active: z.boolean(), type: z.string() })) }).parse(await this.json("/v1/delivery-point/info", { delivery_point_ids: ids })).delivery_points;
+    return z.object({ delivery_points: z.array(z.object({ delivery_point_id: positiveId, name: z.string(), full_address: z.string(), is_active: z.boolean(), type: z.string(), coordinates: pointCoordinatesSchema.nullish() })) }).parse(await this.json("/v1/delivery-point/info", { delivery_point_ids: ids })).delivery_points;
   }
   async pointPage(cursor: string | null) {
     return z.object({ delivery_points: z.array(z.object({ delivery_point_id: positiveId, shipment_method_ids: z.union([z.array(positiveId), positiveId]) })), next_cursor: z.string().nullish() }).parse(await this.json("/v1/delivery-point/list", { pagination: { cursor, limit: 100 } }));

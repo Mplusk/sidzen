@@ -29,11 +29,11 @@ describe("Ozon phone transfer consent boundary", () => {
   });
   it("stores evidence before phone transfer and binds returned quote to its receipt", async () => {
     const result = await quoteOzonDelivery("+79991234567", "8", true);
-    expect(result).toMatchObject({ cost: 99, address: "QA point" });
+    expect(result).toMatchObject({ cost: 0, address: "QA point" });
     expect(m.record.mock.invocationCallOrder[0]).toBeLessThan(m.checkout.mock.invocationCallOrder[0]);
     expect(m.record.mock.calls[0][0].data).toMatchObject({ userId: "owner", subjectHash: "hmac-not-raw-phone", purpose: "ozon" });
     expect(JSON.stringify(m.record.mock.calls)).not.toContain("79991234567");
-    if ("token" in result) expect(JSON.parse(Buffer.from(result.token.split(".")[0], "base64url").toString()).consentId).toBe("receipt");
+    if ("token" in result) expect(JSON.parse(Buffer.from(result.token.split(".")[0], "base64url").toString())).toMatchObject({ consentId: "receipt", cost: 99 });
   });
   it("fails closed if evidence cannot be saved or parcel measurements are missing", async () => {
     m.record.mockRejectedValue(new Error("database")); await quoteOzonDelivery("+79991234567", "8", true); expect(m.checkout).not.toHaveBeenCalled();

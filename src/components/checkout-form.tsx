@@ -7,11 +7,12 @@ import { createOrderAction } from "@/app/actions/checkout";
 import { formatPrice } from "@/lib/format";
 import { phoneMask } from "@/lib/phone-input";
 import { OzonDeliveryPicker, type DeliveryQuoteView } from "@/components/ozon-delivery-picker";
+import { customerDeliveryPrice } from "@/lib/delivery/pricing";
 
 type Delivery = { code: string; name: string; description: string | null; basePrice: number };
 function Submit({ total, online, needsQuote }: { total: number; online: boolean; needsQuote: boolean }) {
   const { pending } = useFormStatus();
-  return <button className="button" type="submit" disabled={pending || needsQuote}>{pending ? "Оформляем…" : needsQuote ? "Сначала рассчитайте доставку" : `${online ? "Перейти к оплате" : "Оформить заказ"} · ${formatPrice(total)}`}</button>;
+  return <button className="button" type="submit" disabled={pending || needsQuote}>{pending ? "Оформляем…" : needsQuote ? "Сначала подтвердите ПВЗ" : `${online ? "Перейти к оплате" : "Оформить заказ"} · ${formatPrice(total)}`}</button>;
 }
 
 export function CheckoutForm({ items, methods, user, onlinePayment, error, ozonDelivery = false, ozonUnavailable, packingReady = true }: {
@@ -28,7 +29,7 @@ export function CheckoutForm({ items, methods, user, onlinePayment, error, ozonD
   const changeDelivery = (code: string) => { setDelivery(code); setOzonQuote(null); };
   const subtotal = items.reduce((sum, item) => sum + item.total, 0);
   const isOzon = delivery === "ozon-delivery";
-  const deliveryPrice = isOzon ? ozonQuote?.cost ?? 0 : methods.find((method) => method.code === delivery)?.basePrice ?? 0;
+  const deliveryPrice = customerDeliveryPrice();
   const total = subtotal + deliveryPrice;
   return <form action={createOrderAction} className="commerce-grid checkout-form">
     <div className="checkout-panel">
@@ -38,7 +39,7 @@ export function CheckoutForm({ items, methods, user, onlinePayment, error, ozonD
         <label className="field"><span>Телефон *</span><input name="phone" type="tel" autoComplete="tel" inputMode="tel" value={phone} onChange={(event) => { setPhone(phoneMask(event.target.value)); setOzonQuote(null); }} placeholder="+7 (999) 123-45-67" pattern="\+7 \([0-9]{3}\) [0-9]{3}-[0-9]{2}-[0-9]{2}" required /><small>Для связи по заказу и доставке</small></label>
         <label className="field field--full"><span>Email *</span><input name="email" type="email" autoComplete="email" defaultValue={user.email} required /></label>
       </div>
-      <fieldset className="checkout-delivery"><legend>Доставка</legend>{methods.map((method) => <label className="delivery-option" key={method.code}><input type="radio" name="delivery" value={method.code} checked={delivery === method.code} onChange={() => changeDelivery(method.code)} required /><span><strong>{method.name}</strong><small>{method.description}</small></span><strong>{method.basePrice ? formatPrice(method.basePrice) : "Бесплатно"}</strong></label>)}{ozonDelivery && <label className="delivery-option"><input type="radio" name="delivery" value="ozon-delivery" checked={isOzon} onChange={() => changeDelivery("ozon-delivery")} /><span><strong>Ozon Доставка</strong><small>В пункт выдачи или постамат · стоимость по API</small></span><strong>{ozonQuote ? formatPrice(ozonQuote.cost) : "По расчёту"}</strong></label>}</fieldset>
+      <fieldset className="checkout-delivery"><legend>Доставка · бесплатно</legend>{methods.map((method) => <label className="delivery-option" key={method.code}><input type="radio" name="delivery" value={method.code} checked={delivery === method.code} onChange={() => changeDelivery(method.code)} required /><span><strong>{method.name}</strong><small>{method.description}</small></span><strong>Бесплатно</strong></label>)}{ozonDelivery && <label className="delivery-option"><input type="radio" name="delivery" value="ozon-delivery" checked={isOzon} onChange={() => changeDelivery("ozon-delivery")} /><span><strong>Ozon Доставка</strong><small>В пункт выдачи или постамат · выбор ПВЗ на карте</small></span><strong>Бесплатно</strong></label>}</fieldset>
       {!ozonDelivery && <div className="delivery-option delivery-option--unavailable" aria-disabled="true"><span><strong>Ozon Доставка</strong><small>{ozonUnavailable ?? "Временно недоступна. Выберите другой способ доставки."}</small></span></div>}
       {isOzon && <><OzonDeliveryPicker key={phone} phone={phone} onQuote={setOzonQuote} packingReady={packingReady} /><input type="hidden" name="ozonQuote" value={ozonQuote?.token ?? ""} /></>}
       {delivery !== "pickup" && !isOzon && <div className="form-grid"><label className="field"><span>Город *</span><input name="city" autoComplete="address-level2" required minLength={2} maxLength={120} /></label><label className="field"><span>Индекс{delivery === "russian-post" ? " *" : ""}</span><input name="postalCode" autoComplete="postal-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required={delivery === "russian-post"} placeholder="6 цифр" /></label><label className="field field--full"><span>Улица, дом, квартира или пункт выдачи *</span><input name="address" autoComplete="street-address" required minLength={4} maxLength={300} /></label></div>}
@@ -48,6 +49,6 @@ export function CheckoutForm({ items, methods, user, onlinePayment, error, ozonD
       <p className="muted">Контактные данные и адрес нужны для заключения и исполнения вашего заказа. <Link className="text-link" href="/legal/privacy/" target="_blank">Как обрабатываются данные и кому передаются</Link>. Не указывайте в комментарии паспортные данные или реквизиты карты.</p>
       <label className="checkout-consent"><input type="checkbox" name="legal" required /><span>Принимаю <Link href="/legal/offer/" target="_blank">условия оферты</Link>. Это не согласие на рекламу или рассылки.</span></label>
     </div>
-    <aside className="order-summary"><h2>Ваш заказ</h2><ul className="checkout-items">{items.map((item) => <li key={item.id}><strong>{item.name} × {item.quantity}</strong><small>{item.configuration}</small><span>{formatPrice(item.total)}</span></li>)}</ul><div className="summary-line"><span>Товары</span><strong>{formatPrice(subtotal)}</strong></div><div className="summary-line"><span>Доставка</span><strong>{isOzon && !ozonQuote ? "Нужен расчёт" : deliveryPrice ? formatPrice(deliveryPrice) : "Бесплатно"}</strong></div><div className="summary-line summary-line--total" aria-live="polite" aria-atomic="true"><span>{isOzon && !ozonQuote ? "Товары без доставки" : "Итого к оплате"}</span><strong>{formatPrice(total)}</strong></div><input type="hidden" name="expectedTotal" value={total.toFixed(2)} /><Submit total={total} online={payment === "yookassa"} needsQuote={isOzon && !ozonQuote} /><p>Все выбранные параметры сохранятся в заказе.</p></aside>
+    <aside className="order-summary"><h2>Ваш заказ</h2><ul className="checkout-items">{items.map((item) => <li key={item.id}><strong>{item.name} × {item.quantity}</strong><small>{item.configuration}</small><span>{formatPrice(item.total)}</span></li>)}</ul><div className="summary-line"><span>Товары</span><strong>{formatPrice(subtotal)}</strong></div><div className="summary-line"><span>Доставка</span><strong>Бесплатно · 0 ₽</strong></div><div className="summary-line summary-line--total" aria-live="polite" aria-atomic="true"><span>Итого к оплате</span><strong>{formatPrice(total)}</strong></div><input type="hidden" name="expectedTotal" value={total.toFixed(2)} /><Submit total={total} online={payment === "yookassa"} needsQuote={isOzon && !ozonQuote} /><p>Доставка за счёт магазина. Все выбранные параметры сохранятся в заказе.</p></aside>
   </form>;
 }

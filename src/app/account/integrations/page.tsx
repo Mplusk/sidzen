@@ -27,7 +27,7 @@ function DeliveryForm({ method }: { method?: { id: string; name: string; descrip
   return <form action={saveDeliveryMethod} className="form-grid">
     <input type="hidden" name="id" value={method?.id ?? ""} />
     <label className="field">Название<input name="name" required maxLength={100} defaultValue={method?.name} placeholder="Курьерская доставка" /></label>
-    <label className="field">Тариф, ₽<input name="basePrice" type="number" required min="0" max="999999" step="0.01" defaultValue={method?.basePrice ?? 0} /></label>
+    <label className="field">Расходы магазина на доставку, ₽<input name="basePrice" type="number" required min="0" max="999999" step="0.01" defaultValue={method?.basePrice ?? 0} /><small>Внутренний тариф перевозчика. Покупателю доставка бесплатна.</small></label>
     <label className="field">Описание и сроки<textarea name="description" maxLength={500} defaultValue={method?.description ?? ""} /></label>
     <label className="field">Порядок отображения<input name="sortOrder" type="number" min="0" max="999" defaultValue={method?.sortOrder ?? 0} required /></label>
     <label><input type="checkbox" name="active" defaultChecked={method?.active ?? true} /> Доступен при оформлении заказа</label>

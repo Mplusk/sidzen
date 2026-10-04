@@ -15,6 +15,7 @@ import { OzonDeliveryClient } from "@/lib/delivery/ozon-client";
 import { ozonCreateBody } from "@/lib/delivery/ozon-worker";
 import { verifyDeliveryConsent, operatorReady } from "@/lib/privacy";
 import { CONSENT_VERSION } from "@/lib/privacy-documents";
+import { deliveryTotals } from "@/lib/delivery/pricing";
 
 export async function createOrderAction(formData: FormData) {
   if (!await operatorReady()) redirect("/checkout/?error=operator");
@@ -41,8 +42,7 @@ export async function createOrderAction(formData: FormData) {
   const deliveryMethod = isOzon ? { active: true, code: OZON_DELIVERY_CODE, name: "Ozon Доставка · ПВЗ", basePrice: ozonQuote!.cost } : await prisma.deliveryMethod.findUnique({ where: { code: parsed.data.delivery } });
   if (!deliveryMethod?.active) redirect("/checkout/?error=delivery");
   const subtotal = cart.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-  const deliveryPrice = Number(deliveryMethod.basePrice);
-  const total = Math.round((subtotal + deliveryPrice) * 100) / 100;
+  const { deliveryPrice, carrierCost, total } = deliveryTotals(subtotal, Number(deliveryMethod.basePrice));
   if (Math.abs(total - parsed.data.expectedTotal) > 0.005) redirect("/checkout/?error=price");
   const number = `3DP-${new Date().toISOString().slice(2, 10).replace(/-/g, "")}-${randomBytes(4).toString("hex").toUpperCase()}`;
   let order;
@@ -69,7 +69,7 @@ export async function createOrderAction(formData: FormData) {
         customerComment: parsed.data.comment || undefined, subtotal, deliveryPrice, total,
         items: { create: cart.items.map((item) => ({ productId: item.productId, productName: item.product!.name, sku: item.product!.sku, quantity: item.quantity, unitPrice: item.unitPrice, totalPrice: item.unitPrice * item.quantity, configuration: item.quote!.config, materialId: item.quote!.materialId, colorId: item.quote!.colorId, qualityProfileId: item.quote!.qualityProfileId })) },
         payment: { create: { provider: parsed.data.payment, amount: total, status: "PENDING" } },
-        shipment: { create: { provider: deliveryMethod.code, method: deliveryMethod.name, cost: deliveryPrice, ...(ozonQuote ? { payload: { pointId: ozonQuote.request.delivery.delivery_point.delivery_point_id, address: ozonQuote.address, estimatedDays: ozonQuote.days }, ozonJob: { create: { clientId: ozonClientId, request: ozonCreateBody(ozonQuote.request, number, parsed.data.name, cart.items.flatMap(item => Array.from({ length: item.quantity }, () => item.product!.name))) } } } : {}) } },
+        shipment: { create: { provider: deliveryMethod.code, method: deliveryMethod.name, cost: carrierCost, ...(ozonQuote ? { payload: { pointId: ozonQuote.request.delivery.delivery_point.delivery_point_id, address: ozonQuote.address, estimatedDays: ozonQuote.days }, ozonJob: { create: { clientId: ozonClientId, request: ozonCreateBody(ozonQuote.request, number, parsed.data.name, cart.items.flatMap(item => Array.from({ length: item.quantity }, () => item.product!.name))) } } } : {}) } },
         notifications: { create: { channel: "email", recipient: parsed.data.email, template: "order-confirmation", status: "PENDING" } },
       } });
       await tx.auditLog.create({ data: { actorId: user?.id, action: "order.offer.accept", entityType: "Order", entityId: created.id, after: { version: CONSENT_VERSION, privacyNoticeVersion: CONSENT_VERSION, delivery: deliveryMethod.code } } });

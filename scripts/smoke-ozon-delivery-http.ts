@@ -98,10 +98,10 @@ try {
   assert.equal((await request("/api/admin/ozon-delivery/label/?jobId=missing&posting=missing")).status, 404);
   assert.deepEqual(await (await request("/api/delivery/ozon/points/?q=Москва", undefined, false)).json(), { points: [] });
   config.enabled = true; await save();
-  await prisma.ozonDeliveryPoint.create({ data: { id: pointId, name: "QA ПВЗ", address: "Москва, QA улица, 1", type: "pvz", active: true, clientId: config.clientId, methodId: 7n, generation: "qa-only" } });
+  await prisma.ozonDeliveryPoint.create({ data: { id: pointId, name: "QA ПВЗ", address: "Москва, QA улица, 1", type: "pvz", latitude: 55.75, longitude: 37.62, active: true, clientId: config.clientId, methodId: 7n, generation: "qa-only" } });
   const points = await request("/api/delivery/ozon/points/?q=Москва", undefined, false);
   assert.match(points.headers.get("cache-control") || "", /no-store/);
-  assert.deepEqual(await points.json(), { points: [{ id: pointId, name: "QA ПВЗ", address: "Москва, QA улица, 1", type: "pvz" }] });
+  assert.deepEqual(await points.json(), { points: [{ id: pointId, name: "QA ПВЗ", address: "Москва, QA улица, 1", type: "pvz", latitude: 55.75, longitude: 37.62 }], truncated: false });
   const prefix = `qa-delivery-${randomUUID().slice(0, 8)}`;
   const product = await prisma.product.create({ data: { name: "QA Delivery Product", slug: prefix, sku: prefix, type: "READY", status: "PUBLISHED", stock: 10, madeToOrder: false, basePrice: 240, shippingWeightG: 100, shippingLengthMm: 200, shippingWidthMm: 100, shippingHeightMm: 50 } }); productId = product.id;
   const edit = await (await request(`/admin/products/${product.id}/`)).text();
@@ -120,12 +120,17 @@ try {
   assert(!disabledCheckout.includes('value="ozon-delivery"'));
   assert(disabledCheckout.includes('aria-disabled="true"'));
   const manualOrder = actionForm(disabledCheckout, 'name="expectedTotal"');
-  for (const [key, value] of Object.entries({ name: "QA Recipient Test", phone: "+79991234567", email: "buyer@example.test", delivery: "pickup", city: "", address: "", postalCode: "", comment: "QA order only", payment: "manual", legal: "on", expectedTotal: "240" })) manualOrder.set(key, value);
+  const carrier = await prisma.deliveryMethod.findUniqueOrThrow({ where: { code: "cdek" } });
+  assert(Number(carrier.basePrice) > 0, "QA carrier fixture must have nonzero internal expenses");
+  for (const [key, value] of Object.entries({ name: "QA Recipient Test", phone: "+79991234567", email: "buyer@example.test", delivery: "cdek", city: "Москва", address: "QA улица, 1", postalCode: "", comment: "QA order only", payment: "manual", legal: "on", expectedTotal: "240" })) manualOrder.set(key, value);
   const orderResult = await request("/checkout/", manualOrder);
   const number = (orderResult.headers.get("location") || "").match(/\/checkout\/success\/([^/]+)\//)?.[1];
   assert(number, "QA manual order should complete");
   const createdOrder = await prisma.order.findUniqueOrThrow({ where: { number } }); fixtureOrderId = createdOrder.id;
   assert.equal(createdOrder.userId, user.id); assert.equal(createdOrder.customerPhone, "+79991234567"); assert.equal(Number(createdOrder.total), 240);
+  assert.equal(Number(createdOrder.deliveryPrice), 0);
+  assert.equal(Number((await prisma.shipment.findUniqueOrThrow({ where: { orderId: createdOrder.id } })).cost), Number(carrier.basePrice));
+  assert.equal(Number((await prisma.payment.findUniqueOrThrow({ where: { orderId: createdOrder.id } })).amount), 240);
   assert(await prisma.auditLog.findFirst({ where: { entityId: createdOrder.id, action: "order.offer.accept" } }));
   assert(![...jar.keys()].some(key => key.startsWith("3dp_order_")), "Signed-in orders must not receive guest access cookies");
   // Restore only the QA cart row consumed by this isolated test.
