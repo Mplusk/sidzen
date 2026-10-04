@@ -12,8 +12,8 @@ export async function POST(request: Request) {
     // to the provider and validate it against the order before changing anything.
     await refreshPayment(input.data.object.id);
     return Response.json({ ok: true });
-  } catch (error) {
-    console.error("Payment verification failed", error instanceof Error ? error.message : "unknown");
+  } catch {
+    console.error("Payment verification failed");
     return new Response(null, { status: 503 });
   }
 }

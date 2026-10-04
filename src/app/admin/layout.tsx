@@ -3,7 +3,7 @@ import { Logo } from "@/components/logo";
 import { requirePermission } from "@/lib/auth";
 import { PERMISSIONS } from "@/lib/permissions";
 
-const nav = [["Дашборд", "/admin/"], ["Заказы", "/admin/orders/"], ["Товары", "/admin/products/"], ["Каталог", "/admin/catalog/"], ["Доставка и оплата", "/account/integrations/"], ["Маркетплейсы", "/account/marketplaces/"], ["SEO", "/admin/seo/"], ["Пользователи", "/admin/users/"], ["Настройки", "/admin/settings/"], ["Аудит", "/admin/audit/"]];
+const nav = [["Дашборд", "/admin/"], ["Заказы", "/admin/orders/"], ["Товары", "/admin/products/"], ["Каталог", "/admin/catalog/"], ["Доставка и оплата", "/account/integrations/"], ["Маркетплейсы", "/account/marketplaces/"], ["SEO", "/admin/seo/"], ["Пользователи", "/admin/users/"], ["Настройки", "/admin/settings/"], ["Аудит", "/admin/audit/"], ["Персональные данные", "/admin/privacy/"]];
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requirePermission(PERMISSIONS.dashboardView);

@@ -26,14 +26,40 @@ function actionForm(html: string, containing: string) {
 }
 const path = "/account/integrations/", secret = "fixture-delivery-secret-never-public";
 const old = await prisma.siteSetting.findUnique({ where: { key: OZON_DELIVERY_SETTING } });
+const operatorKeys = ["legal.seller", "legal.address", "contacts.email"];
+const oldOperator = await prisma.siteSetting.findMany({ where: { key: { in: operatorKeys } } });
 const pointId = "9100000001";
 let productId: string | undefined, cartId: string | undefined;
+let fixtureOrderId: string | undefined;
+const privacyRequests: string[] = [];
+let fixtureRole: string | undefined, qaUserId: string | undefined;
+let originalRoles: string[] = [];
 try {
+  for (const [key, value] of [["legal.seller", "QA operator (test only)"], ["legal.address", "QA test address"], ["contacts.email", "operator@example.test"]]) await prisma.siteSetting.upsert({ where: { key }, create: { key, value, group: key.startsWith("legal.") ? "legal" : "contacts" }, update: { value } });
   assert.match((await request(path)).headers.get("location") || "", /^\/login/);
   assert.match((await request("/api/admin/ozon-delivery/label/?jobId=missing&posting=missing", undefined, false)).headers.get("location") || "", /^\/login/);
   const login = actionForm(await (await request("/login/")).text(), 'name="email"');
   login.set("email", "qa@example.test"); login.set("password", "LocalGalleryQA-2026");
   assert.equal((await request("/login/", login)).headers.get("location"), "/account/");
+  assert.equal((await request("/api/account/personal-data/", undefined, false)).status, 401);
+  const exported = await request("/api/account/personal-data/");
+  assert.equal(exported.status, 200); assert.match(exported.headers.get("cache-control") || "", /no-store/);
+  const personalData = await exported.text();
+  assert(personalData.includes("qa@example.test"));
+  for (const privateField of ["passwordHash", "tokenHash", "subjectHash", "internalNote", "clientSecret"]) assert(!personalData.includes(privateField));
+  const registration = actionForm(await (await request("/register/")).text(), 'name="password"');
+  registration.set("name", "QA"); registration.set("email", "no-consent@example.test"); registration.set("password", "LocalGalleryQA-2026");
+  assert.equal((await request("/register/", registration, false)).headers.get("location"), "/register/?error=consent");
+  assert.equal(await prisma.user.count({ where: { email: "no-consent@example.test" } }), 0);
+  const profile = actionForm(await (await request("/account/profile/")).text(), 'name="company"');
+  profile.set("name", "Should not save"); profile.set("phone", ""); profile.set("company", ""); profile.set("taxId", "");
+  assert.equal((await request("/account/profile/", profile)).headers.get("location"), "/account/profile/?error=consent");
+  const privacyForm = actionForm(await (await request("/account/privacy/")).text(), 'name="message"');
+  privacyForm.set("type", "ACCESS"); privacyForm.set("message", "QA request: give processing information"); privacyForm.set("userId", "forged-owner");
+  assert.equal((await request("/account/privacy/", privacyForm)).headers.get("location"), "/account/privacy/?sent=1");
+  const ownRequest = await prisma.privacyRequest.findFirstOrThrow({ where: { user: { email: "qa@example.test" }, message: "QA request: give processing information" }, orderBy: { createdAt: "desc" } });
+  privacyRequests.push(ownRequest.id); assert.notEqual(ownRequest.userId, "forged-owner");
+  assert((await (await request("/admin/privacy/")).text()).includes(ownRequest.message));
   const config = { enabled: false, clientId: "fixture-delivery-app", clientSecret: encryptSecret(secret, OZON_DELIVERY_SETTING), shipmentMethodId: 7, dispatchDays: 1, checkedAt: new Date().toISOString(), methodName: "QA active method" };
   const save = async () => prisma.siteSetting.upsert({ where: { key: OZON_DELIVERY_SETTING }, create: { key: OZON_DELIVERY_SETTING, group: "integrations", value: config }, update: { value: config } });
   await save();
@@ -60,6 +86,8 @@ try {
   assert([400, 403, 500].includes((await request(path, settings, true, "https://foreign.invalid")).status));
   assert.equal(((await prisma.siteSetting.findUniqueOrThrow({ where: { key: OZON_DELIVERY_SETTING } })).value as typeof config).dispatchDays, 2);
   const user = await prisma.user.findUniqueOrThrow({ where: { email: "qa@example.test" } });
+  qaUserId = user.id;
+  originalRoles = (await prisma.userRole.findMany({ where: { userId: user.id } })).map(row => row.roleId);
   const roles = await prisma.userRole.findMany({ where: { userId: user.id } });
   try {
     await prisma.userRole.deleteMany({ where: { userId: user.id } });
@@ -87,9 +115,42 @@ try {
   assert.equal((await request("/checkout/", order)).headers.get("location"), "/checkout/?error=invalid");
   assert.equal(await prisma.order.count(), ordersBefore); assert.equal(await prisma.ozonDeliveryJob.count(), 0);
   config.enabled = false; await save();
-  assert(!(await (await request("/checkout/")).text()).includes("Ozon Доставка</strong>"));
+  const disabledCheckout = await (await request("/checkout/")).text();
+  assert(disabledCheckout.includes("Ozon Доставка</strong>"));
+  assert(!disabledCheckout.includes('value="ozon-delivery"'));
+  assert(disabledCheckout.includes('aria-disabled="true"'));
+  const manualOrder = actionForm(disabledCheckout, 'name="expectedTotal"');
+  for (const [key, value] of Object.entries({ name: "QA Recipient Test", phone: "+79991234567", email: "buyer@example.test", delivery: "pickup", city: "", address: "", postalCode: "", comment: "QA order only", payment: "manual", legal: "on", expectedTotal: "240" })) manualOrder.set(key, value);
+  const orderResult = await request("/checkout/", manualOrder);
+  const number = (orderResult.headers.get("location") || "").match(/\/checkout\/success\/([^/]+)\//)?.[1];
+  assert(number, "QA manual order should complete");
+  const createdOrder = await prisma.order.findUniqueOrThrow({ where: { number } }); fixtureOrderId = createdOrder.id;
+  assert.equal(createdOrder.userId, user.id); assert.equal(createdOrder.customerPhone, "+79991234567"); assert.equal(Number(createdOrder.total), 240);
+  assert(await prisma.auditLog.findFirst({ where: { entityId: createdOrder.id, action: "order.offer.accept" } }));
+  assert(![...jar.keys()].some(key => key.startsWith("3dp_order_")), "Signed-in orders must not receive guest access cookies");
+  // Restore only the QA cart row consumed by this isolated test.
+  await prisma.cartItem.create({ data: { cartId: cart.id, productId: product.id, quantity: 1, unitPrice: 240, config: {} } });
+  await prisma.siteSetting.update({ where: { key: "legal.seller" }, data: { value: "" } });
+  assert((await (await request("/checkout/")).text()).includes("продавец должен заполнить сведения оператора"));
+  assert((await (await request("/register/")).text()).includes("Регистрация временно недоступна"));
+  await prisma.siteSetting.update({ where: { key: "legal.seller" }, data: { value: "QA operator (test only)" } });
+  const dashboard = await prisma.permission.findUniqueOrThrow({ where: { code: "dashboard.view" } });
+  fixtureRole = (await prisma.role.create({ data: { code: "qa-privacy-" + randomUUID(), name: "QA restricted viewer", permissions: { create: { permissionId: dashboard.id } } } })).id;
+  await prisma.userRole.deleteMany({ where: { userId: user.id } }); await prisma.userRole.create({ data: { userId: user.id, roleId: fixtureRole } });
+  for (const protectedPage of ["/admin/orders/", "/admin/users/", "/admin/audit/", "/admin/settings/", "/admin/privacy/"]) assert.match((await request(protectedPage)).headers.get("location") || "", /forbidden/, protectedPage);
   console.log("PASS: Ozon Delivery settings, secret redaction/preservation, admin and anonymous permissions, CSRF, scoped PVZ search, packaging fields, enabled/disabled checkout and refusal of unquoted delivery. No Ozon API calls or real orders/payments.");
+  console.log("PASS: separate registration/profile consent, missing-operator gate, private export, own data requests, per-section personal-data access controls.");
+  console.log("PASS: isolated QA manual order with accepted-offer evidence; no guest access grant for signed-in buyer.");
 } finally {
+  if (fixtureOrderId) { await prisma.order.deleteMany({ where: { id: fixtureOrderId } }); await prisma.auditLog.deleteMany({ where: { entityId: fixtureOrderId, action: "order.offer.accept" } }); }
+  if (qaUserId && fixtureRole) { await prisma.userRole.deleteMany({ where: { userId: qaUserId } }); await prisma.userRole.createMany({ data: originalRoles.map(roleId => ({ userId: qaUserId!, roleId })) }); }
+  if (fixtureRole) await prisma.role.delete({ where: { id: fixtureRole } });
+  await prisma.privacyRequest.deleteMany({ where: { id: { in: privacyRequests } } });
+  for (const key of operatorKeys) {
+    const previous = oldOperator.find(row => row.key === key);
+    if (previous) await prisma.siteSetting.update({ where: { key }, data: { value: previous.value === null ? Prisma.JsonNull : previous.value as Prisma.InputJsonValue } });
+    else await prisma.siteSetting.deleteMany({ where: { key } });
+  }
   if (cartId) await prisma.cart.deleteMany({ where: { id: cartId } });
   if (productId) await prisma.product.deleteMany({ where: { id: productId } });
   await prisma.ozonDeliveryPoint.deleteMany({ where: { id: pointId, generation: "qa-only" } });

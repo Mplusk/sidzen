@@ -7,6 +7,8 @@ import { createSession, destroySession } from "@/lib/auth";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
+import { consentDocument, privacySubject, operatorReady } from "@/lib/privacy";
+import { CONSENT_VERSION } from "@/lib/privacy-documents";
 
 const credentialsSchema = z.object({ email: z.email().transform((value) => value.toLowerCase().trim()), password: z.string().min(10).max(200) });
 
@@ -28,12 +30,17 @@ export async function loginAction(formData: FormData) {
 }
 
 export async function registerAction(formData: FormData) {
+  if (!await operatorReady()) redirect("/register/?error=operator");
+  if (formData.get("privacyConsent") !== "on") redirect("/register/?error=consent");
+  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  if (!rateLimit(`register:${ip}`, 5, 15 * 60000).allowed) redirect("/register/?error=rate-limit");
   const parsed = credentialsSchema.extend({ name: z.string().trim().min(2).max(120), phone: z.string().trim().min(7).max(30).optional() }).safeParse({ email: formData.get("email"), password: formData.get("password"), name: formData.get("name"), phone: formData.get("phone") || undefined });
   if (!parsed.success) redirect("/register/?error=invalid");
   const exists = await prisma.user.findUnique({ where: { email: parsed.data.email } });
   if (exists) redirect("/login/?error=exists");
   const customerRole = await prisma.role.findUnique({ where: { code: "customer" } });
-  const user = await prisma.user.create({ data: { email: parsed.data.email, passwordHash: hashPassword(parsed.data.password), name: parsed.data.name, phone: parsed.data.phone, emailVerified: new Date(), roles: customerRole ? { create: { roleId: customerRole.id } } : undefined } });
+  const document = await consentDocument("account");
+  const user = await prisma.user.create({ data: { email: parsed.data.email, passwordHash: hashPassword(parsed.data.password), name: parsed.data.name, phone: parsed.data.phone, roles: customerRole ? { create: { roleId: customerRole.id } } : undefined, privacyConsents: { create: { purpose: "account", version: CONSENT_VERSION, document, subjectHash: privacySubject(parsed.data.email) } } } });
   await createSession(user.id);
   redirect("/account/");
 }
@@ -46,8 +53,10 @@ export async function logoutAction() {
 export async function updateProfileAction(formData: FormData) {
   const { requireUser } = await import("@/lib/auth");
   const user = await requireUser();
+  if (!await operatorReady()) redirect("/account/profile/?error=operator");
+  if (formData.get("privacyConsent") !== "on") redirect("/account/profile/?error=consent");
   const parsed = z.object({ name: z.string().trim().min(2).max(120), phone: z.string().trim().max(30), company: z.string().trim().max(180), taxId: z.string().trim().max(20) }).safeParse({ name: formData.get("name"), phone: formData.get("phone") ?? "", company: formData.get("company") ?? "", taxId: formData.get("taxId") ?? "" });
   if (!parsed.success) redirect("/account/profile/?error=invalid");
-  await prisma.user.update({ where: { id: user.id }, data: parsed.data });
+  await prisma.user.update({ where: { id: user.id }, data: { ...parsed.data, privacyConsents: { create: { purpose: "account", version: CONSENT_VERSION, document: await consentDocument("account"), subjectHash: privacySubject(user.email) } } } });
   redirect("/account/profile/?saved=1");
 }

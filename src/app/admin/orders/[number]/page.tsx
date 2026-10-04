@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { updateOrderStatusAction, updateTrackingAction } from "@/app/actions/admin";
 import { prisma } from "@/lib/prisma";
 import { formatDate, formatPrice } from "@/lib/format";
-import { getCurrentUser } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
 import { PERMISSIONS } from "@/lib/permissions";
 import { AdminDeleteOrder } from "@/components/admin-delete-order";
 import { OzonShipmentPanel } from "@/components/ozon-shipment-panel";
@@ -11,10 +11,10 @@ import { OzonShipmentPanel } from "@/components/ozon-shipment-panel";
 export const metadata: Metadata = { title: "Заказ — управление", robots: { index: false, follow: false } };
 
 export default async function AdminOrderPage({ params, searchParams }: { params: Promise<{ number: string }>; searchParams: Promise<{ saved?: string; delivery?: string }> }) {
+  const user = await requirePermission(PERMISSIONS.ordersRead);
   const [{ number }, query] = await Promise.all([params, searchParams]);
   const order = await prisma.order.findUnique({ where: { number }, include: { items: true, payment: true, shipment: { include: { ozonJob: true } }, user: true } });
   if (!order) notFound();
-  const user = await getCurrentUser();
   const canDelete = user?.roles.includes("superadmin") || user?.permissions.has(PERMISSIONS.ordersWrite);
   const ozonPanel = order.shipment?.ozonJob && <OzonShipmentPanel job={order.shipment.ozonJob} number={order.number} />;
   return <>

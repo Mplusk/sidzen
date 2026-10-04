@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { cache } from "react";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 
@@ -13,14 +13,11 @@ function tokenHash(token: string) {
 
 export async function createSession(userId: string) {
   const token = randomBytes(32).toString("base64url");
-  const headerStore = await headers();
   await prisma.session.create({
     data: {
       userId,
       tokenHash: tokenHash(token),
       expiresAt: new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000),
-      ip: headerStore.get("x-forwarded-for")?.split(",")[0]?.trim(),
-      userAgent: headerStore.get("user-agent")?.slice(0, 500),
     },
   });
   const cookieStore = await cookies();
@@ -38,6 +35,8 @@ export async function destroySession() {
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (token) await prisma.session.deleteMany({ where: { tokenHash: tokenHash(token) } });
   cookieStore.delete(SESSION_COOKIE);
+  // A shared browser must not retain guest order access after signing out.
+  for (const cookie of cookieStore.getAll()) if (cookie.name.startsWith("3dp_order_")) cookieStore.delete(cookie.name);
 }
 
 export const getCurrentUser = cache(async () => {

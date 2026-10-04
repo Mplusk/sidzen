@@ -19,8 +19,8 @@ export function CookieBanner() {
   if (!needsConsent || dismissed) return null;
   return (
     <div className="cookie-banner" role="dialog" aria-label="Использование cookies">
-      <p>Используем необходимые cookies для корзины и кабинета. Аналитика включается только после согласия. <Link href="/legal/cookies/">Подробнее</Link></p>
-      <div><button className="button button--small" onClick={() => accept("necessary")}>Только необходимые</button><button className="button button--small button--dark" onClick={() => accept("all")}>Принять</button></div>
+      <p>Используем только необходимые cookies для корзины, входа и доступа к заказу. Рекламных счётчиков и аналитики нет. <Link href="/legal/cookies/">Подробнее</Link></p>
+      <div><button className="button button--small" onClick={() => accept("necessary")}>Понятно</button></div>
     </div>
   );
 }

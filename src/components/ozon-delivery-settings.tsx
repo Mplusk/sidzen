@@ -1,12 +1,15 @@
 import { saveOzonDelivery } from "@/app/actions/ozon-delivery";
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getOzonDeliveryConfig } from "@/lib/delivery/ozon-config";
 
 export async function OzonDeliverySettings() {
   const [config, sync] = await Promise.all([getOzonDeliveryConfig(), prisma.ozonDeliverySync.findUnique({ where: { id: "ozon" } })]);
   const count = config.shipmentMethodId ? await prisma.ozonDeliveryPoint.count({ where: { clientId: config.clientId, methodId: BigInt(config.shipmentMethodId), active: true } }) : 0;
+  const missingPackaging = await prisma.product.count({ where: { status: "PUBLISHED", type: { in: ["READY", "PARAMETRIC"] }, OR: [{ shippingWeightG: null }, { shippingLengthMm: null }, { shippingWidthMm: null }, { shippingHeightMm: null }] } });
   return <section className="content-card" id="ozon-delivery"><h2>Ozon Доставка · Delivery API</h2>
     <p>{config.enabled ? "Доставка включена" : "Доставка выключена"}. Секрет: {config.clientSecret ? "сохранён, скрыт" : "не задан"}.</p>
+    {!!missingPackaging && <p className="notice notice--danger">У {missingPackaging} опубликованных товаров не заполнены вес и габариты упакованной посылки. Для них Ozon не сможет рассчитать доставку. Заполните реальные измерения в <Link className="text-link" href="/admin/products/">редакторе товаров</Link>; размеры самого изделия не заменяют параметры упаковки.</p>}
     <p className="muted">Это отдельное подключение Ozon Доставки для бизнеса, не Seller API для товаров. Создайте частное приложение в <a className="text-link" href="https://seller.ozon.ru/app/settings/private-apps" target="_blank" rel="noreferrer">кабинете Ozon Доставки</a> и скопируйте client_id / client_secret.</p>
     <p>Права приложения: <code>delivery-api.shipment-method</code>, <code>delivery-api.delivery</code>, <code>delivery-api.delivery-point</code>, <code>delivery-api.order</code>, <code>delivery-api.posting</code>. В Ozon заранее настройте активный метод отгрузки, пункт передачи заказов и возвратов.</p>
     {config.checkedAt && <p className="muted">Проверено: {new Date(config.checkedAt).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })} МСК. {config.methodName}</p>}

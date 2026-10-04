@@ -13,9 +13,12 @@ import { deliveryConfigFingerprint, getOzonDeliveryConfig, OZON_DELIVERY_CODE, r
 import { verifyOzonQuote, type OzonQuote } from "@/lib/delivery/ozon-quote";
 import { OzonDeliveryClient } from "@/lib/delivery/ozon-client";
 import { ozonCreateBody } from "@/lib/delivery/ozon-worker";
+import { verifyDeliveryConsent, operatorReady } from "@/lib/privacy";
+import { CONSENT_VERSION } from "@/lib/privacy-documents";
 
 export async function createOrderAction(formData: FormData) {
-  const parsed = checkoutSchema.safeParse(Object.fromEntries(["name", "email", "phone", "city", "address", "postalCode", "delivery", "comment", "legal", "payment", "expectedTotal", "ozonQuote"].map((key) => [key, formData.get(key) ?? ""])));
+  if (!await operatorReady()) redirect("/checkout/?error=operator");
+  const parsed = checkoutSchema.safeParse(Object.fromEntries(["name", "email", "phone", "city", "address", "postalCode", "delivery", "comment", "legal", "payment", "expectedTotal", "ozonQuote", "ozonConsent"].map((key) => [key, formData.get(key) ?? ""])));
   if (!parsed.success) redirect("/checkout/?error=invalid");
   if (parsed.data.payment === "yookassa" && !await onlinePaymentReady()) redirect("/checkout/?error=payment");
   const cart = await getCart();
@@ -29,6 +32,7 @@ export async function createOrderAction(formData: FormData) {
     try {
       const config = await getOzonDeliveryConfig(); requireOzonDelivery(config);
       ozonQuote = verifyOzonQuote(parsed.data.ozonQuote, cart, config, parsed.data.phone);
+      await verifyDeliveryConsent(ozonQuote.consentId ?? "", cart.id, parsed.data.phone);
       const fresh = await new OzonDeliveryClient(config).checkout(ozonQuote.request);
       if (Math.abs(fresh.cost - ozonQuote.cost) > 0.005) throw new Error("delivery-price-changed");
       ozonClientId = config.clientId;
@@ -48,6 +52,8 @@ export async function createOrderAction(formData: FormData) {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412027)`;
         const config = await getOzonDeliveryConfig(tx); requireOzonDelivery(config);
         if (deliveryConfigFingerprint(config) !== ozonQuote.config) throw new Error("delivery-config-changed");
+        await tx.$queryRaw`SELECT "id" FROM "PrivacyConsent" WHERE "id" = ${ozonQuote.consentId ?? ""} FOR UPDATE`;
+        await verifyDeliveryConsent(ozonQuote.consentId ?? "", cart.id, parsed.data.phone, tx);
       }
       if (parsed.data.payment === "yookassa") {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412026)`;
@@ -57,7 +63,7 @@ export async function createOrderAction(formData: FormData) {
       // Claim the cart rows atomically so a double click cannot create two orders.
       const claimed = await tx.cartItem.deleteMany({ where: { cartId: cart.id, OR: cart.items.map((item) => ({ id: item.id, quantity: item.quantity, updatedAt: item.updatedAt })) } });
       if (claimed.count !== cart.items.length) throw new Error("cart-changed");
-      return tx.order.create({ data: {
+      const created = await tx.order.create({ data: {
         number, userId: user?.id, status: "AWAITING_PAYMENT", customerName: parsed.data.name, customerEmail: parsed.data.email, customerPhone: parsed.data.phone,
         shippingAddress: ozonQuote ? ozonQuote.address : parsed.data.delivery === "pickup" ? "Самовывоз по согласованию" : `${parsed.data.postalCode ? `${parsed.data.postalCode}, ` : ""}${parsed.data.city}, ${parsed.data.address}`,
         customerComment: parsed.data.comment || undefined, subtotal, deliveryPrice, total,
@@ -66,11 +72,14 @@ export async function createOrderAction(formData: FormData) {
         shipment: { create: { provider: deliveryMethod.code, method: deliveryMethod.name, cost: deliveryPrice, ...(ozonQuote ? { payload: { pointId: ozonQuote.request.delivery.delivery_point.delivery_point_id, address: ozonQuote.address, estimatedDays: ozonQuote.days }, ozonJob: { create: { clientId: ozonClientId, request: ozonCreateBody(ozonQuote.request, number, parsed.data.name, cart.items.flatMap(item => Array.from({ length: item.quantity }, () => item.product!.name))) } } } : {}) } },
         notifications: { create: { channel: "email", recipient: parsed.data.email, template: "order-confirmation", status: "PENDING" } },
       } });
+      await tx.auditLog.create({ data: { actorId: user?.id, action: "order.offer.accept", entityType: "Order", entityId: created.id, after: { version: CONSENT_VERSION, privacyNoticeVersion: CONSENT_VERSION, delivery: deliveryMethod.code } } });
+      if (ozonQuote?.consentId) await tx.privacyConsent.update({ where: { id: ozonQuote.consentId }, data: { orderId: created.id } });
+      return created;
     });
   } catch {
     redirect("/cart/?error=changed");
   }
-  await grantOrderAccess(order.number);
+  if (!user) await grantOrderAccess(order.number);
   const { sendOrderConfirmation } = await import("@/lib/order-notifications");
   await sendOrderConfirmation(order.id).catch(() => undefined);
   let paymentUrl: string | null = null;

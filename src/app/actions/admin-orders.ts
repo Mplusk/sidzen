@@ -28,7 +28,7 @@ export async function deleteOrderAction(formData: FormData) {
   } catch (error) {
     if (error instanceof Error && error.message === "confirmation") redirect("/admin/orders/?error=confirmation");
     if (error instanceof Error && error.message === "delivery-active") redirect("/admin/orders/?error=delivery-active");
-    console.error("Could not delete order", error);
+    console.error("Could not delete order");
     redirect("/admin/orders/?error=delete");
   }
   revalidatePath("/admin", "layout");

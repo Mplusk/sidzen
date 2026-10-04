@@ -6,8 +6,9 @@ export async function sendOrderConfirmation(orderId: string) {
   const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: true, shipment: true, notifications: { where: { channel: "email", template: "order-confirmation" } } } });
   const notice = order.notifications[0];
   if (!notice || notice.status === "SENT") return;
-  if (!process.env.RESEND_API_KEY || !process.env.ORDER_EMAIL_FROM) {
-    await prisma.orderNotification.update({ where: { id: notice.id }, data: { status: "NOT_CONFIGURED", error: "Email provider is not configured" } });
+  // Explicit operator review is required before any foreign processor receives PD.
+  if (process.env.RESEND_PERSONAL_DATA_TRANSFER_APPROVED !== "true" || !process.env.RESEND_API_KEY || !process.env.ORDER_EMAIL_FROM) {
+    await prisma.orderNotification.update({ where: { id: notice.id }, data: { status: "NOT_CONFIGURED", error: "Email provider not configured or personal-data transfer not approved" } });
     return;
   }
   const text = [`Заказ ${order.number} принят.`, ...order.items.map((item) => `${item.productName} × ${item.quantity}\n${configurationText(item.configuration)}\n${formatPrice(item.totalPrice)}`), `Товары: ${formatPrice(order.subtotal)}`, `Доставка (${order.shipment?.method}): ${formatPrice(order.deliveryPrice)}`, `Итого: ${formatPrice(order.total)}`, `Адрес: ${order.shippingAddress}`, "Спасибо за заказ в 3DPRINTA!"].join("\n\n");

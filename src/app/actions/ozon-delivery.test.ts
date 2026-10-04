@@ -11,9 +11,14 @@ vi.mock("next/navigation", () => ({ redirect: (url: string) => { throw new Error
 vi.mock("@/lib/delivery/ozon-config", async original => ({ ...await original<typeof import("@/lib/delivery/ozon-config")>(), getOzonDeliveryConfig: mocks.config }));
 vi.mock("@/lib/delivery/ozon-client", async original => ({ ...await original<typeof import("@/lib/delivery/ozon-client")>(), OzonDeliveryClient: class { shipmentMethods = mocks.methods; verifyMethod = mocks.verify; pointPage = mocks.points; } }));
 import { decryptSecret } from "@/lib/integration-secrets";
-import { saveOzonDelivery } from "./ozon-delivery";
+import { saveOzonDelivery, quoteOzonDelivery } from "./ozon-delivery";
 const form = () => { const data = new FormData(); data.set("clientId", "fixture-app"); data.set("clientSecret", "fixture-secret"); data.set("shipmentMethodId", ""); data.set("dispatchDays", "1"); data.set("enabled", "on"); return data; };
 describe("Ozon credential setup", () => {
+  it("rejects pre-order phone transfer without separate consent before any API or database call", async () => {
+    vi.clearAllMocks();
+    expect(await quoteOzonDelivery("+79991234567", "7", false)).toEqual({ error: expect.stringContaining("отдельное согласие") });
+    expect(mocks.config).not.toHaveBeenCalled(); expect(mocks.transaction).not.toHaveBeenCalled(); expect(mocks.points).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.resetAllMocks(); vi.stubEnv("AUTH_SECRET", "test-only-key");
     mocks.permission.mockResolvedValue({ id: "admin" });

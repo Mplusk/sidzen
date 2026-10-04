@@ -3,8 +3,10 @@ import { prisma } from "../src/lib/prisma";
 import { claimRun, processRun } from "../src/lib/marketplaces/sync";
 import { catalogInvalidationToken } from "../src/lib/marketplaces/cache-token";
 import { processOzonJob, refreshOzonJob, syncOzonPointsPage } from "../src/lib/delivery/ozon-worker";
+import { pruneTransientPersonalData } from "../src/lib/privacy-maintenance";
 
 let stopping = false;
+let nextPrivacyCleanup = 0;
 process.on("SIGTERM", () => { stopping = true; });
 process.on("SIGINT", () => { stopping = true; });
 async function heartbeat() { await writeFile("/tmp/3dprinta-marketplace-heartbeat", String(Date.now())); }
@@ -14,6 +16,10 @@ console.log("Marketplace and delivery worker ready. Catalog sync runs on request
 try {
   while (!stopping) {
     try {
+      if (Date.now() >= nextPrivacyCleanup) {
+        await pruneTransientPersonalData();
+        nextPrivacyCleanup = Date.now() + 3600000;
+      }
       const run = await claimRun();
       if (run) {
         await processRun(run);

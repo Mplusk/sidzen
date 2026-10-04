@@ -22,7 +22,7 @@ export function buildOzonPostings(items: DeliveryItem[], config: OzonDeliveryCon
   }
   return postings;
 }
-const quoteSchema = z.object({ request: checkoutRequestSchema, cart: z.string(), config: z.string(), address: z.string(), cost: z.number().finite().nonnegative(), days: z.number().int().nonnegative(), expires: z.number().int() });
+const quoteSchema = z.object({ request: checkoutRequestSchema, cart: z.string(), config: z.string(), address: z.string(), cost: z.number().finite().nonnegative(), days: z.number().int().nonnegative(), expires: z.number().int(), consentId: z.string().optional() });
 export type OzonQuote = z.infer<typeof quoteSchema>;
 function signingKey() { if (!process.env.AUTH_SECRET) throw new Error("quote-key-missing"); return `${process.env.AUTH_SECRET}:ozon-delivery-quote-v1`; }
 export function signOzonQuote(quote: OzonQuote) {

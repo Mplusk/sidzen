@@ -701,6 +701,8 @@ body:has(.admin-shell) > .cookie-banner { display: none; }
   .product-detail .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 }
 /* API delivery: compact, readable point search without horizontal overflow. */
+.delivery-option--unavailable { opacity: .65; grid-template-columns: 1fr; cursor: default; }
+.checkout-consent { margin: 12px 0; }
 .ozon-delivery-picker { padding: 16px; background: var(--surface, #f2f4f7); border-radius: 12px; margin: 12px 0 20px; }
 .ozon-delivery-picker .field { min-width: 0; margin-bottom: 12px; }
 .ozon-delivery-picker select { width: 100%; max-width: 100%; }

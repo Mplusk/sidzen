@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { logoutAction } from "@/app/actions/auth";
 
-const links = [["Обзор", "/account/"], ["Заказы", "/account/orders/"], ["Документы", "/account/documents/"], ["Профиль", "/account/profile/"]];
+const links = [["Обзор", "/account/"], ["Заказы", "/account/orders/"], ["Документы", "/account/documents/"], ["Профиль", "/account/profile/"], ["Персональные данные", "/account/privacy/"]];
 
 export default async function AccountLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();

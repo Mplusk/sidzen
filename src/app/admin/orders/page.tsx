@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { formatDate, formatPrice } from "@/lib/format";
-import { getCurrentUser } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
 import { PERMISSIONS } from "@/lib/permissions";
 import { AdminDeleteOrder } from "@/components/admin-delete-order";
 
@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: "Заказы — управлени�
 export default async function AdminOrdersPage({ searchParams }: { searchParams: Promise<{ status?: string; q?: string; deleted?: string; error?: string }> }) {
   const params = await searchParams;
   const deletionError = params.error === "delivery-active" ? "Сначала отмените или завершите доставку Ozon в карточке заказа. Неоднозначные отправления требуют сверки в Ozon." : params.error === "confirmation" ? "Удаление не подтверждено. Откройте окно удаления и подтвердите действие." : params.error === "missing" ? "Заказ уже удалён или не найден." : "Не удалось удалить заказ. Попробуйте ещё раз.";
-  const user = await getCurrentUser();
+  const user = await requirePermission(PERMISSIONS.ordersRead);
   const canDelete = user?.roles.includes("superadmin") || user?.permissions.has(PERMISSIONS.ordersWrite);
   const statuses = params.status === "production" ? ["QUEUED", "PRINTING", "POST_PROCESSING"] : params.status ? [params.status] : undefined;
   const orders = await prisma.order.findMany({ where: { ...(statuses ? { status: { in: statuses as never[] } } : {}), ...(params.q ? { OR: [{ number: { contains: params.q, mode: "insensitive" } }, { customerEmail: { contains: params.q, mode: "insensitive" } }, { customerPhone: { contains: params.q } }] } : {}) }, include: { items: true, payment: true, shipment: true }, orderBy: { createdAt: "desc" }, take: 200 });
