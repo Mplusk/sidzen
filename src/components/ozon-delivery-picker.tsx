@@ -23,7 +23,7 @@ export function OzonDeliveryPicker({ phone, onQuote, packingReady = true }: { ph
   const [message, setMessage] = useState("");
   const [quote, setQuote] = useState<(DeliveryQuoteView & { phone: string }) | null>(null);
   const [lastPhone, setLastPhone] = useState(phone);
-  if (lastPhone !== phone) { setLastPhone(phone); setQuote(null); }
+  if (lastPhone !== phone) { setLastPhone(phone); setQuote(null); setMessage(""); }
   const phoneRef = useRef(phone);
   useEffect(() => { phoneRef.current = phone; }, [phone]);
   const revision = useRef(0);
@@ -98,10 +98,9 @@ export function OzonDeliveryPicker({ phone, onQuote, packingReady = true }: { ph
     </>}
     {point && <p className="notice">Выбран ПВЗ: {points.find(value => value.id === point)?.address}</p>}
     <label className="checkout-consent"><input type="checkbox" name="ozonConsent" checked={consent} required onChange={event => { setConsent(event.target.checked); clearQuote(); }} /><span>Даю отдельное <Link href="/legal/consent/?purpose=ozon" target="_blank">согласие на передачу номера Ozon для проверки и расчёта доставки</Link>. Без согласия можно выбрать другой способ доставки.</span></label>
-    {checkIssue && <p className="notice ozon-check-help" id="ozon-check-help">{checkIssue}</p>}
-    <button type="button" className="button button--small" onClick={calculate} disabled={!!pending} aria-describedby={checkIssue ? "ozon-check-help" : undefined}>{pending === "quote" ? "Проверяем доставку…" : "Проверить доставку в выбранный ПВЗ"}</button>
-    {message && <p className="notice" role="alert">{message}</p>}
-    {quote && quote.phone !== phone && !checkIssue && <p className="notice">Телефон изменён. ПВЗ сохранён — повторите проверку доставки для нового номера.</p>}
+    {checkIssue && message !== checkIssue && <p className="notice ozon-check-help" id="ozon-check-help">{checkIssue}</p>}
+    <button type="button" className="button button--small" onClick={calculate} disabled={!!pending} aria-describedby={message ? "ozon-check-message" : checkIssue ? "ozon-check-help" : undefined}>{pending === "quote" ? "Проверяем доставку…" : "Проверить доставку в выбранный ПВЗ"}</button>
+    {message && <p className="notice" role="alert" id="ozon-check-message">{message}</p>}
     {quote && quote.phone === phone && <p className="notice notice--success" role="status"><strong>Доставка бесплатная · 0 ₽</strong><br />{quote.address}<br />Примерно {quote.days} дн. в пути после отгрузки. Проверка действительна 15 минут.</p>}
   </div>;
 }

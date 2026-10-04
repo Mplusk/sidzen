@@ -35,6 +35,7 @@ describe("Ozon checkout interaction regressions", () => {
     expect(button("Проверить доставку").disabled).toBe(false);
     await click("Проверить доставку"); expect(container.querySelector('[role="alert"]')?.textContent).toContain("телефон"); expect(m.quote).not.toHaveBeenCalled();
     phone = "+7 (999) 123-45-67"; await render();
+    expect(container.textContent).not.toContain("Заполните телефон");
     expect(container.querySelector("select")!.value).toBe("42"); expect(container.querySelector<HTMLInputElement>('input[name="ozonConsent"]')!.checked).toBe(true);
     await click("Проверить доставку"); expect(m.quote).toHaveBeenCalledWith(phone, "42", true); expect(onQuote).toHaveBeenLastCalledWith(expect.objectContaining({ token: "signed-fixture", cost: 0 }));
     expect(container.textContent).toContain("Доставка бесплатная · 0 ₽");
