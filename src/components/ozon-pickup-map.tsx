@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
-import { hasPointCoordinates, type PickupPoint } from "@/lib/delivery/points";
+import { hasPointCoordinates, initialMapPoints, type PickupPoint } from "@/lib/delivery/points";
 
 export default function OzonPickupMap({ points, selected, onSelect }: { points: PickupPoint[]; selected: string; onSelect: (id: string) => void }) {
   const container = useRef<HTMLDivElement>(null);
@@ -36,14 +36,19 @@ export default function OzonPickupMap({ points, selected, onSelect }: { points: 
       markersRef.current.set(point.id, marker);
       return marker;
     });
-    map.fitBounds(L.latLngBounds(located.map(point => [point.latitude, point.longitude])), { padding: [28, 28], maxZoom: 15 });
+    const focus = initialMapPoints(points);
+    map.fitBounds(L.latLngBounds(focus.map(point => [point.latitude, point.longitude])), { padding: [28, 28], maxZoom: 15 });
     const markerIndex = markersRef.current;
     return () => { for (const marker of markers) marker.remove(); markerIndex.clear(); };
   }, [points]);
   useEffect(() => {
     const point = points.find(point => point.id === selected);
     for (const [id, marker] of markersRef.current) marker.getElement()?.classList.toggle("ozon-map-pin--selected", id === selected);
-    if (point && hasPointCoordinates(point)) mapRef.current?.panTo([point.latitude, point.longitude]);
+    if (point && hasPointCoordinates(point)) {
+      mapRef.current?.panTo([point.latitude, point.longitude]);
+      markersRef.current.get(point.id)?.openPopup();
+    }
   }, [points, selected]);
-  return <div className="ozon-map-wrapper"><div ref={container} className="ozon-pickup-map" role="region" aria-label="Карта пунктов выдачи Ozon" />{tileError && <p className="muted" role="status">Подложка карты временно недоступна. ПВЗ можно выбрать по метке или из списка ниже.</p>}</div>;
+  const focused = initialMapPoints(points).length;
+  return <div className="ozon-map-wrapper"><div ref={container} className="ozon-pickup-map" role="region" aria-label="Карта пунктов выдачи Ozon" />{focused < points.filter(hasPointCoordinates).length && <p className="muted">Карта открыта в районе большинства найденных ПВЗ. Пункты в других районах тоже доступны: выберите адрес в списке — карта перейдёт к нему.</p>}{tileError && <p className="muted" role="status">Подложка карты временно недоступна. ПВЗ можно выбрать по метке или из списка ниже.</p>}</div>;
 }
