@@ -44,6 +44,8 @@ try {
   assert(table); assert(table.includes("PLA пластик") && table.includes("черный") && table.includes("Вес с упаковкой, г"));
   for (const text of ["Ozon", "0 × 0", "Технология", "Срок изготовления", "Пустая строка"]) assert(!table.includes(text));
   assert(html.includes('class="product-description"'));
+  assert(html.includes('class="product-overview"') && html.includes('class="product-buy-panel"') && html.includes('Артикул:'));
+  assert(!html.includes('print-benefits') && !html.includes('class="cta-band"'));
   assert(html.includes("Следующее фото") && html.includes("Предыдущее фото"));
   assert(html.includes("Товар временно отсутствует в наличии.")); assert(!html.includes("Уменьшите количество."));
   assert(!html.includes(">Добавить в корзину</button>"));

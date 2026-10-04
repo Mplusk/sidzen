@@ -12,7 +12,7 @@ import { ProductPurchaseForm } from "@/components/product-purchase-form";
 import { productOptionInclude, productOptions } from "@/lib/product-options-server";
 import { pluralRu } from "@/lib/format";
 import { productSpecificationRows } from "@/lib/product-specifications";
-import { CheckIcon, ShieldIcon, TruckIcon } from "@/components/icons";
+import { TruckIcon } from "@/components/icons";
 
 type Params = Promise<{ category: string; product: string }>;
 
@@ -64,27 +64,31 @@ export default async function ProductPage({ params }: { params: Params }) {
     ...(product.reviews.length ? { aggregateRating: { "@type": "AggregateRating", ratingValue: rating.toFixed(1), reviewCount: product.reviews.length } } : {}),
   };
   const specs = productSpecificationRows(product);
+  const description = product.description || product.shortDescription;
   return (
     <>
       <JsonLd data={schema} />
-      <div className="container"><Breadcrumbs items={[{ label: "Каталог", href: "/catalog/" }, { label: category.name, href: `/catalog/${category.slug}/` }, { label: product.name, href: `/catalog/${category.slug}/${product.slug}/` }]} /></div>
+      <div className="container product-breadcrumbs"><Breadcrumbs items={[{ label: "Каталог", href: "/catalog/" }, { label: category.name, href: `/catalog/${category.slug}/` }, { label: product.name, href: `/catalog/${category.slug}/${product.slug}/` }]} /></div>
       <article className="container product-detail">
         <div className="product-detail__grid">
-          <ProductGallery key={product.id} images={product.images.map(({ path, alt, caption }) => ({ path, alt, caption }))} name={product.name} badge={product.badge} />
+          <ProductGallery key={product.id} images={product.images.map(({ path, alt, caption, width, height }) => ({ path, alt, caption, width, height }))} name={product.name} badge={product.badge} />
           <div className="product-summary">
-            <span className="eyebrow">{category.name} · {product.sku}</span>
+            <span className="product-summary__sku">Артикул: {product.sku}</span>
             <h1>{product.h1 ?? product.name}</h1>
-            <p className="product-summary__lead">{product.shortDescription}</p>
-            <span className="stock-label">{product.stock > 0 ? `В наличии: ${product.stock} шт.` : product.madeToOrder ? `Под заказ: ${product.leadDays}–${product.leadDays + 2} ${pluralRu(product.leadDays + 2, ["день", "дня", "дней"])}` : "Нет в наличии"}</span>
-            <ProductPurchaseForm product={options} />
-            <div className="print-benefits"><div className="print-benefit"><ShieldIcon /><strong>Гарантия качества</strong><span>Проверка геометрии</span></div><div className="print-benefit"><TruckIcon /><strong>Доставка по РФ</strong><span>С трек-номером</span></div><div className="print-benefit"><CheckIcon /><strong>Поможем выбрать</strong><span>Материал и слой</span></div></div>
+            {product.reviews.length > 0 && <a className="product-rating" href="#reviews-heading">★ {rating.toFixed(1)} · {product.reviews.length} {pluralRu(product.reviews.length, ["отзыв", "отзыва", "отзывов"])}</a>}
+            {specs.length > 0 && <section className="product-overview" aria-labelledby="product-overview-heading"><div className="product-overview__heading"><h2 id="product-overview-heading">О товаре</h2><a href="#specifications">Все характеристики</a></div><dl>{specs.slice(0, 6).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl></section>}
+            <a className="product-description-link" href="#description">Перейти к описанию →</a>
           </div>
+          <aside className="product-buy-panel" aria-label="Покупка товара">
+            <span className={"stock-label" + (product.stock < 1 && !product.madeToOrder ? " stock-label--unavailable" : "")}>{product.stock > 0 ? `В наличии: ${product.stock} шт.` : product.madeToOrder ? `Под заказ: ${product.leadDays}–${product.leadDays + 2} ${pluralRu(product.leadDays + 2, ["день", "дня", "дней"])}` : "Нет в наличии"}</span>
+            <ProductPurchaseForm product={options} />
+            <Link className="product-delivery-note" href="/delivery/"><TruckIcon aria-hidden="true" /><span>Доставка и оплата<small>Стоимость доставки — при оформлении</small></span></Link>
+          </aside>
         </div>
-        <div className="content-tabs"><nav className="content-tabs__nav"><a href="#description">Описание</a>{specs.length > 0 && <a href="#specifications">Характеристики</a>}<a href="#delivery">Доставка</a></nav><div className="rich-text"><h2 id="description">Описание</h2>{product.description && <p className="product-description">{product.description}</p>}{product.usage && <p>{product.usage}</p>}{specs.length > 0 && <><h2 id="specifications">Характеристики</h2><table className="spec-table"><tbody>{specs.map(([key, value]) => <tr key={key}><th scope="row">{key}</th><td>{value}</td></tr>)}</tbody></table></>}<h2 id="delivery">Доставка и уход</h2><p>Отправляем СДЭК или Почтой России. Точную стоимость покажем при оформлении заказа. {product.instructions}</p></div></div>
+        <div className="content-tabs"><nav className="content-tabs__nav"><a href="#description">Описание</a>{specs.length > 0 && <a href="#specifications">Характеристики</a>}<a href="#delivery">Доставка</a></nav><div className="rich-text"><h2 id="description">Описание</h2>{description && <p className="product-description">{description}</p>}{product.usage && <p>{product.usage}</p>}{specs.length > 0 && <><h2 id="specifications">Характеристики</h2><table className="spec-table"><tbody>{specs.map(([key, value]) => <tr key={key}><th scope="row">{key}</th><td>{value}</td></tr>)}</tbody></table></>}<h2 id="delivery">Доставка и уход</h2><p>Отправляем СДЭК или Почтой России. Точную стоимость покажем при оформлении заказа. {product.instructions}</p></div></div>
         <section aria-labelledby="reviews-heading"><h2 id="reviews-heading">Отзывы покупателей</h2>{product.reviews.length ? product.reviews.map((review) => <article className="review-card" key={review.id}><strong>{review.author} · {review.rating}/5</strong><p>{review.text}</p><small>{review.createdAt.toLocaleDateString("ru-RU")}</small></article>) : <p>Опубликованных отзывов пока нет.</p>}</section>
         {related.length > 0 && <section><h2>Вам также может подойти</h2><div className="product-grid">{related.map((item) => <ProductCard key={item.id} product={item} />)}</div></section>}
       </article>
-      <section className="cta-band"><div className="container"><div className="cta-band__inner"><h2>Продолжить покупки</h2><div className="cta-band__content"><p>Вернитесь в каталог, чтобы посмотреть другие изделия.</p><Link className="button button--light" href="/catalog/">Открыть каталог</Link></div></div></div></section>
     </>
   );
 }

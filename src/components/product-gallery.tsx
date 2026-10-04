@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 import { ArrowIcon } from "@/components/icons";
 
-type GalleryImage = { path: string; alt: string; caption?: string | null };
+type GalleryImage = { path: string; alt: string; caption?: string | null; width?: number | null; height?: number | null };
 
 export function ProductGallery({ images, name, badge, href, compact = false }: {
   images: GalleryImage[];
@@ -15,14 +15,19 @@ export function ProductGallery({ images, name, badge, href, compact = false }: {
   compact?: boolean;
 }) {
   const [active, setActive] = useState(0);
+  const [ratios, setRatios] = useState<Record<string, number>>({});
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const swiped = useRef(false);
   const current = images[active] ?? images[0];
+  const ratio = current?.width && current.height ? current.width / current.height : current ? ratios[current.path] : undefined;
   const change = (step: number) => setActive((index) => (index + step + images.length) % images.length);
-  const photo = current ? <Image src={current.path} alt={`${current.alt || name} — фото ${active + 1}`} fill priority={!compact && active === 0} sizes={compact ? "(max-width: 600px) 48vw, (max-width: 900px) 32vw, (max-width: 1200px) 24vw, (max-width: 1600px) 19vw, 250px" : "(max-width: 560px) 92vw, 460px"} /> : <span className="image-placeholder">3D</span>;
+  const photo = current ? <Image src={current.path} alt={`${current.alt || name} — фото ${active + 1}`} fill preload={!compact && active === 0} sizes={compact ? "(max-width: 600px) 48vw, (max-width: 900px) 32vw, (max-width: 1200px) 24vw, (max-width: 1600px) 19vw, 250px" : "(max-width: 700px) 94vw, (max-width: 1200px) 45vw, 480px"} onLoad={compact ? undefined : (event) => {
+    const image = event.currentTarget;
+    if (image.naturalWidth > 0 && image.naturalHeight > 0) setRatios((values) => ({ ...values, [current.path]: image.naturalWidth / image.naturalHeight }));
+  }} /> : <span className="image-placeholder">3D</span>;
 
   return <div className={`product-gallery${compact ? " product-gallery--compact" : ""}`} role="region" aria-roledescription="карусель" aria-label={`Фотографии: ${name}`}>
-    <div className="product-gallery__main" tabIndex={images.length > 1 ? 0 : undefined}
+    <div className="product-gallery__main" style={!compact && ratio ? { aspectRatio: ratio } : undefined} tabIndex={images.length > 1 ? 0 : undefined}
       onKeyDown={(event) => {
         if (images.length < 2 || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
         event.preventDefault();
