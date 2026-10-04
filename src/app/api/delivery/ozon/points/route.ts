@@ -3,49 +3,6 @@ import { rateLimit } from "@/lib/rate-limit";
 import { getOzonDeliveryConfig } from "@/lib/delivery/ozon-config";
 import { OzonDeliveryClient } from "@/lib/delivery/ozon-client";
 import { hasPointCoordinates } from "@/lib/delivery/points";
-import type { PickupPoint } from "@/lib/delivery/points";
-import { pointCoordinatesSchema } from "@/lib/delivery/ozon-client";
-import { hasTrustedOrigin } from "@/lib/request-security";
-import { operatorReady } from "@/lib/privacy";
-import { approximatePosition } from "@/lib/delivery/picker-state";
-
-// Coordinates stay out of URLs, access logs, persistent storage and Ozon calls.
-export async function POST(request: Request) {
-  const reply = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "private, no-store" } });
-  if (!hasTrustedOrigin(request)) return reply({ error: "Недопустимый источник запроса." }, 403);
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
-  if (!rateLimit(`ozon-points:${ip}`, 60, 60000).allowed) return reply({ error: "Слишком много запросов. Повторите через минуту." }, 429);
-  if (!request.headers.get("content-type")?.startsWith("application/json")) return reply({ error: "Некорректный запрос." }, 400);
-  const body = await request.text();
-  if (body.length > 256) return reply({ error: "Некорректный запрос." }, 400);
-  let input;
-  try { input = pointCoordinatesSchema.strict().safeParse(JSON.parse(body)); } catch { return reply({ error: "Некорректная геопозиция." }, 400); }
-  if (!input.success) return reply({ error: "Некорректная геопозиция." }, 400);
-  if (!await operatorReady()) return reply({ error: "Поиск по геопозиции временно недоступен. Введите город вручную." }, 503);
-  const config = await getOzonDeliveryConfig();
-  if (!config.enabled || !config.shipmentMethodId || !config.checkedAt) return reply({ error: "Ozon Доставка временно недоступна." }, 503);
-  const scope = { clientId: config.clientId, methodId: BigInt(config.shipmentMethodId), active: true };
-  // Never advertise a cached distant PVZ as the nearest while the old directory
-  // still lacks coordinates. Maintenance fills only public point information.
-  if (await prisma.ozonDeliveryPoint.count({ where: { ...scope, OR: [{ latitude: null }, { longitude: null }] } })) return reply({ error: "Справочник координат ПВЗ обновляется. Пока найдите ПВЗ по городу или улице." }, 503);
-  const { latitude, longitude } = approximatePosition(input.data.latitude, input.data.longitude);
-  try {
-    const points = await prisma.$queryRaw<PickupPoint[]>`
-      SELECT id, name, address, type, latitude, longitude, "distanceKm" FROM (
-        SELECT id, name, address, type, latitude, longitude,
-          6371 * acos(least(1.0, greatest(-1.0,
-            sin(radians(latitude)) * sin(radians(${latitude}::double precision)) +
-            cos(radians(latitude)) * cos(radians(${latitude}::double precision)) * cos(radians(longitude - ${longitude}::double precision))
-          ))) AS "distanceKm"
-        FROM "OzonDeliveryPoint"
-        WHERE "clientId" = ${config.clientId} AND "methodId" = ${scope.methodId} AND active
-          AND latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180
-          AND NOT (latitude = 0 AND longitude = 0)
-      ) AS nearby WHERE "distanceKm" <= 50 ORDER BY "distanceKm", id LIMIT 61
-    `;
-    return reply({ points: points.slice(0, 60).map(point => ({ ...point, distanceKm: Math.round(point.distanceKm! * 10) / 10 })), truncated: points.length > 60, nearby: true });
-  } catch { return reply({ error: "Не удалось загрузить ближайшие ПВЗ. Повторите попытку или введите город вручную." }, 503); }
-}
 
 export async function GET(request: Request) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";

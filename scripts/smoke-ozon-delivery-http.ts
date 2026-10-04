@@ -102,24 +102,13 @@ try {
   const points = await request("/api/delivery/ozon/points/?q=Москва", undefined, false);
   assert.match(points.headers.get("cache-control") || "", /no-store/);
   assert.deepEqual(await points.json(), { points: [{ id: pointId, name: "QA ПВЗ", address: "Москва, QA улица, 1", type: "pvz", latitude: 55.75, longitude: 37.62 }], truncated: false });
-  // Simulate the HTTPS origin seen behind the production TLS-terminating proxy.
-  const trustedOrigin = `https://${base.host}`;
-  const locate = (origin = trustedOrigin, coordinates: unknown = { latitude: 55.750123, longitude: 37.620789 }) => fetch(new URL("/api/delivery/ozon/points/", base), { method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(coordinates) });
-  const nearby = await locate(); assert.equal(nearby.status, 200); assert.match(nearby.headers.get("cache-control") || "", /no-store/);
-  const nearPoints = await nearby.json(); assert.equal(nearPoints.nearby, true); assert.equal(nearPoints.points[0].id, pointId); assert(nearPoints.points[0].distanceKm <= 0.1);
-  assert.equal((await locate("https://foreign.invalid")).status, 403);
-  assert.equal((await locate(trustedOrigin, { latitude: 91, longitude: 38 })).status, 400);
-  assert.equal((await locate(trustedOrigin, { latitude: 0, longitude: 0 })).status, 200);
   const prefix = `qa-delivery-${randomUUID().slice(0, 8)}`;
   const product = await prisma.product.create({ data: { name: "QA Delivery Product", slug: prefix, sku: prefix, type: "READY", status: "PUBLISHED", stock: 10, madeToOrder: false, basePrice: 240, shippingWeightG: 100, shippingLengthMm: 200, shippingWidthMm: 100, shippingHeightMm: 50 } }); productId = product.id;
   const edit = await (await request(`/admin/products/${product.id}/`)).text();
   for (const name of ["shippingWeightG", "shippingLengthMm", "shippingWidthMm", "shippingHeightMm"]) assert(edit.includes(`name="${name}"`));
   const cart = await prisma.cart.upsert({ where: { userId: user.id }, create: { userId: user.id }, update: {} }); cartId = cart.id;
   await prisma.cartItem.create({ data: { cartId, productId, quantity: 1, unitPrice: 240, config: {} } });
-  const checkoutResponse = await request("/checkout/");
-  assert.match(checkoutResponse.headers.get("permissions-policy") || "", /geolocation=\(self\)/);
-  assert.match((await request("/catalog/")).headers.get("permissions-policy") || "", /geolocation=\(\)/);
-  const checkout = await checkoutResponse.text(); assert(checkout.includes("Ozon Доставка"));
+  const checkout = await (await request("/checkout/")).text(); assert(checkout.includes("Ozon Доставка"));
   const order = actionForm(checkout, 'name="expectedTotal"');
   for (const [key, value] of Object.entries({ name: "QA Buyer", phone: "+79991234567", email: "buyer@example.test", delivery: "ozon-delivery", payment: "manual", legal: "on", expectedTotal: "240", ozonQuote: "" })) order.set(key, value);
   const ordersBefore = await prisma.order.count();
