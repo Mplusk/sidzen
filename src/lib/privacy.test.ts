@@ -6,12 +6,16 @@ import { consentDocument, operatorReady, privacySubject, verifyDeliveryConsent }
 import { CONSENT_VERSION } from "./privacy-documents";
 afterEach(() => vi.unstubAllEnvs());
 describe("personal-data consent", () => {
-  beforeEach(() => { vi.resetAllMocks(); vi.stubEnv("AUTH_SECRET", "test-only"); mocks.contacts.mockResolvedValue({ legalName: "QA operator", legalAddress: "QA address", email: "operator@example.test", inn: "" }); });
+  beforeEach(() => { vi.resetAllMocks(); vi.stubEnv("AUTH_SECRET", "test-only"); vi.stubEnv("PERSONAL_DATA_RF_STORAGE_CONFIRMED", "true"); mocks.contacts.mockResolvedValue({ legalName: "QA operator", legalAddress: "QA address", email: "operator@example.test", inn: "" }); });
   it("requires identified operator and valid contact email", async () => {
     expect(await operatorReady()).toBe(true);
     mocks.contacts.mockResolvedValue({ legalName: "", legalAddress: "", email: "" });
     expect(await operatorReady()).toBe(false); await expect(consentDocument("ozon")).rejects.toThrow("operator");
     mocks.contacts.mockResolvedValue({ legalName: "Name", legalAddress: "Address", email: "bad" }); expect(await operatorReady()).toBe(false);
+  });
+  it("does not treat seller details alone as proof of Russian database location", async () => {
+    vi.stubEnv("PERSONAL_DATA_RF_STORAGE_CONFIRMED", "false"); expect(await operatorReady()).toBe(false);
+    vi.stubEnv("PERSONAL_DATA_RF_STORAGE_CONFIRMED", ""); expect(await operatorReady()).toBe(false);
   });
   it("snapshots separate versioned purpose without copying recipient phone", async () => {
     const document = await consentDocument("ozon");

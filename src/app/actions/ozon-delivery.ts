@@ -66,7 +66,7 @@ export async function saveOzonDelivery(form: FormData) {
 export async function quoteOzonDelivery(phoneInput: string, pointInput: string, consentAccepted: boolean = false) {
   // This check must precede even OAuth / point-info calls, not just the UI button.
   if (consentAccepted !== true) return { error: "Для передачи номера Ozon необходимо отдельное согласие на расчёт доставки." };
-  if (!await operatorReady()) return { error: "Магазин ещё не заполнил сведения оператора персональных данных. Расчёт временно недоступен." };
+  if (!await operatorReady()) return { error: "Для расчёта нужны сведения оператора и подтверждение размещения базы данных в России. Расчёт временно недоступен." };
   const ip = (await headers()).get("x-forwarded-for")?.split(",")[0] || "unknown";
   if (!rateLimit(`ozon-quote:${ip}`, 15, 60000).allowed) return { error: "Слишком много расчётов. Повторите через минуту." };
   try {

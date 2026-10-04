@@ -3,6 +3,7 @@ const m = vi.hoisted(() => ({ user: vi.fn(), permission: vi.fn(), create: vi.fn(
 vi.mock("@/lib/auth", () => ({ requireUser: m.user, requirePermission: m.permission }));
 vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: m.tx } }));
 vi.mock("@/lib/rate-limit", () => ({ rateLimit: m.rate }));
+vi.mock("@/lib/privacy", () => ({ rfStorageReady: () => true }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: (url: string) => { throw new Error("redirect:" + url); } }));
 import { answerPersonalDataRequest, requestPersonalData } from "./privacy";

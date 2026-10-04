@@ -30,6 +30,8 @@ jobs:
     env:
       DATABASE_URL: postgresql://build:build@127.0.0.1:5432/build
       AUTH_SECRET: build-only-secret
+      # Isolated synthetic QA data only; this does not configure production.
+      PERSONAL_DATA_RF_STORAGE_CONFIRMED: "true"
       NEXT_PUBLIC_SITE_URL: https://3dprinta.shop
     steps:
       - uses: actions/checkout@v4
