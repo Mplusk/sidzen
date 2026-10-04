@@ -4,6 +4,9 @@ export const ozonAttributesSchema = z.object({ result: z.array(z.object({
   id: z.union([z.number().int().positive().safe(), z.string().regex(/^\d+$/)]).transform(String),
   description_category_id: z.number().int().positive().optional(),
   type_id: z.number().int().positive().optional(),
+  // Seller API volume/weight fields describe the packaged sale unit.
+  depth: z.number().nullish(), width: z.number().nullish(), height: z.number().nullish(),
+  dimension_unit: z.string().nullish(), weight: z.number().nullish(), weight_unit: z.string().nullish(),
   attributes: z.array(z.object({ id: z.number().int(), name: z.string().optional(), values: z.array(z.object({ value: z.string() })) })).default([]),
 })) });
 export const ozonAttributeDictionarySchema = z.object({ result: z.array(z.object({ id: z.number().int(), name: z.string().trim().min(1) })) });

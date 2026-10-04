@@ -88,10 +88,11 @@ describe("marketplace catalog contracts", () => {
       if (path === "/v3/product/list") return json({ result: { items: [{ product_id: 11, offer_id: "ITEM-1" }], last_id: "cursor", total: 1 } });
       if (path === "/v3/product/info/list") return json({ items: [{ id: 11, offer_id: "ITEM-1", name: "Ozon title", barcodes: ["000123"], images: ["https://ir.ozone.ru/b.jpg"], primary_image: ["https://ir.ozone.ru/a.jpg"] }] });
       if (path === "/v5/product/info/prices") return json({ items: [{ product_id: 11, price: { price: "150.50", old_price: "200", currency_code: "RUB" } }] });
-      return json({ result: [{ id: 11, attributes: [{ id: 4191, values: [{ value: "Description" }] }, { id: 100, name: "Материал", values: [{ value: "PLA" }] }] }] });
+      return json({ result: [{ id: 11, depth: 190, width: 55, height: 70, dimension_unit: "mm", weight: 85, weight_unit: "g", attributes: [{ id: 4191, values: [{ value: "Description" }] }, { id: 100, name: "Материал", values: [{ value: "PLA" }] }] }] });
     };
     const page = await fetchPage("ozon", connection, {}, transport);
     expect(page.items[0]).toMatchObject({ price: 150.5, description: "Description", specifications: { "Материал": "PLA" }, issue: null });
     expect(page.items[0].images).toEqual(["https://ir.ozone.ru/a.jpg", "https://ir.ozone.ru/b.jpg"]);
+    expect(page.items[0].measurements?.packaging).toEqual({ shippingWeightG: 85, shippingLengthMm: 190, shippingWidthMm: 55, shippingHeightMm: 70 });
   });
 });

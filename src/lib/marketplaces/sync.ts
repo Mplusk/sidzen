@@ -32,10 +32,18 @@ export async function guardProductWrite(tx: Tx, sku: string, productId?: string)
 
 export async function reconcileProduct(tx: Tx, productId: string, primary: Provider) {
   const product = await tx.product.findUniqueOrThrow({ where: { id: productId } });
-  if (product.marketplaceMode === "SITE") return;
   const rows = await tx.marketplaceListing.findMany({ where: { productId } });
   const canonical = canonicalSnapshot(rows, primary);
   if (!canonical) return;
+  const { packaging, ...itemMeasurements } = canonical.measurements ?? {};
+  if (product.marketplaceMode === "SITE") {
+    // New importer fields may fill previously empty measurements, but must
+    // never replace manual values or mix a partially manual parcel with Ozon.
+    const missingItem = Object.fromEntries(Object.entries(itemMeasurements).filter(([key]) => product[key as keyof typeof itemMeasurements] == null));
+    const missingParcel = [product.shippingWeightG, product.shippingLengthMm, product.shippingWidthMm, product.shippingHeightMm].every(value => value == null);
+    if (Object.keys(missingItem).length || (missingParcel && packaging)) await tx.product.update({ where: { id: productId }, data: { ...missingItem, ...(missingParcel ? packaging : {}) } });
+    return;
+  }
   const oldImages = await tx.productImage.findMany({ where: { productId }, orderBy: { sortOrder: "asc" } });
   const replaceImages = canonical.images.length > 0 && JSON.stringify(oldImages.map((image) => image.path)) !== JSON.stringify(canonical.images);
   await tx.product.update({ where: { id: productId }, data: {
@@ -43,6 +51,7 @@ export async function reconcileProduct(tx: Tx, productId: string, primary: Provi
     // Missing optional fields never wipe existing website information.
     ...(canonical.description ? { description: canonical.description } : {}),
     ...(canonical.specifications && Object.keys(canonical.specifications).length ? { specifications: canonical.specifications } : {}),
+    ...itemMeasurements, ...packaging,
     ...(replaceImages ? { images: { deleteMany: {}, create: canonical.images.map((path, sortOrder) => ({ path, sortOrder, alt: canonical.name })) } } : {}),
   } });
 }

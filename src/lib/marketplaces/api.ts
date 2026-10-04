@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { snapshotSchema, type Connection, type Provider, type Snapshot } from "./model";
 import { ozonAttributesSchema, ozonAttributeDictionarySchema, ozonSpecifications, type OzonAttributeCache } from "./ozon-attributes";
+import { ozonMeasurements } from "./ozon-measurements";
 
 export class MarketplaceError extends Error {}
 const id = z.union([z.number().int().positive().safe(), z.string().regex(/^\d+$/)]).transform(String);
@@ -170,6 +171,7 @@ export async function fetchPage(provider: Provider, connection: Connection, curs
       return checkedSnapshot({ externalId: item.id, sku: item.offer_id, name: item.name.trim().slice(0, 180), barcodes: [...new Set(item.barcodes)],
         description: plainText(attr.item.attributes.find((attribute) => attribute.id === 4191)?.values.map((value) => value.value).join("\n") ?? "") || null,
         specifications: ozonSpecifications(attr.item, attr.labels),
+        measurements: ozonMeasurements(attr.item, attr.labels),
         price, oldPrice: oldPrice > price ? oldPrice : null, images: [...new Set([...primary, ...item.images])].slice(0, 20), issue: priceData.currency_code !== "RUB" ? "currency" : null,
       });
     }) };

@@ -4,6 +4,7 @@ type Measurement = number | string | { toString(): string } | null;
 export type SpecificationProduct = {
   specifications: unknown;
   widthMm: Measurement; depthMm: Measurement; heightMm: Measurement; weightGrams: Measurement;
+  shippingWeightG?: number | null; shippingLengthMm?: number | null; shippingWidthMm?: number | null; shippingHeightMm?: number | null;
   technologies: { name: string }[]; materials: { name: string }[]; colors: { name: string }[];
   stock: number; madeToOrder: boolean; leadDays: number;
 };
@@ -19,6 +20,9 @@ export function productSpecificationRows(product: SpecificationProduct) {
   if (dimensions.every(positive)) rows.set("Габариты", `${dimensions.map(format).join(" × ")} мм`);
   else dimensions.forEach((value, index) => { if (positive(value)) rows.set(["Ширина", "Глубина", "Высота"][index], `${format(value)} мм`); });
   if (positive(product.weightGrams)) rows.set("Вес", `${format(product.weightGrams)} г`);
+  if (positive(product.shippingWeightG ?? null)) rows.set("Вес с упаковкой, г", format(product.shippingWeightG!));
+  const parcel = [product.shippingLengthMm ?? null, product.shippingWidthMm ?? null, product.shippingHeightMm ?? null];
+  if (parcel.every(positive)) rows.set("Габариты упаковки (Д × Ш × В)", `${parcel.map(format).join(" × ")} мм`);
   if (product.stock > 0) rows.set("Отправка", "На следующий рабочий день");
   else if (product.madeToOrder) rows.set("Срок изготовления", `${product.leadDays}–${product.leadDays + 2} ${pluralRu(product.leadDays + 2, ["рабочий день", "рабочих дня", "рабочих дней"])}`);
   return [...rows.entries()];

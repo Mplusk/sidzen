@@ -15,6 +15,9 @@ describe("customer-facing product specifications", () => {
   it("uses a production lead time only for products actually available to order", () => {
     expect(Object.fromEntries(productSpecificationRows({ ...product, madeToOrder: true }))["Срок изготовления"]).toBe("3–5 рабочих дней");
   });
+  it("shows parcel measurements separately, without inventing bare-item dimensions or duplicate weight", () => {
+    expect(Object.fromEntries(productSpecificationRows({ ...product, shippingWeightG: 85, shippingLengthMm: 190, shippingWidthMm: 55, shippingHeightMm: 70 }))).toEqual({ "Материал": "PLA пластик", "Цвет": "черный", "Вес с упаковкой, г": "85", "Габариты упаковки (Д × Ш × В)": "190 × 55 × 70 мм" });
+  });
   it("hides unresolved old Ozon IDs, nulls, objects and empty rows, without hiding valid false/zero values", () => {
     expect(translatedSpecifications({ "Ozon · 85": "Нет бренда", " ": "blank", "Пусто": "", "Нет данных": null, "Объект": {}, "Число": 0, "Флаг": false, technology: "FDM" })).toEqual({ "Число": "0", "Флаг": "Нет", "Технология": "FDM" });
   });

@@ -12,6 +12,20 @@ export const snapshotSchema = z.object({
   price: z.number().finite().positive().max(999_999_999),
   oldPrice: z.number().finite().positive().max(999_999_999).nullable(),
   images: z.array(z.string().max(1000)).max(20),
+  measurements: z.object({
+    // Dimensions of the item, never silently substituted with its packaging.
+    weightGrams: z.number().finite().positive().max(1_000_000).optional(),
+    widthMm: z.number().finite().positive().max(10_000).optional(),
+    heightMm: z.number().finite().positive().max(10_000).optional(),
+    depthMm: z.number().finite().positive().max(10_000).optional(),
+    // Keep a complete parcel together; do not mix providers or partial parcels.
+    packaging: z.object({
+      shippingWeightG: z.number().int().positive().max(1_000_000),
+      shippingLengthMm: z.number().int().positive().max(10_000),
+      shippingWidthMm: z.number().int().positive().max(10_000),
+      shippingHeightMm: z.number().int().positive().max(10_000),
+    }).optional(),
+  }).optional(),
   // An item-level issue prevents automatic mutation, even if already linked.
   issue: z.string().nullable().default(null),
 });
@@ -41,6 +55,12 @@ export function canonicalSnapshot(rows: { provider: string; externalId: string; 
     description: candidates.find((row) => row.description)?.description ?? null,
     specifications: candidates.find((row) => row.specifications && Object.keys(row.specifications).length)?.specifications ?? null,
     images: candidates.find((row) => row.images.length)?.images ?? [],
+    measurements: {
+      ...Object.fromEntries(["weightGrams", "widthMm", "heightMm", "depthMm", "packaging"].flatMap(key => {
+        const value = candidates.map(row => row.measurements?.[key as keyof NonNullable<Snapshot["measurements"]>]).find(value => value !== undefined);
+        return value === undefined ? [] : [[key, value]];
+      })),
+    } as NonNullable<Snapshot["measurements"]>,
   };
 }
 

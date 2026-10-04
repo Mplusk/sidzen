@@ -21,7 +21,7 @@ async function apply(provider: Provider, value: Snapshot, runId?: string) {
   return prisma.$transaction(async (tx) => { await marketplaceLock(tx); return applySnapshot(tx, provider, accountId, value, runId); }, { maxWait: 120_000, timeout: 120_000 });
 }
 async function remember(sku: string) { const product = await prisma.product.findUniqueOrThrow({ where: { sku } }); if (!productIds.includes(product.id)) productIds.push(product.id); return product; }
-function fields(product: Awaited<ReturnType<typeof remember>>) { return { name: product.name, price: Number(product.basePrice), oldPrice: Number(product.oldPrice), description: product.description, specifications: product.specifications, status: product.status, stock: product.stock }; }
+function fields(product: Awaited<ReturnType<typeof remember>>) { return { name: product.name, price: Number(product.basePrice), oldPrice: Number(product.oldPrice), description: product.description, specifications: product.specifications, status: product.status, stock: product.stock, shippingWeightG: product.shippingWeightG, shippingLengthMm: product.shippingLengthMm, shippingWidthMm: product.shippingWidthMm, shippingHeightMm: product.shippingHeightMm, weightGrams: product.weightGrams === null ? null : Number(product.weightGrams), widthMm: product.widthMm === null ? null : Number(product.widthMm) }; }
 try {
   await prisma.siteSetting.upsert({ where: { key: POLICY_KEY }, create: { key: POLICY_KEY, group: "integrations", value: { primary: "ozon", categoryId: category.id } }, update: { value: { primary: "ozon", categoryId: category.id } } });
   const wb = { ...base, externalId: "201", name: `${prefix} WB title`, description: "WB text", price: 250 };
@@ -30,6 +30,14 @@ try {
   assert.equal(first.status, "DRAFT"); assert.equal(first.madeToOrder, false);
   assert.equal(await prisma.productCategory.count({ where: { productId: first.id, categoryId: category.id } }), 1);
   const canonical = fields(first);
+  const measured: Snapshot = { ...base, measurements: { weightGrams: 65, widthMm: 45, packaging: { shippingWeightG: 85, shippingLengthMm: 190, shippingWidthMm: 55, shippingHeightMm: 70 } } };
+  await apply("ozon", measured);
+  assert.equal(Number((await remember(prefix)).weightGrams), 65);
+  assert.equal((await remember(prefix)).shippingWeightG, 85);
+  await apply("ozon", base); // A missing parcel must not clear an existing one.
+  assert.equal((await remember(prefix)).shippingLengthMm, 190);
+  // Restore this isolated fixture before the reverse-order comparison below.
+  await prisma.product.update({ where: { id: first.id }, data: { weightGrams: null, widthMm: null, shippingWeightG: null, shippingLengthMm: null, shippingWidthMm: null, shippingHeightMm: null } });
   await apply("ozon", base); await apply("wb", wb);
   assert.equal(await prisma.product.count({ where: { sku: prefix } }), 1);
   assert.equal(await prisma.marketplaceListing.count({ where: { productId: first.id } }), 2);
@@ -39,6 +47,12 @@ try {
   await apply("wb", wb); await apply("ozon", base);
   const reversed = await remember(prefix);
   assert.deepEqual(fields(reversed), canonical);
+  await prisma.product.update({ where: { id: reversed.id }, data: { marketplaceMode: "SITE" } });
+  await apply("ozon", measured);
+  assert.equal((await remember(prefix)).shippingWeightG, 85);
+  assert.equal((await remember(prefix)).shippingLengthMm, 190);
+  assert.equal(Number((await remember(prefix)).widthMm), 45);
+  await prisma.product.update({ where: { id: reversed.id }, data: { marketplaceMode: "AUTO" } });
   const parallel = await Promise.allSettled(Array.from({ length: 4 }, () => apply("ozon", base)));
   for (const result of parallel) { if (result.status === "rejected") throw result.reason; }
   assert.equal(await prisma.product.count({ where: { sku: prefix } }), 1);
@@ -80,9 +94,11 @@ try {
   assert.equal((await prisma.marketplaceListing.findUniqueOrThrow({ where: { id: manualListing.id } })).conflict, null);
   assert.equal(Number((await prisma.product.findUniqueOrThrow({ where: { id: legacy.id } })).basePrice), 150);
 
-  await prisma.product.update({ where: { id: reversed.id }, data: { marketplaceMode: "SITE", name: "Manual name", basePrice: 777 } });
-  await apply("ozon", { ...base, price: 180 });
+  await prisma.product.update({ where: { id: reversed.id }, data: { marketplaceMode: "SITE", name: "Manual name", basePrice: 777, shippingWeightG: 123, shippingLengthMm: null, widthMm: 99 } });
+  await apply("ozon", { ...measured, price: 180 });
   assert.equal((await remember(prefix)).name, "Manual name"); assert.equal(Number((await remember(prefix)).basePrice), 777);
+  assert.equal((await remember(prefix)).shippingWeightG, 123); assert.equal(Number((await remember(prefix)).widthMm), 99);
+  assert.equal((await remember(prefix)).shippingLengthMm, null); // Do not complete a partially manual parcel using unrelated Ozon dimensions.
   await assert.rejects(prisma.$transaction((tx) => guardProductWrite(tx, ` ${prefix.toLowerCase()} `)), /duplicate-sku/);
 
   // Exercise the real queue, leases, page checkpoints and worker with mock HTTP.
@@ -98,7 +114,7 @@ try {
     }
     if (path === "/v3/product/info/list") return Response.json({ items: ids.map((id) => ({ id: Number(id), offer_id: `${prefix}-worker-${id}`, name: `${prefix} worker ${id}`, barcodes: [], images: [] })) });
     if (path === "/v5/product/info/prices") return Response.json({ items: ids.map((id) => ({ product_id: Number(id), price: { price: "321.50", old_price: "400", currency_code: "RUB" } })) });
-    if (path === "/v4/product/info/attributes") return Response.json({ result: ids.map((id) => ({ id: Number(id), attributes: [] })) });
+    if (path === "/v4/product/info/attributes") return Response.json({ result: ids.map((id) => ({ id: Number(id), depth: 190, width: 55, height: 70, dimension_unit: "mm", weight: 85, weight_unit: "g", attributes: [] })) });
     throw new Error("Unexpected outbound request in local test");
   };
   const queued = await prisma.marketplaceSyncRun.create({ data: { provider: "ozon", accountId } }); runIds.push(queued.id);
@@ -108,6 +124,9 @@ try {
   await processRun(claims.find(Boolean)!);
   const completed = await prisma.marketplaceSyncRun.findUniqueOrThrow({ where: { id: queued.id } });
   assert.equal(completed.status, "SUCCEEDED"); assert.equal(completed.processed, 21); assert.equal(completed.created, 21); assert.equal(completed.conflicts, 0);
+  const workerMeasured = await prisma.product.findUniqueOrThrow({ where: { sku: `${prefix}-WORKER-400` } });
+  assert.equal(workerMeasured.shippingWeightG, 85); assert.equal(workerMeasured.shippingLengthMm, 190); assert.equal(workerMeasured.shippingWidthMm, 55); assert.equal(workerMeasured.shippingHeightMm, 70);
+  assert.equal(workerMeasured.weightGrams, null); // Package weight is not the bare item.
   productIds.push(...(await prisma.product.findMany({ where: { sku: { startsWith: `${prefix}-WORKER-` } }, select: { id: true } })).map((row) => row.id));
 
   const stale = await prisma.marketplaceSyncRun.create({ data: { provider: "ozon", accountId, status: "RUNNING", leaseToken: "expired", leaseUntil: new Date(0), processed: 1, updated: 1 } }); runIds.push(stale.id);
