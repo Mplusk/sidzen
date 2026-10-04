@@ -36,7 +36,6 @@ if ! flock -n 9; then
 fi
 
 previous_release=""
-previous_image_ids="$(docker ps -aq --filter label=com.docker.compose.project=3dprinta | xargs -r docker inspect --format '{{.Image}}' | sort -u)"
 if [[ -L "$current_link" ]]; then
   previous_release="$(readlink -f "$current_link")"
 fi
@@ -97,9 +96,8 @@ wait_for_health() {
 
 cleanup_successful_deploy() {
   local old_release
-  local old_image
   local current_image_ids
-  current_image_ids="$(compose_for "$final_release" images -q | xargs -r docker image inspect --format '{{.Id}}' | sort -u)"
+  current_image_ids="$(release_image_ids "$final_release")"
 
   while IFS= read -r -d '' old_release; do
     rm -rf -- "$old_release"
@@ -111,12 +109,37 @@ cleanup_successful_deploy() {
   # containers, rollback images or shared build caches. Old shop runtime caches
   # disappear with the replaced containers/releases; prune only our images.
   docker container prune --force --filter label=com.docker.compose.project=3dprinta
+  cleanup_unused_shop_images "$current_image_ids"
+}
+
+release_image_ids() {
+  local release_dir="$1"
+  local service_image
+  for service_image in app migrate marketplace-worker; do
+    docker image inspect --format '{{.Id}}' "3dprinta-${service_image}:$(basename "$release_dir")" 2>/dev/null || true
+  done
+}
+
+cleanup_unused_shop_images() {
+  local protected_ids="$1"
+  local old_image
+  # Include orphaned migrators and failed releases, not just images that had
+  # containers before this deploy. Keep rollback images and ALL used images.
   while IFS= read -r old_image; do
-    if [[ -n "$old_image" ]] && ! grep -Fxq "$old_image" <<< "$current_image_ids" && [[ -z "$(docker ps -aq --filter "ancestor=$old_image")" ]]; then
+    if [[ -n "$old_image" ]] && ! grep -Fxq "$old_image" <<< "$protected_ids" && [[ -z "$(docker ps -aq --filter "ancestor=$old_image")" ]]; then
       docker image rm "$old_image" || true
     fi
-  done <<< "$previous_image_ids"
-  docker image prune --force --filter label=com.3dprinta.project=shop
+  done < <(docker image ls --quiet --no-trunc --filter label=com.3dprinta.project=shop | sort -u)
+}
+
+require_disk_space() {
+  local required_kb="$1"
+  local available_kb
+  available_kb="$(df -Pk "$project_root" | awk 'NR == 2 { print $4 }')"
+  if [[ "$available_kb" -lt "$required_kb" ]]; then
+    printf 'Insufficient disk space: %s KiB available, %s KiB needed. Existing shop containers remain unchanged.\n' "$available_kb" "$required_kb" >&2
+    exit 1
+  fi
 }
 
 verify_backup_entrypoint() {
@@ -174,9 +197,27 @@ python3 "${final_release}/scripts/preserve-proxy-config.py" "$previous_release" 
 
 if [[ "${DEPLOY_PREBUILT_IMAGES:-false}" == true ]]; then
   image_artifact="${incoming_root}/${release_sha}.images.tar.gz"
-  if [[ ! -f "$image_artifact" ]] || ! (gzip -dc "$image_artifact" | docker image load); then
+  if [[ ! -f "$image_artifact" ]]; then
+    printf 'Prebuilt image archive is missing.\n' >&2
+    exit 2
+  fi
+  cleanup_unused_shop_images "$(release_image_ids "$previous_release"; release_image_ids "$final_release")"
+  images_present=true
+  for service_image in app migrate marketplace-worker; do
+    if ! docker image inspect "3dprinta-${service_image}:${release_sha}" > /dev/null 2>&1; then images_present=false; fi
+  done
+  if [[ "$images_present" != true ]]; then
+    # Docker stores unpacked layers and compressed blobs. Reserve room for both
+    # plus database writes BEFORE loading images or touching working containers.
+    # OCI archives can contain compressed blobs inside the outer gzip archive.
+    # Counting the outer tar alone underestimates their unpacked filesystem size.
+    image_storage_bytes="$(python3 "${final_release}/scripts/estimate-image-space.py" "$image_artifact")"
+    require_disk_space "$(( (image_storage_bytes + 1023) / 1024 + 524288 ))"
+  fi
+  if [[ "$images_present" != true ]] && ! (gzip -dc "$image_artifact" | docker image load); then
     rollback "prebuilt image import"
   fi
+  require_disk_space 524288
   for service_image in app migrate marketplace-worker; do
     if ! docker image inspect "3dprinta-${service_image}:${release_sha}" > /dev/null 2>&1; then
       rollback "missing immutable image"

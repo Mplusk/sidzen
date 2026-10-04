@@ -22,6 +22,11 @@ these prebuilt images instead of building Next.js on the memory-constrained VPS.
 It activates the release only after application, database, worker and backup
 entrypoint checks. Old releases and shop-only image caches are cleaned only
 after success; unrelated projects and persistent data volumes are preserved.
+Before an image import, unused shop-only images (including orphaned migrators)
+are removed while preserving every image of the current rollback release and
+any image used by a container. Import requires enough room for unpacked layers,
+compressed blobs and at least 512 MiB for database writes. Insufficient space
+rejects the update before the working shop containers are changed.
 
 CI secrets: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_PRIVATE_KEY` and verified
 `DEPLOY_KNOWN_HOSTS`. Never commit their values.
