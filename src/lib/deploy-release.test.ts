@@ -31,4 +31,9 @@ describe("SSH-streamed release deployment", () => {
     expect(deployment).toContain('"3dprinta-${service_image}:${release_sha}"');
     expect(deployment).toContain('up -d --no-build --remove-orphans');
   });
+
+  it("keeps backups from consuming following commands in a streamed SSH session", () => {
+    const backup = readFileSync("scripts/backup.sh", "utf8");
+    expect(backup).toContain('--format=custom < /dev/null > "${destination}/database.dump"');
+  });
 });

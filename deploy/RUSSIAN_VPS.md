@@ -43,3 +43,16 @@ Daily backups run through `/usr/local/sbin/3dprinta-backup`; the executable is a
 symlink to the active release's backup script. Archives are stored under
 `/var/backups/3dprinta` on the VPS and retained for 14 days. Additional independent
 Russian backup storage requires separate configuration.
+
+For manual Compose operations on the active release, select its immutable image
+tag and the persistent host overlay explicitly:
+
+```sh
+cd /opt/3dprinta/current
+export SHOP_IMAGE_TAG="$(basename "$(readlink -f /opt/3dprinta/current)")"
+docker compose --env-file .env.production -f compose.yaml \
+  -f /opt/3dprinta/shared/compose.override.yaml ps
+```
+
+The automated deployment sets this tag itself. Do not rebuild images or run
+Compose without the host overlay on the production VPS.
