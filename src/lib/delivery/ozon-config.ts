@@ -2,11 +2,11 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { decryptSecret } from "@/lib/integration-secrets";
-import { OzonDeliveryError, positiveId } from "./ozon-client";
+import { OzonDeliveryError, positiveId, shipmentMethodSchema } from "./ozon-client";
 
 export const OZON_DELIVERY_SETTING = "integrations.ozon-delivery";
 export const OZON_DELIVERY_CODE = "ozon-delivery";
-export const ozonDeliveryConfigSchema = z.object({ enabled: z.boolean(), clientId: z.string().trim().max(200), clientSecret: z.string().max(4000), shipmentMethodId: positiveId.nullable(), dispatchDays: z.number().int().min(1).max(30), checkedAt: z.string().optional(), methodName: z.string().optional() });
+export const ozonDeliveryConfigSchema = z.object({ enabled: z.boolean(), clientId: z.string().trim().max(200), clientSecret: z.string().max(4000), shipmentMethodId: positiveId.nullable(), dispatchDays: z.number().int().min(1).max(30), checkedAt: z.string().optional(), authorizedAt: z.string().optional(), methodName: z.string().optional(), methods: z.array(shipmentMethodSchema).max(2000).optional() });
 export type OzonDeliveryConfig = z.infer<typeof ozonDeliveryConfigSchema>;
 export async function getOzonDeliveryConfig(database: Pick<typeof prisma, "siteSetting"> = prisma): Promise<OzonDeliveryConfig> {
   const row = await database.siteSetting.findUnique({ where: { key: OZON_DELIVERY_SETTING } });

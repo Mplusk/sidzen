@@ -41,6 +41,17 @@ try {
   assert(html.includes("Ozon Доставка · Delivery API") && html.includes("fixture-delivery-app"));
   assert(!html.includes(secret) && !html.includes(config.clientSecret));
   assert(!(await (await request("/admin/settings/")).text()).includes(config.clientSecret));
+  await prisma.siteSetting.update({ where: { key: OZON_DELIVERY_SETTING }, data: { value: { enabled: false, clientId: config.clientId, clientSecret: config.clientSecret, shipmentMethodId: null, dispatchDays: 1, authorizedAt: new Date().toISOString(), methods: [] } } });
+  const noMethodHtml = await (await request(path)).text();
+  assert(noMethodHtml.includes("нет активного метода отгрузки") && noMethodHtml.includes("Загрузить методы отгрузки"));
+  assert(!noMethodHtml.includes(secret) && !noMethodHtml.includes(config.clientSecret));
+  const noMethodForm = actionForm(noMethodHtml, 'name="shipmentMethodId"');
+  for (const [key, value] of Object.entries({ clientId: config.clientId, clientSecret: "", shipmentMethodId: "", dispatchDays: "1" })) noMethodForm.set(key, value);
+  assert.equal((await request(path, noMethodForm)).headers.get("location"), path + "?result=ozon-no-method#ozon-delivery");
+  const unready = (await prisma.siteSetting.findUniqueOrThrow({ where: { key: OZON_DELIVERY_SETTING } })).value as typeof config;
+  assert.equal(unready.enabled, false); assert.equal(unready.shipmentMethodId, null);
+  assert.equal(decryptSecret(unready.clientSecret, OZON_DELIVERY_SETTING), secret);
+  await save();
   const settings = actionForm(html, 'name="shipmentMethodId"'); settings.set("clientId", config.clientId); settings.set("clientSecret", ""); settings.set("shipmentMethodId", "7"); settings.set("dispatchDays", "2");
   assert.equal((await request(path, settings)).headers.get("location"), path + "?result=ozon-verified#ozon-delivery");
   const persisted = (await prisma.siteSetting.findUniqueOrThrow({ where: { key: OZON_DELIVERY_SETTING } })).value as typeof config;

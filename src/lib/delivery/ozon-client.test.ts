@@ -5,6 +5,15 @@ afterEach(() => vi.restoreAllMocks());
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const request: OzonCheckoutRequest = { recipient: { phone_number: "+79991234567" }, delivery: { delivery_point: { delivery_point_id: 42 } }, postings: [{ request_id: 1, shipment_method_id: 7, cutoff_at: "2030-01-01T12:00:00Z", declared_value: { amount: "240.00", currency_code: "RUB" }, dimensions: { weight_g: 100, length_mm: 200, width_mm: 100, height_mm: 50 } }] };
 describe("official Ozon Delivery API client", () => {
+  it("discovers existing methods without creating routes and guards repeating pagination", async () => {
+    const transport = vi.fn<typeof fetch>().mockResolvedValueOnce(json({ access_token: "token" })).mockResolvedValueOnce(json({ shipment_methods: [{ shipment_method_id: 7, name: "Метод 1", status: "active" }], next_cursor: "page-2" })).mockResolvedValueOnce(json({ shipment_methods: [{ shipment_method_id: 8, name: "Метод 2", status: "blocked" }], next_cursor: null }));
+    const api = new OzonDeliveryClient({ clientId: "app", clientSecret: "synthetic-secret" }, transport);
+    expect(await api.shipmentMethods()).toHaveLength(2);
+    expect(JSON.parse(transport.mock.calls[1][1]!.body as string)).toEqual({ pagination: { cursor: null, limit: 100 } });
+    expect(JSON.parse(transport.mock.calls[2][1]!.body as string)).toEqual({ pagination: { cursor: "page-2", limit: 100 } });
+    const repeating = vi.fn<typeof fetch>().mockResolvedValueOnce(json({ access_token: "token" })).mockImplementation(async () => json({ shipment_methods: [], next_cursor: "same" }));
+    await expect(new OzonDeliveryClient({ clientId: "app", clientSecret: "secret" }, repeating).shipmentMethods()).rejects.toThrow("pagination");
+  });
   it("uses separate client credentials with a JSON scope array and Bearer authorization", async () => {
     const transport = vi.fn<typeof fetch>().mockResolvedValueOnce(json({ access_token: "synthetic-token" })).mockResolvedValueOnce(json({ shipment_methods: [{ shipment_method_id: 7, name: "Наш пункт отгрузки", status: "active" }] }));
     const api = new OzonDeliveryClient({ clientId: "private-app", clientSecret: "synthetic-secret" }, transport);

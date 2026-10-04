@@ -22,22 +22,31 @@ export async function saveOzonDelivery(form: FormData) {
   const parsed = ozonDeliveryConfigSchema.safeParse({ enabled: form.get("enabled") === "on", clientId: String(form.get("clientId") ?? "").trim(), clientSecret: String(form.get("clientSecret") ?? "").trim() || current.clientSecret, shipmentMethodId: form.get("shipmentMethodId") ? Number(form.get("shipmentMethodId")) : null, dispatchDays: Number(form.get("dispatchDays")) });
   if (!parsed.success) finish("ozon-invalid");
   const config = parsed.data;
-  const changed = config.clientId !== current.clientId || config.clientSecret !== current.clientSecret || config.shipmentMethodId !== current.shipmentMethodId;
-  if (config.enabled && (!config.clientId || !config.clientSecret || !config.shipmentMethodId)) finish("ozon-incomplete");
-  if (config.enabled || changed || form.get("intent") === "check") {
+  let changed = config.clientId !== current.clientId || config.clientSecret !== current.clientSecret || config.shipmentMethodId !== current.shipmentMethodId;
+  if (config.enabled && (!config.clientId || !config.clientSecret)) finish("ozon-incomplete");
+  if (config.enabled || changed || form.get("intent") === "check" || form.get("intent") === "methods") {
     try {
-      if (!config.shipmentMethodId) throw new OzonDeliveryError("method");
       const api = new OzonDeliveryClient(config);
-      const method = await api.verifyMethod(config.shipmentMethodId);
+      config.methods = await api.shipmentMethods();
+      config.authorizedAt = new Date().toISOString();
+      const active = config.methods.filter(method => method.status === "active");
+      // A single active method is unambiguous. Never guess between several routes.
+      if (!config.shipmentMethodId && active.length === 1) config.shipmentMethodId = active[0].shipment_method_id;
       await api.pointPage(null); // Verify PVZ permission too; no order creation.
-      config.methodName = method.name; config.checkedAt = new Date().toISOString();
+      if (config.shipmentMethodId) {
+        const method = await api.verifyMethod(config.shipmentMethodId);
+        config.methodName = method.name; config.checkedAt = new Date().toISOString();
+      } else {
+        config.enabled = false;
+      }
+      changed = config.clientId !== current.clientId || config.clientSecret !== current.clientSecret || config.shipmentMethodId !== current.shipmentMethodId;
     } catch { finish("ozon-connection"); }
-  } else { config.checkedAt = current.checkedAt; config.methodName = current.methodName; }
+  } else { config.checkedAt = current.checkedAt; config.methodName = current.methodName; config.authorizedAt = current.authorizedAt; config.methods = current.methods; }
   const saved = await prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412027)`;
     if (JSON.stringify(await getOzonDeliveryConfig(tx)) !== JSON.stringify(current)) return false;
     if (config.clientId !== current.clientId && await tx.ozonDeliveryJob.count({ where: { status: { notIn: ["FINISHED", "CANCELED"] } } })) return false;
-    const value = { ...config, clientSecret: config.clientSecret ? encryptSecret(config.clientSecret, OZON_DELIVERY_SETTING) : "" };
+    const value = JSON.parse(JSON.stringify({ ...config, clientSecret: config.clientSecret ? encryptSecret(config.clientSecret, OZON_DELIVERY_SETTING) : "" }));
     await tx.siteSetting.upsert({ where: { key: OZON_DELIVERY_SETTING }, create: { key: OZON_DELIVERY_SETTING, group: "integrations", value }, update: { value, group: "integrations" } });
     if (config.enabled && (changed || form.get("intent") === "points" || !await tx.ozonDeliverySync.findUnique({ where: { id: "ozon" } }))) {
       const data = { clientId: config.clientId, methodId: BigInt(config.shipmentMethodId!), generation: randomUUID(), cursor: null, pages: 0, points: 0, error: null, status: "PENDING", lockedUntil: null, lockToken: null };
@@ -48,7 +57,7 @@ export async function saveOzonDelivery(form: FormData) {
   });
   if (!saved) finish("ozon-pending");
   revalidatePath("/account/integrations/"); revalidatePath("/checkout/");
-  finish(config.checkedAt ? "ozon-verified" : "saved");
+  finish(config.authorizedAt && !config.shipmentMethodId ? config.methods?.some(method => method.status === "active") ? "ozon-select-method" : "ozon-no-method" : config.checkedAt ? "ozon-verified" : "saved");
 }
 
 export async function quoteOzonDelivery(phoneInput: string, pointInput: string) {

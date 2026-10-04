@@ -3,6 +3,7 @@ import { z } from "zod";
 // Official contract: https://docs.ozon.ru/api/ozon-delivery/
 export const OZON_DELIVERY_SCOPES = ["delivery-api.shipment-method", "delivery-api.delivery", "delivery-api.delivery-point", "delivery-api.order", "delivery-api.posting"];
 export const positiveId = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
+export const shipmentMethodSchema = z.object({ shipment_method_id: positiveId, name: z.string().max(500), status: z.string().max(80) });
 const money = z.object({ amount: z.string().regex(/^\d+(?:\.\d{1,2})?$/), currency_code: z.literal("RUB") });
 export const parcelSchema = z.object({ weight_g: z.number().int().positive().max(1_000_000), length_mm: z.number().int().positive().max(10_000), width_mm: z.number().int().positive().max(10_000), height_mm: z.number().int().positive().max(10_000) });
 export const postingSchema = z.object({ request_id: positiveId, shipment_method_id: positiveId, cutoff_at: z.iso.datetime(), declared_value: money, dimensions: parcelSchema });
@@ -64,6 +65,19 @@ export class OzonDeliveryClient {
     const method = result.shipment_methods.find(value => value.shipment_method_id === id);
     if (!method || method.status !== "active") throw new OzonDeliveryError("method");
     return method;
+  }
+  async shipmentMethods() {
+    const methods = new Map<number, z.infer<typeof shipmentMethodSchema>>();
+    let cursor: string | null = null;
+    const seen = new Set<string>();
+    for (let page = 0; page < 20; page++) {
+      const response = z.object({ shipment_methods: z.array(shipmentMethodSchema), next_cursor: z.string().nullish() }).parse(await this.json("/v1/shipment-method/search", { pagination: { cursor, limit: 100 } }));
+      for (const method of response.shipment_methods) methods.set(method.shipment_method_id, method);
+      if (!response.next_cursor) return [...methods.values()];
+      if (seen.has(response.next_cursor)) throw new OzonDeliveryError("pagination");
+      seen.add(response.next_cursor); cursor = response.next_cursor;
+    }
+    throw new OzonDeliveryError("pagination");
   }
   async pointInfo(ids: number[]) {
     return z.object({ delivery_points: z.array(z.object({ delivery_point_id: positiveId, name: z.string(), full_address: z.string(), is_active: z.boolean(), type: z.string() })) }).parse(await this.json("/v1/delivery-point/info", { delivery_point_ids: ids })).delivery_points;
