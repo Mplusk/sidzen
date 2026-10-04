@@ -44,13 +44,16 @@ fi
 compose_for() {
   local release_dir="$1"
   local overlay=()
+  if [[ -f "${project_root}/shared/compose.override.yaml" ]]; then
+    overlay+=(--file "${project_root}/shared/compose.override.yaml")
+  fi
   if [[ -f "${release_dir}/.compose-proxy-networks.yaml" ]]; then
-    overlay=(--file "${release_dir}/.compose-proxy-networks.yaml")
+    overlay+=(--file "${release_dir}/.compose-proxy-networks.yaml")
   fi
   # CI streams this script into `bash -s` over SSH. Compose run otherwise
   # consumes the remaining script through stdin and bash exits successfully
   # before starting containers or activating the release.
-  COMPOSE_PARALLEL_LIMIT=1 docker compose \
+  SHOP_IMAGE_TAG="$(basename "$release_dir")" COMPOSE_PARALLEL_LIMIT=1 docker compose \
     --project-name "$compose_project" \
     --env-file "$shared_env" \
     --file "${release_dir}/compose.yaml" \
@@ -66,8 +69,10 @@ rollback() {
     printf 'Rolling back to %s.\n' "$previous_release" >&2
     ln -sfn "$shared_env" "${previous_release}/.env.production"
     python3 "${final_release}/scripts/preserve-proxy-config.py" "$final_release" "$previous_release"
-    compose_for "$previous_release" build
-    compose_for "$previous_release" up -d --remove-orphans
+    if [[ "${DEPLOY_PREBUILT_IMAGES:-false}" != true ]]; then
+      compose_for "$previous_release" build
+    fi
+    compose_for "$previous_release" up -d --no-build --remove-orphans
   else
     printf 'No previous release is available for automatic rollback.\n' >&2
   fi
@@ -167,16 +172,28 @@ mv "$staging_release" "$final_release"
 
 python3 "${final_release}/scripts/preserve-proxy-config.py" "$previous_release" "$final_release"
 
-printf 'Building release %s.\n' "$release_sha"
-if ! compose_for "$final_release" build; then
-  rollback "image build"
+if [[ "${DEPLOY_PREBUILT_IMAGES:-false}" == true ]]; then
+  image_artifact="${incoming_root}/${release_sha}.images.tar.gz"
+  if [[ ! -f "$image_artifact" ]] || ! (gzip -dc "$image_artifact" | docker image load); then
+    rollback "prebuilt image import"
+  fi
+  for service_image in app migrate marketplace-worker; do
+    if ! docker image inspect "3dprinta-${service_image}:${release_sha}" > /dev/null 2>&1; then
+      rollback "missing immutable image"
+    fi
+  done
+else
+  printf 'Building release %s.\n' "$release_sha"
+  if ! compose_for "$final_release" build; then
+    rollback "image build"
+  fi
 fi
 
 printf 'Starting release %s.\n' "$release_sha"
 if ! compose_for "$final_release" run --rm --no-deps proxy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile; then
   rollback "proxy configuration validation"
 fi
-if ! compose_for "$final_release" up -d --remove-orphans; then
+if ! compose_for "$final_release" up -d --no-build --remove-orphans; then
   rollback "container start or migration"
 fi
 

@@ -78,7 +78,7 @@ jobs:
     needs: verify
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     environment:
       name: production
       url: https://3dprinta.shop
@@ -90,6 +90,13 @@ jobs:
 
       - name: Create immutable release archive
         run: git archive --format=tar.gz --output="${RUNNER_TEMP}/3dprinta-${GITHUB_SHA}.tar.gz" "${GITHUB_SHA}"
+
+      - name: Build immutable images on the runner, not the small production VPS
+        run: |
+          docker build --target runner -t "3dprinta-app:${GITHUB_SHA}" .
+          docker build --target migrator -t "3dprinta-migrate:${GITHUB_SHA}" .
+          docker build --target marketplace-worker -t "3dprinta-marketplace-worker:${GITHUB_SHA}" .
+          docker image save "3dprinta-app:${GITHUB_SHA}" "3dprinta-migrate:${GITHUB_SHA}" "3dprinta-marketplace-worker:${GITHUB_SHA}" | gzip -1 > "${RUNNER_TEMP}/3dprinta-${GITHUB_SHA}.images.tar.gz"
 
       - name: Configure deploy SSH key
         env:
@@ -110,6 +117,7 @@ jobs:
           ssh_options=(-i "${HOME}/.ssh/3dprinta_deploy" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15)
           ssh "${ssh_options[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" "install -d -m 0750 /opt/3dprinta/incoming"
           scp "${ssh_options[@]}" "${RUNNER_TEMP}/3dprinta-${GITHUB_SHA}.tar.gz" "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/3dprinta/incoming/${GITHUB_SHA}.tar.gz"
+          scp "${ssh_options[@]}" "${RUNNER_TEMP}/3dprinta-${GITHUB_SHA}.images.tar.gz" "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/3dprinta/incoming/${GITHUB_SHA}.images.tar.gz"
 
       - name: Activate release and clean previous versions
         env:
@@ -117,7 +125,7 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         run: |
           ssh_options=(-i "${HOME}/.ssh/3dprinta_deploy" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=20)
-          ssh "${ssh_options[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" "bash -s -- '${GITHUB_SHA}'" < scripts/deploy-release.sh
+          ssh "${ssh_options[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" "DEPLOY_PREBUILT_IMAGES=true bash -s -- '${GITHUB_SHA}'" < scripts/deploy-release.sh
 
       - name: Verify the active release and marketplace worker
         env:

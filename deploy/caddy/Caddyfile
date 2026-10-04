@@ -10,11 +10,3 @@
 www.3dprinta.shop {
     redir https://3dprinta.shop{uri} permanent
 }
-
-# BEGIN PrintERP managed
-# PrintERP runs in a separate Compose project on the shared Docker network.
-erp.3dprinta.shop {
-    encode zstd gzip
-    reverse_proxy erp-web:8080
-}
-# END PrintERP managed

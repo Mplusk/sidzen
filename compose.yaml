@@ -41,6 +41,7 @@ services:
         max-file: "3"
 
   migrate:
+    image: 3dprinta-migrate:${SHOP_IMAGE_TAG:-latest}
     build:
       context: .
       target: migrator
@@ -51,6 +52,7 @@ services:
     restart: "no"
 
   app:
+    image: 3dprinta-app:${SHOP_IMAGE_TAG:-latest}
     build:
       context: .
       target: runner
@@ -76,6 +78,7 @@ services:
         max-file: "3"
 
   marketplace-worker:
+    image: 3dprinta-marketplace-worker:${SHOP_IMAGE_TAG:-latest}
     build:
       context: .
       target: marketplace-worker
