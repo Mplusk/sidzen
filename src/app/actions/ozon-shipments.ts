@@ -9,6 +9,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { getOzonDeliveryConfig } from "@/lib/delivery/ozon-config";
 import { OzonDeliveryClient } from "@/lib/delivery/ozon-client";
 import { processOzonJob, refreshOzonJob } from "@/lib/delivery/ozon-worker";
+import { operatorReady } from "@/lib/privacy";
 
 export async function manageOzonShipment(form: FormData) {
   const user = await requirePermission("orders.write");
@@ -16,6 +17,7 @@ export async function manageOzonShipment(form: FormData) {
   const job = await prisma.ozonDeliveryJob.findUnique({ where: { id: jobId }, include: { shipment: { include: { order: true } } } });
   if (!job) redirect("/admin/orders/");
   const path = `/admin/orders/${job.shipment.order.number}/`;
+  if ((intent === "create" || intent === "approve") && !await operatorReady()) redirect(`${path}?delivery=error`);
   if (!rateLimit(`ozon-shipment:${user.id}`, 20, 60000).allowed) redirect(`${path}?delivery=error`);
   let success = false;
   try {

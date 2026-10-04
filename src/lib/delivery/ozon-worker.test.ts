@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ find: vi.fn(), claim: vi.fn(), transaction: vi.fn(), shipment: vi.fn(), config: vi.fn(), json: vi.fn() }));
+const mocks = vi.hoisted(() => ({ find: vi.fn(), claim: vi.fn(), transaction: vi.fn(), shipment: vi.fn(), config: vi.fn(), json: vi.fn(), privacy: vi.fn() }));
+vi.mock("@/lib/privacy", () => ({ operatorReady: mocks.privacy }));
 vi.mock("@/lib/prisma", () => ({ prisma: { ozonDeliveryJob: { findFirst: mocks.find, updateMany: mocks.claim }, $transaction: mocks.transaction } }));
 vi.mock("./ozon-config", () => ({ getOzonDeliveryConfig: mocks.config }));
 vi.mock("./ozon-client", async importOriginal => {
@@ -13,9 +14,18 @@ const fixture = () => ({ id: "job-1", shipmentId: "shipment-1", clientId: "app",
 describe("Ozon delivery outbox", () => {
   beforeEach(() => {
     vi.resetAllMocks(); mocks.find.mockResolvedValue(fixture()); mocks.claim.mockResolvedValue({ count: 1 });
+    mocks.privacy.mockResolvedValue(true);
     mocks.config.mockResolvedValue({ clientId: "app", clientSecret: "synthetic-secret" });
     mocks.transaction.mockImplementation(callback => callback({ ozonDeliveryJob: { updateMany: mocks.claim }, shipment: { update: mocks.shipment } }));
     mocks.json.mockResolvedValue({ order_number: "test-only", postings: [{ request_id: 1, posting_number: "p1" }, { request_id: 2, posting_number: "p2" }] });
+  });
+  it("does not claim or transmit existing pending jobs without Russian storage and operator readiness", async () => {
+    mocks.privacy.mockResolvedValue(false);
+    expect(await processOzonJob()).toBe(false);
+    expect(await processOzonJob("job-1")).toBe(false);
+    expect(mocks.find).not.toHaveBeenCalled();
+    expect(mocks.claim).not.toHaveBeenCalled();
+    expect(mocks.json).not.toHaveBeenCalled();
   });
   it("reuses the exact persisted body and UUID across ambiguous retries", async () => {
     const job = fixture(); mocks.find.mockResolvedValue(job);

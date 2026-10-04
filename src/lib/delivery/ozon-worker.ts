@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { operatorReady } from "@/lib/privacy";
 import { getOzonDeliveryConfig } from "./ozon-config";
 import { checkoutRequestSchema, OzonDeliveryClient, OzonDeliveryError, positiveId } from "./ozon-client";
 
@@ -43,6 +44,9 @@ export async function syncOzonPointsPage() {
 }
 
 export async function processOzonJob(id?: string) {
+  // Also covers pending jobs created before privacy safeguards were deployed.
+  // Public pickup-directory reads and cancellation/status reconciliation remain available.
+  if (!await operatorReady()) return false;
   const eligibleStatus = id ? { in: ["PENDING", "REVIEW"] } : "PENDING";
   const job = await prisma.ozonDeliveryJob.findFirst({ where: { ...(id ? { id } : { nextAttemptAt: { lte: new Date() }, shipment: { order: { OR: [{ payment: { status: "PAID" } }, { status: { in: [...paidOrderStatuses] } }] } } }), status: eligibleStatus, ...unlocked() }, include: { shipment: { include: { order: { include: { payment: true } } } } }, orderBy: { nextAttemptAt: "asc" } });
   if (!job) return false;

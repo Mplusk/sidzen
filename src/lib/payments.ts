@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getPaymentConfig } from "@/lib/integrations";
+import { operatorReady } from "@/lib/privacy";
 
 export async function onlinePaymentReady() {
   const config = await getPaymentConfig();
@@ -27,6 +28,7 @@ export async function createOnlinePayment(orderId: string) {
     await applyVerifiedPayment(remote);
     return paymentUrl(remote);
   }
+  if (!await operatorReady()) throw new Error("personal-data-not-ready");
   // The provider keeps idempotency keys for 24 hours. Never repeat an ambiguous
   // create request outside that window: an operator must reconcile it first.
   if (Date.now() - order.createdAt.getTime() > 23 * 60 * 60 * 1000) throw new Error("payment-reconciliation-required");
