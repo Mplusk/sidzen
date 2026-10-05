@@ -10,14 +10,31 @@ import { OzonDeliveryPicker, type DeliveryQuoteView } from "@/components/ozon-de
 import { customerDeliveryPrice } from "@/lib/delivery/pricing";
 
 type Delivery = { code: string; name: string; description: string | null; basePrice: number };
+const deliveryErrors: Record<string, string> = {
+  "ozon": "Не удалось подтвердить доставку. Проверьте ПВЗ и повторите расчёт.",
+  "ozon-expired": "Истекли 15 минут действия расчёта. Проверьте доставку в ПВЗ заново.",
+  "ozon-cart": "Изменились товары, цена или упаковка. Проверьте корзину и рассчитайте доставку заново.",
+  "ozon-config": "Магазин обновил настройки доставки. Проверьте ПВЗ заново.",
+  "ozon-phone": "Изменился телефон получателя. Проверьте доставку с текущим номером заново.",
+  "ozon-signature": "Расчёт доставки отсутствует или повреждён. Проверьте ПВЗ заново.",
+  "ozon-consent": "Согласие на проверку Ozon отсутствует, отозвано или устарело. Подтвердите его и повторите расчёт.",
+  "ozon-transport": "Ozon не ответил на повторную проверку. Повторите расчёт чуть позже.",
+  "ozon-provider": "Ozon вернул ошибку при повторной проверке доставки. Повторите расчёт или обратитесь в магазин.",
+  "ozon-recipient": "Ozon не подтвердил доставку получателю. Проверьте, что телефон зарегистрирован на Ozon.",
+  "ozon-unavailable": "Ozon не подтвердил доставку всех товаров в этот ПВЗ. Попробуйте другой пункт.",
+  "ozon-price": "Ozon изменил расходы магазина на перевозку. Проверьте доставку заново; для вас она остаётся бесплатной.",
+  "ozon-disabled": "Доставка Ozon временно выключена магазином. Повторите позже.",
+  "ozon-credentials": "Ozon отклонил подключение магазина. Сообщите об этом продавцу.",
+  "ozon-rate": "Ozon ограничил частоту проверок. Повторите чуть позже.",
+};
 function Submit({ total, online, needsQuote, noDelivery }: { total: number; online: boolean; needsQuote: boolean; noDelivery: boolean }) {
   const { pending } = useFormStatus();
   return <button className="button" type="submit" disabled={pending || needsQuote || noDelivery}>{pending ? "Оформляем…" : noDelivery ? "Доставка временно недоступна" : needsQuote ? "Сначала подтвердите ПВЗ" : `${online ? "Перейти к оплате" : "Оформить заказ"} · ${formatPrice(total)}`}</button>;
 }
 
-export function CheckoutForm({ items, methods, user, onlinePayment, error, ozonDelivery = false, ozonUnavailable, packingReady = true }: {
+export function CheckoutForm({ items, methods, user, onlinePayment, error, reference, ozonDelivery = false, ozonUnavailable, packingReady = true }: {
   items: Array<{ id: string; name: string; configuration: string; quantity: number; total: number }>;
-  methods: Delivery[]; user: { name: string; email: string; phone: string }; onlinePayment: boolean; error?: string;
+  methods: Delivery[]; user: { name: string; email: string; phone: string }; onlinePayment: boolean; error?: string; reference?: string;
   ozonDelivery?: boolean;
   ozonUnavailable?: string;
   packingReady?: boolean;
@@ -34,7 +51,7 @@ export function CheckoutForm({ items, methods, user, onlinePayment, error, ozonD
   const total = subtotal + deliveryPrice;
   return <form action={createOrderAction} className="commerce-grid checkout-form">
     <div className="checkout-panel">
-      {error && <p className="notice notice--danger" role="alert">{error === "ozon" ? "Расчёт Ozon устарел или условия изменились. Выберите ПВЗ и рассчитайте доставку заново." : error === "price" ? "Цена или условия доставки изменились. Проверьте обновлённую сумму и подтвердите заказ." : error === "payment" ? "Онлайн-оплата временно недоступна. Выберите счёт или повторите попытку позже." : "Проверьте контактные данные, адрес и согласие с условиями."}</p>}
+      {error && <p className="notice notice--danger" role="alert">{deliveryErrors[error] ?? (error === "price" ? "Цена или условия доставки изменились. Проверьте обновлённую сумму и подтвердите заказ." : error === "payment" ? "Онлайн-оплата временно недоступна. Выберите счёт или повторите попытку позже." : "Проверьте контактные данные, адрес и согласие с условиями.")}{reference && /^[a-f0-9-]{36}$/i.test(reference) && <><br /><small>Код обращения: {reference}</small></>}</p>}
       <h2>Контактные данные</h2><div className="form-grid">
         <label className="field"><span>ФИО получателя *</span><input name="name" autoComplete="name" defaultValue={user.name} required minLength={2} maxLength={120} /></label>
         <label className="field"><span>Телефон *</span><input name="phone" type="tel" autoComplete="tel" inputMode="tel" value={phone} onChange={event => changePhone(event.target.value)} placeholder="+7 (999) 123-45-67" pattern="\+7 \([0-9]{3}\) [0-9]{3}-[0-9]{2}-[0-9]{2}" required /><small>Для связи по заказу и доставке</small></label>

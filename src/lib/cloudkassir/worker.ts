@@ -4,6 +4,7 @@ import { operatorReady } from "@/lib/privacy";
 import { cloudConfigured, getCloudConfig } from "./config";
 import { cloudRequest, safeReceiptUrl } from "./client";
 import { readFiscalPayload } from "./lifecycle";
+import { writeDiagnostic } from "@/lib/diagnostics";
 
 // The provider retains idempotency results for ONE HOUR. Never blindly resend
 // an unknown submission after that window, even after a crash or manual retry.
@@ -40,9 +41,11 @@ export async function processFiscalReceipt(now = new Date()) {
     } else {
       const state = z.enum(["Processed", "Queued", "Error", "NotFound"]).parse(await cloudRequest(config, "kkt/receipt/status/get", { Id: receipt.externalId }));
       await prisma.fiscalReceipt.updateMany({ where: { id: receipt.id, status: { not: "PROCESSED" } }, data: { status: state === "Processed" ? "PROCESSED" : state === "Queued" ? "QUEUED" : "MANUAL_REVIEW", processedAt: state === "Processed" ? now : undefined, leaseUntil: null, errorCode: state === "Error" || state === "NotFound" ? "provider-status" : null } });
+      if (state === "Error" || state === "NotFound") await writeDiagnostic("fiscal.review", { reason: "provider-status", attempts: receipt.attempts });
     }
   } catch (error) {
     const rejected = error instanceof Error && error.message === "cloud-rejected";
+    await writeDiagnostic("fiscal.failed", { reason: rejected ? "provider-rejected" : "temporary", attempts: receipt.attempts });
     await prisma.fiscalReceipt.updateMany({ where: { id: receipt.id, status: { not: "PROCESSED" } }, data: { status: rejected ? "MANUAL_REVIEW" : receipt.externalId ? "QUEUED" : "SENDING", leaseUntil: null, errorCode: rejected ? "provider-rejected" : "temporary", nextAttemptAt: new Date(now.getTime() + 30_000) } });
   }
   return true;

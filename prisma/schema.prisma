@@ -830,6 +830,20 @@ model SiteSetting {
   updatedAt DateTime @updatedAt
 }
 
+// Operational diagnostics only. No request/response bodies, credentials or buyer data.
+model DiagnosticLog {
+  id        String   @id @default(cuid())
+  reference String   @unique
+  level     String
+  area      String
+  code      String
+  details   Json
+  createdAt DateTime @default(now())
+
+  @@index([createdAt, id])
+  @@index([area, level, createdAt])
+}
+
 model AuditLog {
   id         String   @id @default(cuid())
   actorId    String?

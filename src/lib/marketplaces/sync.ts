@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Prisma, type MarketplaceSyncRun } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { writeDiagnostic } from "@/lib/diagnostics";
 import { slugify } from "@/lib/format";
 import { getConnection, getPolicy } from "./config";
 import { canonicalSnapshot, identityKeys, normalizeSku, providers, snapshotSchema, type Provider, type Snapshot } from "./model";
@@ -153,7 +154,7 @@ export async function processRun(run: MarketplaceSyncRun) {
       for (const item of page.items) {
         if (!item.issue) {
           try { item.images = await importImages(item.images, provider); }
-          catch { item.images = []; item.issue = "images"; }
+          catch { item.images = []; item.issue = "images"; await writeDiagnostic("marketplace.images", { provider }); }
         } else item.images = [];
         await prisma.$transaction(async (tx) => {
           await marketplaceLock(tx); await requireLease(tx, run);
@@ -166,11 +167,12 @@ export async function processRun(run: MarketplaceSyncRun) {
         await tx.marketplaceSyncRun.update({ where: { id: run.id }, data: { cursor: page.cursor, ...(page.done ? { status: "SUCCEEDED", finishedAt: new Date(), leaseToken: null, leaseUntil: null } : {}) } });
         if (page.done) await tx.auditLog.create({ data: { actorId: run.actorId && await tx.user.findUnique({ where: { id: run.actorId } }) ? run.actorId : null, action: "marketplace.sync.complete", entityType: "MarketplaceSyncRun", entityId: run.id, after: { provider } } });
       });
-      if (page.done) return;
+      if (page.done) { await writeDiagnostic("marketplace.ok", { provider }); return; }
       cursor = page.cursor;
       await new Promise((resolve) => setTimeout(resolve, 700));
     }
   } catch (error) {
+    await writeDiagnostic("marketplace.failed", { ...(providers.includes(run.provider as Provider) ? { provider: run.provider as Provider } : {}), reason: error instanceof MarketplaceError ? error.message : "provider" });
     // No provider bodies, authentication headers or raw errors enter logs/UI.
     await prisma.marketplaceSyncRun.updateMany({ where: { id: run.id, status: "RUNNING", leaseToken: run.leaseToken }, data: { status: "FAILED", finishedAt: new Date(), leaseUntil: null, leaseToken: null, error: error instanceof MarketplaceError ? error.message : "database" } });
   } finally { clearInterval(heartbeat); }

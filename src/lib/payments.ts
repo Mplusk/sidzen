@@ -5,6 +5,7 @@ import { getTochkaConfig, tochkaReady, type TochkaConfig } from "@/lib/tochka/co
 import { getTochkaOperation, operationSchema, tochkaPaymentUrl, tochkaRequest, type TochkaOperation } from "@/lib/tochka/client";
 import { cloudReady, getCloudConfig } from "@/lib/cloudkassir/config";
 import { prepareFiscalReceipt, queueDerivedReceipt } from "@/lib/cloudkassir/lifecycle";
+import { writeDiagnostic } from "@/lib/diagnostics";
 
 const bindingSchema = z.object({ version: z.literal(1), requestedAt: z.iso.datetime(), customerCode: z.string(), merchantId: z.string(), paymentLinkId: z.string(), fiscalReceiptId: z.string().optional() });
 export async function onlinePaymentReady() {
@@ -146,7 +147,7 @@ export async function reconcileTochkaPayments(shouldStop = () => false) {
   for (const payment of payments) {
     if (shouldStop() || Date.now() >= deadline) break;
     try { await refreshTochkaPayment(payment.id); }
-    catch { /* Retry without logging bank responses or personal data. */ }
+    catch { await writeDiagnostic("payment.reconcile.failed"); }
     finally { await prisma.payment.updateMany({ where: { id: payment.id, status: { in: ["PENDING", "AUTHORIZED", "PAID"] } }, data: { updatedAt: new Date() } }); }
   }
 }

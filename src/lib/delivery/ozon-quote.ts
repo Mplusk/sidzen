@@ -24,18 +24,25 @@ export function buildOzonPostings(items: DeliveryItem[], config: OzonDeliveryCon
 }
 const quoteSchema = z.object({ request: checkoutRequestSchema, cart: z.string(), config: z.string(), address: z.string(), cost: z.number().finite().nonnegative(), days: z.number().int().nonnegative(), expires: z.number().int(), consentId: z.string().optional() });
 export type OzonQuote = z.infer<typeof quoteSchema>;
+export class OzonQuoteError extends OzonDeliveryError {
+  constructor(public readonly reason: "expired" | "signature" | "cart" | "config" | "phone") { super("quote"); }
+}
 function signingKey() { if (!process.env.AUTH_SECRET) throw new Error("quote-key-missing"); return `${process.env.AUTH_SECRET}:ozon-delivery-quote-v1`; }
 export function signOzonQuote(quote: OzonQuote) {
   const body = Buffer.from(JSON.stringify(quoteSchema.parse(quote))).toString("base64url");
   return `${body}.${createHmac("sha256", signingKey()).update(body).digest("base64url")}`;
 }
 export function verifyOzonQuote(token: string, cart: { id: string; items: DeliveryItem[] }, config: OzonDeliveryConfig, phone: string) {
-  if (token.length > 100000) throw new OzonDeliveryError("quote");
+  if (token.length > 100000) throw new OzonQuoteError("signature");
   const [body, signature, extra] = token.split(".");
-  if (!body || !signature || extra) throw new OzonDeliveryError("quote");
+  if (!body || !signature || extra) throw new OzonQuoteError("signature");
   const expected = createHmac("sha256", signingKey()).update(body).digest(); const actual = Buffer.from(signature, "base64url");
-  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) throw new OzonDeliveryError("quote");
-  const quote = quoteSchema.parse(JSON.parse(Buffer.from(body, "base64url").toString()));
-  if (quote.expires <= Date.now() || quote.cart !== cartDeliveryFingerprint(cart) || quote.config !== deliveryConfigFingerprint(config) || quote.request.recipient.phone_number !== phone) throw new OzonDeliveryError("quote");
+  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) throw new OzonQuoteError("signature");
+  let quote: OzonQuote;
+  try { quote = quoteSchema.parse(JSON.parse(Buffer.from(body, "base64url").toString())); } catch { throw new OzonQuoteError("signature"); }
+  if (quote.expires <= Date.now()) throw new OzonQuoteError("expired");
+  if (quote.cart !== cartDeliveryFingerprint(cart)) throw new OzonQuoteError("cart");
+  if (quote.config !== deliveryConfigFingerprint(config)) throw new OzonQuoteError("config");
+  if (quote.request.recipient.phone_number !== phone) throw new OzonQuoteError("phone");
   return quote;
 }

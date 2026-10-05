@@ -17,6 +17,8 @@ import { consentDocument, privacySubject, operatorReady } from "@/lib/privacy";
 import { CONSENT_VERSION } from "@/lib/privacy-documents";
 import { getCurrentUser } from "@/lib/auth";
 import { customerDeliveryPrice } from "@/lib/delivery/pricing";
+import { writeDiagnostic } from "@/lib/diagnostics";
+import { ozonDiagnosticCode } from "@/lib/diagnostic-events";
 
 function finish(code: string): never { redirect(`/account/integrations/?result=${code}#ozon-delivery`); }
 export async function saveOzonDelivery(form: FormData) {
@@ -44,7 +46,7 @@ export async function saveOzonDelivery(form: FormData) {
         config.enabled = false;
       }
       changed = config.clientId !== current.clientId || config.clientSecret !== current.clientSecret || config.shipmentMethodId !== current.shipmentMethodId;
-    } catch { finish("ozon-connection"); }
+    } catch (error) { await writeDiagnostic(ozonDiagnosticCode(error instanceof OzonDeliveryError ? error.code : "response")); finish("ozon-connection"); }
   } else { config.checkedAt = current.checkedAt; config.methodName = current.methodName; config.authorizedAt = current.authorizedAt; config.methods = current.methods; }
   const saved = await prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412027)`;
@@ -70,6 +72,7 @@ export async function quoteOzonDelivery(phoneInput: string, pointInput: string, 
   if (!await operatorReady()) return { error: "Для расчёта нужны сведения оператора и подтверждение размещения базы данных в России. Расчёт временно недоступен." };
   const ip = (await headers()).get("x-forwarded-for")?.split(",")[0] || "unknown";
   if (!rateLimit(`ozon-quote:${ip}`, 15, 60000).allowed) return { error: "Слишком много расчётов. Повторите через минуту." };
+  const started = Date.now();
   try {
     const phone = normalizePhone(phoneInput); const id = positiveId.parse(Number(pointInput));
     if (!/^\+7\d{10}$/.test(phone)) throw new OzonDeliveryError("recipient");
@@ -83,9 +86,12 @@ export async function quoteOzonDelivery(phoneInput: string, pointInput: string, 
     const user = await getCurrentUser();
     const consent = await prisma.privacyConsent.create({ data: { userId: user?.id, subjectHash: privacySubject(cart.id, phone), purpose: "ozon", version: CONSENT_VERSION, document: await consentDocument("ozon"), expiresAt: new Date(Date.now() + 15 * 60000) } });
     const calculation = await api.checkout(request);
+    await writeDiagnostic("delivery.quote.ok", { stage: "quote", durationMs: Date.now() - started });
     return { ...calculation, cost: customerDeliveryPrice(), address: point.full_address, token: signOzonQuote({ ...calculation, consentId: consent.id, address: point.full_address, request, cart: cartDeliveryFingerprint(cart), config: deliveryConfigFingerprint(config), expires: consent.expiresAt!.getTime() }) };
   } catch (error) {
     const code = error instanceof OzonDeliveryError ? error.code : "provider";
-    return { error: code === "packaging" ? "Для товаров не заполнены параметры упаковки. Выберите другую доставку или свяжитесь с магазином." : code === "recipient" ? "Ozon Доставка доступна для номера телефона, зарегистрированного на Ozon. Проверьте номер или выберите другую доставку." : code === "parcels" ? "Для Ozon Доставки можно оформить не более 100 отдельных посылок." : "Не удалось рассчитать доставку. Проверьте выбранный ПВЗ или выберите другой способ." };
+    const reference = await writeDiagnostic(ozonDiagnosticCode(code), { stage: "quote", durationMs: Date.now() - started, reason: code });
+    const message = code === "packaging" ? "Для товаров не заполнены параметры упаковки. Выберите другую доставку или свяжитесь с магазином." : code === "recipient" ? "Ozon Доставка доступна для номера телефона, зарегистрированного на Ozon. Проверьте номер или выберите другую доставку." : code === "parcels" ? "Для Ozon Доставки можно оформить не более 100 отдельных посылок." : code === "transport" ? "Ozon не ответил на проверку доставки. Повторите попытку чуть позже." : "Не удалось рассчитать доставку. Проверьте выбранный ПВЗ или выберите другой способ.";
+    return { error: `${message}${reference ? ` Код обращения: ${reference}` : ""}` };
   }
 }

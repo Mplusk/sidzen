@@ -6,6 +6,7 @@ import { processOzonJob, refreshOzonJob, syncOzonPointsPage } from "../src/lib/d
 import { pruneTransientPersonalData } from "../src/lib/privacy-maintenance";
 import { reconcileTochkaPayments } from "../src/lib/payments";
 import { processFiscalReceipt } from "../src/lib/cloudkassir/worker";
+import { pruneDiagnosticLogs, writeDiagnostic } from "../src/lib/diagnostics";
 
 let stopping = false;
 let nextPrivacyCleanup = 0;
@@ -24,10 +25,10 @@ async function financeLoop() {
     try {
       if (Date.now() >= nextPaymentCheck) {
         nextPaymentCheck = Date.now() + 60_000;
-        await reconcileTochkaPayments(() => stopping).catch(() => console.warn("Payment reconciliation will retry; no payment data logged."));
+        await reconcileTochkaPayments(() => stopping).catch(async () => { await writeDiagnostic("payment.reconcile.failed"); });
       }
       if (!stopping) await processFiscalReceipt();
-    } catch { console.warn("Fiscal reconciliation will retry; no receipt or customer data logged."); }
+    } catch { await writeDiagnostic("fiscal.failed", { reason: "temporary" }); }
     if (!stopping) await new Promise(resolve => setTimeout(resolve, 2000));
   }
 }
@@ -42,6 +43,7 @@ try {
       }
       if (Date.now() >= nextPrivacyCleanup) {
         await pruneTransientPersonalData();
+        await pruneDiagnosticLogs();
         nextPrivacyCleanup = Date.now() + 3600000;
       }
       const run = await claimRun();
@@ -50,8 +52,8 @@ try {
         try {
           const base = process.env.MARKETPLACE_APP_URL || "http://app:3000";
           const response = await fetch(`${base}/api/internal/catalog-invalidate/`, { method: "POST", headers: { Authorization: `Bearer ${catalogInvalidationToken()}` }, redirect: "error", signal: AbortSignal.timeout(5000) });
-          if (!response.ok) console.warn("Catalog cache will refresh using its normal TTL.");
-        } catch { console.warn("Catalog cache will refresh using its normal TTL."); }
+          if (!response.ok) await writeDiagnostic("worker.cache");
+        } catch { await writeDiagnostic("worker.cache"); }
         console.log("Marketplace job processed", run.id);
       }
       await processOzonJob();
@@ -59,6 +61,7 @@ try {
       await syncOzonPointsPage();
       await new Promise((resolve) => setTimeout(resolve, 2000));
     } catch {
+      await writeDiagnostic("worker.failed");
       console.warn("Marketplace worker temporarily unavailable; retrying without losing queued jobs.");
       await new Promise((resolve) => setTimeout(resolve, 5000));
     }

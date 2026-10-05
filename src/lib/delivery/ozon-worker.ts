@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { operatorReady } from "@/lib/privacy";
+import { writeDiagnostic } from "@/lib/diagnostics";
 import { getOzonDeliveryConfig } from "./ozon-config";
 import { checkoutRequestSchema, OzonDeliveryClient, OzonDeliveryError, positiveId } from "./ozon-client";
 
@@ -38,6 +39,7 @@ export async function syncOzonPointsPage() {
       if (!page.next_cursor) await tx.ozonDeliveryPoint.updateMany({ where: { generation: { not: sync.generation } }, data: { active: false } });
     }, { timeout: 20000 });
   } catch (error) {
+    await writeDiagnostic("delivery.points.failed", { stage: "points", reason: error instanceof OzonDeliveryError ? error.code : "provider" });
     await prisma.ozonDeliverySync.updateMany({ where: { id: sync.id, lockToken }, data: { status: "FAILED", error: error instanceof OzonDeliveryError ? error.code : "provider", lockToken: null, lockedUntil: null } });
   }
   return true;
@@ -79,6 +81,7 @@ export async function processOzonJob(id?: string) {
       await tx.shipment.update({ where: { id: job.shipmentId }, data: { tracking: response.postings.map(posting => posting.posting_number).join(", ") } });
     });
   } catch (error) {
+    await writeDiagnostic("delivery.shipment.failed", { stage: "shipment", reason: error instanceof OzonDeliveryError ? error.code : "provider", attempts: job.attempts + 1 });
     await prisma.ozonDeliveryJob.updateMany({ where: { id: job.id, lockToken }, data: { error: error instanceof OzonDeliveryError ? error.code : "provider", nextAttemptAt: new Date(Date.now() + Math.min(3600000, 60000 * 2 ** Math.min(job.attempts, 6))), lockToken: null, lockedUntil: null } });
   }
   return true;
@@ -100,6 +103,7 @@ export async function refreshOzonJob(id?: string) {
     const finished = statuses.postings.every(value => ["delivered", "canceled"].includes(value.status));
     await prisma.ozonDeliveryJob.updateMany({ where: { id: job.id, lockToken }, data: { response: asJson({ ...created, statuses: statuses.postings }), status: job.status === "REVIEW" ? "REVIEW" : finished ? statuses.postings.every(value => value.status === "canceled") ? "CANCELED" : "FINISHED" : "CREATED", error: job.status === "REVIEW" ? "partial" : null, nextAttemptAt: new Date(Date.now() + 300000), lockToken: null, lockedUntil: null } });
   } catch (error) {
+    await writeDiagnostic("delivery.status.failed", { stage: "status", reason: error instanceof OzonDeliveryError ? error.code : "provider" });
     await prisma.ozonDeliveryJob.updateMany({ where: { id: job.id, lockToken }, data: { error: error instanceof OzonDeliveryError ? error.code : "provider", nextAttemptAt: new Date(Date.now() + 600000), lockToken: null, lockedUntil: null } });
   }
   return true;
