@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { checkoutSchema } from "@/lib/checkout-validation";
 import { grantOrderAccess } from "@/lib/order-access";
 import { createOnlinePayment, onlinePaymentReady } from "@/lib/payments";
-import { getPaymentConfig } from "@/lib/integrations";
+import { getTochkaConfig, tochkaReady } from "@/lib/tochka/config";
 import { deliveryConfigFingerprint, getOzonDeliveryConfig, OZON_DELIVERY_CODE, requireOzonDelivery } from "@/lib/delivery/ozon-config";
 import { verifyOzonQuote, type OzonQuote } from "@/lib/delivery/ozon-quote";
 import { OzonDeliveryClient } from "@/lib/delivery/ozon-client";
@@ -21,7 +21,7 @@ export async function createOrderAction(formData: FormData) {
   if (!await operatorReady()) redirect("/checkout/?error=operator");
   const parsed = checkoutSchema.safeParse(Object.fromEntries(["name", "email", "phone", "city", "address", "postalCode", "delivery", "comment", "legal", "payment", "expectedTotal", "ozonQuote", "ozonConsent"].map((key) => [key, formData.get(key) ?? ""])));
   if (!parsed.success) redirect("/checkout/?error=invalid");
-  if (parsed.data.payment === "yookassa" && !await onlinePaymentReady()) redirect("/checkout/?error=payment");
+  if (parsed.data.payment === "tochka" && !await onlinePaymentReady()) redirect("/checkout/?error=payment");
   const cart = await getCart();
   if (!cart?.items.length) redirect("/cart/?error=empty");
   if (cart.items.some((item) => !item.available || !item.quote)) redirect("/cart/?error=unavailable");
@@ -61,10 +61,10 @@ export async function createOrderAction(formData: FormData) {
         await tx.$queryRaw`SELECT "id" FROM "PrivacyConsent" WHERE "id" = ${ozonQuote.consentId ?? ""} FOR UPDATE`;
         await verifyDeliveryConsent(ozonQuote.consentId ?? "", cart.id, parsed.data.phone, tx);
       }
-      if (parsed.data.payment === "yookassa") {
+      if (parsed.data.payment === "tochka") {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412026)`;
-        const config = await getPaymentConfig(tx);
-        if (!config.enabled || !config.shopId || !config.secret) throw new Error("payment-config-changed");
+        const config = await getTochkaConfig(tx);
+        if (!tochkaReady(config)) throw new Error("payment-config-changed");
       }
       // Claim the cart rows atomically so a double click cannot create two orders.
       const claimed = await tx.cartItem.deleteMany({ where: { cartId: cart.id, OR: cart.items.map((item) => ({ id: item.id, quantity: item.quantity, updatedAt: item.updatedAt })) } });
@@ -89,7 +89,7 @@ export async function createOrderAction(formData: FormData) {
   const { sendOrderConfirmation } = await import("@/lib/order-notifications");
   await sendOrderConfirmation(order.id).catch(() => undefined);
   let paymentUrl: string | null = null;
-  if (parsed.data.payment === "yookassa") {
+  if (parsed.data.payment === "tochka") {
     try { paymentUrl = await createOnlinePayment(order.id); } catch { redirect(`/checkout/success/${order.number}/?error=payment`); }
   }
   redirect(paymentUrl ?? `/checkout/success/${order.number}/`);

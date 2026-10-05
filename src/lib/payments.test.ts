@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({ find: vi.fn(), update: vi.fn(), order: vi.fn(), audit: vi.fn(), orderFind: vi.fn(), privacy: vi.fn() }));
 vi.mock("@/lib/privacy", () => ({ operatorReady: db.privacy }));
 vi.mock("@/lib/prisma", () => ({ prisma: { order: { findUniqueOrThrow: db.orderFind }, siteSetting: { findUnique: async () => null }, $transaction: (fn: (tx: unknown) => unknown) => fn({ payment: { findUnique: db.find, updateMany: db.update }, order: { updateMany: db.order }, auditLog: { create: db.audit } }) } }));
-import { applyVerifiedPayment, createOnlinePayment, onlinePaymentReady, type VerifiedPayment } from "./payments";
+import { applyVerifiedPayment, createOnlinePayment, onlinePaymentReady, type VerifiedPayment } from "./legacy-yookassa";
 const remote: VerifiedPayment = { id: "11111111-1111-4111-8111-111111111111", status: "succeeded", paid: true, amount: { value: "1490.00", currency: "RUB" }, metadata: { orderId: "order-1" }, recipient: { account_id: "shop-1" } };
 beforeEach(() => { vi.clearAllMocks(); vi.unstubAllEnvs(); vi.stubEnv("YOOKASSA_SHOP_ID", "shop-1"); db.find.mockResolvedValue({ id: "payment-1", orderId: "order-1", provider: "yookassa", amount: 1490, externalId: remote.id, order: { total: 1490 } }); db.update.mockResolvedValue({ count: 1 }); });
 describe("verified online payments", () => {

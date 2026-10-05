@@ -54,6 +54,7 @@ jobs:
         run: |
           pnpm prisma migrate deploy
           pnpm exec tsx scripts/smoke-marketplaces.ts
+          pnpm exec tsx scripts/smoke-tochka.ts
       - run: pnpm build
       - name: Verify administrator marketplace controls over HTTP
         env:
@@ -72,6 +73,7 @@ jobs:
           pnpm exec tsx scripts/smoke-marketplaces-http.ts
           pnpm exec tsx scripts/smoke-product-card-http.ts
           pnpm exec tsx scripts/smoke-ozon-delivery-http.ts
+          pnpm exec tsx scripts/smoke-integrations.mjs
 
   deploy:
     name: Deploy production

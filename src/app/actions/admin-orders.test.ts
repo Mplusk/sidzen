@@ -56,6 +56,10 @@ describe("order deletion", () => {
     await expect(deleteOrderAction(form("3DP-123"))).rejects.toThrow("error=delivery-active");
     expect(mocks.remove).not.toHaveBeenCalled();
   });
+  it("does not delete an active or ambiguously created bank payment", async () => {
+    mocks.find.mockResolvedValue({ id: "order-1", number: "3DP-123", status: "AWAITING_PAYMENT", total: "1200", payment: { provider: "tochka", status: "PENDING", externalId: null, payload: { version: 1 } } });
+    await expect(deleteOrderAction(form("3DP-123"))).rejects.toThrow("error=payment-active"); expect(mocks.remove).not.toHaveBeenCalled();
+  });
 
   it("reports a failed transaction instead of claiming successful deletion", async () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => undefined);

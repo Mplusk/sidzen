@@ -4,9 +4,11 @@ import { claimRun, processRun } from "../src/lib/marketplaces/sync";
 import { catalogInvalidationToken } from "../src/lib/marketplaces/cache-token";
 import { processOzonJob, refreshOzonJob, syncOzonPointsPage } from "../src/lib/delivery/ozon-worker";
 import { pruneTransientPersonalData } from "../src/lib/privacy-maintenance";
+import { reconcileTochkaPayments } from "../src/lib/payments";
 
 let stopping = false;
 let nextPrivacyCleanup = 0;
+let nextPaymentCheck = 0;
 process.on("SIGTERM", () => { stopping = true; });
 process.on("SIGINT", () => { stopping = true; });
 async function heartbeat() { await writeFile("/tmp/3dprinta-marketplace-heartbeat", String(Date.now())); }
@@ -19,6 +21,10 @@ try {
       if (Date.now() >= nextPrivacyCleanup) {
         await pruneTransientPersonalData();
         nextPrivacyCleanup = Date.now() + 3600000;
+      }
+      if (Date.now() >= nextPaymentCheck) {
+        nextPaymentCheck = Date.now() + 60_000;
+        await reconcileTochkaPayments().catch(() => console.warn("Payment reconciliation will retry; no payment data logged."));
       }
       const run = await claimRun();
       if (run) {
