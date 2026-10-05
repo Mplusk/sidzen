@@ -11,6 +11,7 @@ import { queueDerivedReceipt, readFiscalPayload } from "../src/lib/cloudkassir/l
 import { processFiscalReceipt, SAFE_RETRY_MS } from "../src/lib/cloudkassir/worker";
 import { acceptCloudNotification } from "../src/lib/cloudkassir/webhook";
 import { recoverFiscalReceipt } from "../src/lib/cloudkassir/recovery";
+import { operatorReady } from "../src/lib/privacy";
 import type { TochkaOperation } from "../src/lib/tochka/client";
 
 const db = new URL(process.env.DATABASE_URL || "");
@@ -56,7 +57,10 @@ globalThis.fetch = async (input, init) => {
   assert.equal(url.pathname, "/kkt/receipt/get");
   return Response.json({ Success: true, Model: { ...saved.body.CustomerReceipt, AdditionalData: { Id: saved.id, InvoiceId: saved.body.InvoiceId, OrganizationInn: saved.body.Inn, Type: saved.body.Type, Amount: saved.body.CustomerReceipt.Items.reduce((sum, item) => sum + item.Amount, 0), DocumentNumber: "123", FiscalSign: "123", FiscalNumber: config.fiscalNumber, RegNumber: "123", DateTime: new Date().toISOString(), OfdReceiptUrl: `https://receipts.ru/${saved.id}` } } });
 };
-async function setting(key: string, value: Prisma.InputJsonValue) { await prisma.siteSetting.upsert({ where: { key }, create: { key, group: "integrations", value }, update: { value } }); }
+async function setting(key: string, value: Prisma.InputJsonValue) {
+  const group = key.startsWith("integrations.") ? "integrations" : "qa";
+  await prisma.siteSetting.upsert({ where: { key }, create: { key, group, value }, update: { value, group } });
+}
 async function fixture() {
   const row = await prisma.order.create({ data: { number: `${prefix}-${orderIds.length}`, status: "AWAITING_PAYMENT", customerName: "QA-only buyer", customerEmail: "fixture@example.test", customerPhone: "+79990000000", subtotal: 150, discount: 0.01, total: 149.99, deliveryPrice: 0, items: { create: { productName: "QA-only fixture", sku: prefix, quantity: 3, unitPrice: 50, totalPrice: 150 } }, payment: { create: { provider: "tochka", amount: 149.99 } } }, include: { payment: true } });
   orderIds.push(row.id); return row;
@@ -71,8 +75,10 @@ async function paid() {
 try {
   for (const [key, value] of [["legal.seller", "QA operator"], ["legal.address", "QA address"], ["contacts.email", "operator@example.test"]]) await setting(key, value);
   await setting(TOCHKA_SETTING, bankConfig); await setting(CLOUD_SETTING, { ...config, apiSecret: encryptSecret(config.apiSecret, CLOUD_SETTING) });
+  assert.equal(await operatorReady(), true, "Synthetic operator contacts must be visible even on a fresh database");
   assert.equal(await onlinePaymentReady(), true);
-  const initial = await fixture(); await Promise.allSettled(Array.from({ length: 5 }, () => createOnlinePayment(initial.id)));
+  const initial = await fixture(); const attempts = await Promise.allSettled(Array.from({ length: 5 }, () => createOnlinePayment(initial.id)));
+  assert(attempts.some(row => row.status === "fulfilled"), "At least one concurrent claim must create the fixture payment");
   assert.equal(bankPosts, 1); assert.equal(await prisma.fiscalReceipt.count({ where: { orderId: initial.id } }), 1);
   await processFiscalReceipt(); assert.equal(receiptPosts, 0, "No receipt before bank confirmation");
   const payment = await prisma.payment.findUniqueOrThrow({ where: { orderId: initial.id } }); const remote = bank.get(payment.externalId!)!;
