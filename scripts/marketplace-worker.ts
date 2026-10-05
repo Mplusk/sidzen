@@ -16,7 +16,23 @@ process.on("SIGINT", () => { stopping = true; });
 async function heartbeat() { await writeFile("/tmp/3dprinta-marketplace-heartbeat", String(Date.now())); }
 await heartbeat();
 const pulse = setInterval(() => { void heartbeat().catch(() => {}); }, 10_000);
-console.log("Marketplace and delivery worker ready. Catalog sync runs on request; confirmed deliveries run automatically.");
+// Bank / fiscal work must not wait for a large marketplace import or carrier
+// request. A separate awaited loop avoids overlapping ticks and drains safely
+// before the shared database client is disconnected on shutdown.
+async function financeLoop() {
+  while (!stopping) {
+    try {
+      if (Date.now() >= nextPaymentCheck) {
+        nextPaymentCheck = Date.now() + 60_000;
+        await reconcileTochkaPayments().catch(() => console.warn("Payment reconciliation will retry; no payment data logged."));
+      }
+      await processFiscalReceipt();
+    } catch { console.warn("Fiscal reconciliation will retry; no receipt or customer data logged."); }
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+}
+const finances = financeLoop();
+console.log("Marketplace, delivery and independent financial queues ready.");
 try {
   while (!stopping) {
     try {
@@ -27,10 +43,6 @@ try {
       if (Date.now() >= nextPrivacyCleanup) {
         await pruneTransientPersonalData();
         nextPrivacyCleanup = Date.now() + 3600000;
-      }
-      if (Date.now() >= nextPaymentCheck) {
-        nextPaymentCheck = Date.now() + 60_000;
-        await reconcileTochkaPayments().catch(() => console.warn("Payment reconciliation will retry; no payment data logged."));
       }
       const run = await claimRun();
       if (run) {
@@ -45,11 +57,10 @@ try {
       await processOzonJob();
       await refreshOzonJob();
       await syncOzonPointsPage();
-      await processFiscalReceipt();
       await new Promise((resolve) => setTimeout(resolve, 2000));
     } catch {
       console.warn("Marketplace worker temporarily unavailable; retrying without losing queued jobs.");
       await new Promise((resolve) => setTimeout(resolve, 5000));
     }
   }
-} finally { clearInterval(pulse); await prisma.$disconnect(); }
+} finally { stopping = true; clearInterval(pulse); await finances; await prisma.$disconnect(); }
