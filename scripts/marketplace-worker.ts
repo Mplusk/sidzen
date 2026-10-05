@@ -5,6 +5,7 @@ import { catalogInvalidationToken } from "../src/lib/marketplaces/cache-token";
 import { processOzonJob, refreshOzonJob, syncOzonPointsPage } from "../src/lib/delivery/ozon-worker";
 import { pruneTransientPersonalData } from "../src/lib/privacy-maintenance";
 import { reconcileTochkaPayments } from "../src/lib/payments";
+import { processFiscalReceipt } from "../src/lib/cloudkassir/worker";
 
 let stopping = false;
 let nextPrivacyCleanup = 0;
@@ -44,6 +45,7 @@ try {
       await processOzonJob();
       await refreshOzonJob();
       await syncOzonPointsPage();
+      await processFiscalReceipt();
       await new Promise((resolve) => setTimeout(resolve, 2000));
     } catch {
       console.warn("Marketplace worker temporarily unavailable; retrying without losing queued jobs.");

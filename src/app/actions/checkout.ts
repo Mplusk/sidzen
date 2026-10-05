@@ -16,6 +16,7 @@ import { ozonCreateBody } from "@/lib/delivery/ozon-worker";
 import { verifyDeliveryConsent, operatorReady } from "@/lib/privacy";
 import { CONSENT_VERSION } from "@/lib/privacy-documents";
 import { deliveryTotals } from "@/lib/delivery/pricing";
+import { cloudReady, getCloudConfig } from "@/lib/cloudkassir/config";
 
 export async function createOrderAction(formData: FormData) {
   if (!await operatorReady()) redirect("/checkout/?error=operator");
@@ -64,7 +65,7 @@ export async function createOrderAction(formData: FormData) {
       if (parsed.data.payment === "tochka") {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412026)`;
         const config = await getTochkaConfig(tx);
-        if (!tochkaReady(config)) throw new Error("payment-config-changed");
+        if (!tochkaReady(config) || (config.receiptMode === "cloudkassir" && !cloudReady(await getCloudConfig(tx)))) throw new Error("payment-config-changed");
       }
       // Claim the cart rows atomically so a double click cannot create two orders.
       const claimed = await tx.cartItem.deleteMany({ where: { cartId: cart.id, OR: cart.items.map((item) => ({ id: item.id, quantity: item.quantity, updatedAt: item.updatedAt })) } });

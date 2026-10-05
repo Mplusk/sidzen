@@ -9,6 +9,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { encryptSecret } from "@/lib/integration-secrets";
 import { deliveryConfigSchema } from "@/lib/integrations";
 import { checkTochka } from "@/lib/tochka/client";
+import { cloudReady, getCloudConfig } from "@/lib/cloudkassir/config";
 import { getTochkaConfig, TOCHKA_SETTING, tochkaConfigSchema, validProductionToken } from "@/lib/tochka/config";
 
 const path = "/account/integrations/";
@@ -22,7 +23,9 @@ export async function savePaymentIntegration(form: FormData) {
   const parsed = tochkaConfigSchema.safeParse({ enabled: form.get("enabled") === "on", customerCode: String(form.get("customerCode") ?? "").trim(), merchantId: String(form.get("merchantId") ?? "").trim(), token, card: form.get("card") === "on", sbp: form.get("sbp") === "on", receiptMode: form.get("receiptMode"), vatType: String(form.get("vatType") ?? ""), taxSystemCode: String(form.get("taxSystemCode") ?? ""), externalReceiptsConfirmed: form.get("externalReceiptsConfirmed") === "on" });
   if (!parsed.success) result("invalid");
   const config = parsed.data;
-  if (config.enabled && (!validProductionToken(token) || !config.customerCode || !config.merchantId || (!config.card && !config.sbp) || (config.receiptMode === "provider" ? !config.vatType || !config.taxSystemCode : !config.externalReceiptsConfirmed))) result("incomplete");
+  if (config.receiptMode === "cloudkassir") { config.vatType = "none"; config.taxSystemCode = "usn_income"; }
+  if (config.enabled && (!validProductionToken(token) || !config.customerCode || !config.merchantId || (!config.card && !config.sbp) || (config.receiptMode === "provider" ? !config.vatType || !config.taxSystemCode : config.receiptMode === "external" && !config.externalReceiptsConfirmed))) result("incomplete");
+  if ((config.enabled || form.get("intent") === "check") && config.receiptMode === "cloudkassir" && !cloudReady(await getCloudConfig())) result("cloud-incomplete");
   const credentialsChanged = config.customerCode !== current.customerCode || config.merchantId !== current.merchantId || token !== current.token;
   const recipientChanged = config.customerCode !== current.customerCode || config.merchantId !== current.merchantId;
   const verificationChanged = credentialsChanged || config.card !== current.card || config.sbp !== current.sbp || config.receiptMode !== current.receiptMode;
@@ -35,7 +38,8 @@ export async function savePaymentIntegration(form: FormData) {
   const saved = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412026)`;
     if (JSON.stringify(await getTochkaConfig(tx)) !== JSON.stringify(current)) return false;
-    if (recipientChanged && await tx.payment.count({ where: { provider: "tochka", status: { in: ["PENDING", "AUTHORIZED"] } } })) return false;
+    if (config.enabled && config.receiptMode === "cloudkassir" && !cloudReady(await getCloudConfig(tx))) return false;
+    if (recipientChanged && await tx.payment.count({ where: { provider: "tochka", OR: [{ status: { in: ["PENDING", "AUTHORIZED"] } }, { status: "PAID", order: { fiscalReceipts: { some: {} } } }] } })) return false;
     // Optional checkedAt must be omitted rather than saved as an undefined JSON value.
     const { checkedAt, ...fields } = config;
     const value = { ...fields, token: token ? encryptSecret(token, TOCHKA_SETTING) : "", ...(checkedAt ? { checkedAt } : {}) };

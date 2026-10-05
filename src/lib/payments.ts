@@ -3,9 +3,14 @@ import { prisma } from "@/lib/prisma";
 import { operatorReady } from "@/lib/privacy";
 import { getTochkaConfig, tochkaReady, type TochkaConfig } from "@/lib/tochka/config";
 import { getTochkaOperation, operationSchema, tochkaPaymentUrl, tochkaRequest, type TochkaOperation } from "@/lib/tochka/client";
+import { cloudReady, getCloudConfig } from "@/lib/cloudkassir/config";
+import { prepareFiscalReceipt, queueDerivedReceipt } from "@/lib/cloudkassir/lifecycle";
 
-const bindingSchema = z.object({ version: z.literal(1), requestedAt: z.iso.datetime(), customerCode: z.string(), merchantId: z.string(), paymentLinkId: z.string() });
-export async function onlinePaymentReady() { return tochkaReady(await getTochkaConfig()); }
+const bindingSchema = z.object({ version: z.literal(1), requestedAt: z.iso.datetime(), customerCode: z.string(), merchantId: z.string(), paymentLinkId: z.string(), fiscalReceiptId: z.string().optional() });
+export async function onlinePaymentReady() {
+  const config = await getTochkaConfig();
+  return tochkaReady(config) && (config.receiptMode !== "cloudkassir" || cloudReady(await getCloudConfig()));
+}
 export function isOnlineProvider(provider?: string) { return provider === "tochka" || provider === "yookassa"; }
 
 export async function applyTochkaPayment(paymentId: string, remote: TochkaOperation) {
@@ -19,11 +24,27 @@ export async function applyTochkaPayment(paymentId: string, remote: TochkaOperat
     if (payment.order.currency !== "RUB") throw new Error("payment-currency");
     if ((payment.externalId && payment.externalId !== remote.operationId) || remote.paymentLinkId !== binding.paymentLinkId || remote.customerCode !== binding.customerCode || remote.merchantId !== binding.merchantId || Number(remote.amount) !== Number(payment.amount) || Number(payment.amount) !== Number(payment.order.total)) throw new Error("payment-mismatch");
     if (!payment.externalId) await tx.payment.update({ where: { id: payment.id }, data: { externalId: remote.operationId } });
-    const status = remote.status === "APPROVED" ? "PAID" : remote.status === "EXPIRED" ? "CANCELED" : remote.status === "AUTHORIZED" ? "AUTHORIZED" : null;
+    if (binding.fiscalReceiptId && remote.status === "REFUNDED_PARTIALLY") {
+      await tx.payment.updateMany({ where: { id: payment.id, refundReviewRequired: false }, data: { refundReviewRequired: true } });
+      await tx.fiscalReceipt.updateMany({ where: { orderId: payment.orderId, status: "PENDING", firstAttemptAt: null }, data: { status: "MANUAL_REVIEW", errorCode: "partial-refund" } });
+      return; // Exact returned positions/amounts must be reconciled, never guessed.
+    }
+    const status = remote.status === "APPROVED" ? "PAID" : remote.status === "EXPIRED" ? "CANCELED" : remote.status === "AUTHORIZED" ? "AUTHORIZED" : remote.status === "REFUNDED" && binding.fiscalReceiptId ? "REFUNDED" : null;
     if (!status) return;
-    const updated = await tx.payment.updateMany({ where: { id: payment.id, status: { in: status === "AUTHORIZED" ? ["PENDING"] : ["PENDING", "AUTHORIZED"] } }, data: { status, ...(status === "PAID" ? { paidAt: new Date() } : {}) } });
+    const updated = await tx.payment.updateMany({ where: { id: payment.id, status: { in: status === "REFUNDED" ? ["PENDING", "AUTHORIZED", "PAID"] : status === "AUTHORIZED" ? ["PENDING"] : ["PENDING", "AUTHORIZED"] } }, data: { status, ...(status === "PAID" ? { paidAt: new Date() } : {}) } });
     if (!updated.count) return;
     if (status === "PAID") await tx.order.updateMany({ where: { id: payment.orderId, status: { in: ["NEW", "APPROVED", "AWAITING_PAYMENT"] } }, data: { status: "PAID" } });
+    if (binding.fiscalReceiptId && status === "PAID") {
+      await tx.fiscalReceipt.updateMany({ where: { id: binding.fiscalReceiptId, orderId: payment.orderId, kind: "PREPAYMENT", status: "WAITING_PAYMENT" }, data: { status: "PENDING", nextAttemptAt: new Date() } });
+    }
+    if (binding.fiscalReceiptId && status === "REFUNDED") {
+      await tx.order.update({ where: { id: payment.orderId }, data: { status: "REFUNDED" } });
+      if (payment.status !== "PAID" || payment.refundReviewRequired) {
+        await tx.fiscalReceipt.updateMany({ where: { orderId: payment.orderId, firstAttemptAt: null, status: { in: ["WAITING_PAYMENT", "PENDING"] } }, data: { status: "MANUAL_REVIEW", errorCode: "refund-reconciliation" } });
+        await tx.payment.update({ where: { id: payment.id }, data: { refundReviewRequired: true } });
+      } else await queueDerivedReceipt(tx, payment.orderId, "REFUND");
+    }
+    if (binding.fiscalReceiptId && status === "CANCELED") await tx.fiscalReceipt.updateMany({ where: { id: binding.fiscalReceiptId, status: "WAITING_PAYMENT" }, data: { status: "CANCELED" } });
     await tx.auditLog.create({ data: { action: "payment.verified", entityType: "Payment", entityId: payment.id, after: { provider: "tochka", externalId: remote.operationId, status } } });
   });
 }
@@ -86,7 +107,8 @@ export async function createOnlinePayment(orderId: string) {
     if (current.externalId || current.payload !== null) return null;
     const config = await getTochkaConfig(tx);
     if (!tochkaReady(config)) throw new Error("payment-not-configured");
-    const binding = { version: 1 as const, requestedAt: new Date().toISOString(), customerCode: config.customerCode, merchantId: config.merchantId, paymentLinkId: payment.id };
+    const fiscalReceiptId = config.receiptMode === "cloudkassir" ? await prepareFiscalReceipt(tx, orderId, await getCloudConfig(tx)) : undefined;
+    const binding = { version: 1 as const, requestedAt: new Date().toISOString(), customerCode: config.customerCode, merchantId: config.merchantId, paymentLinkId: payment.id, ...(fiscalReceiptId ? { fiscalReceiptId } : {}) };
     await tx.payment.update({ where: { id: payment.id }, data: { payload: binding } });
     return { config, binding };
   });
@@ -115,12 +137,16 @@ export async function createOnlinePayment(orderId: string) {
 }
 
 export async function reconcileTochkaPayments() {
-  const payments = await prisma.payment.findMany({ where: { provider: "tochka", status: { in: ["PENDING", "AUTHORIZED"] }, OR: [{ externalId: { not: null } }, { payload: { path: ["version"], equals: 1 } }] }, orderBy: { updatedAt: "asc" }, take: 10 });
+  // New money / owed prepayment checks must not wait behind years of paid
+  // history. Reserve capacity for refund checks while prioritizing live links.
+  const pending = await prisma.payment.findMany({ where: { provider: "tochka", status: { in: ["PENDING", "AUTHORIZED"] }, OR: [{ externalId: { not: null } }, { payload: { path: ["version"], equals: 1 } }] }, orderBy: { updatedAt: "asc" }, take: 8 });
+  const paid = await prisma.payment.findMany({ where: { provider: "tochka", status: "PAID", order: { fiscalReceipts: { some: { kind: "PREPAYMENT" } } } }, orderBy: { updatedAt: "asc" }, take: 10 - pending.length });
+  const payments = [...pending, ...paid];
   const deadline = Date.now() + 20_000;
   for (const payment of payments) {
     if (Date.now() >= deadline) break;
     try { await refreshTochkaPayment(payment.id); }
     catch { /* Retry without logging bank responses or personal data. */ }
-    finally { await prisma.payment.updateMany({ where: { id: payment.id, status: { in: ["PENDING", "AUTHORIZED"] } }, data: { updatedAt: new Date() } }); }
+    finally { await prisma.payment.updateMany({ where: { id: payment.id, status: { in: ["PENDING", "AUTHORIZED", "PAID"] } }, data: { updatedAt: new Date() } }); }
   }
 }

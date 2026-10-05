@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ permission: vi.fn(), transaction: vi.fn(), find: vi.fn(), remove: vi.fn(), audit: vi.fn(), revalidate: vi.fn() }));
+const mocks = vi.hoisted(() => ({ permission: vi.fn(), transaction: vi.fn(), find: vi.fn(), remove: vi.fn(), audit: vi.fn(), revalidate: vi.fn(), fiscalCount: vi.fn(), fiscalDelete: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ requirePermission: mocks.permission }));
 vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: mocks.transaction } }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
@@ -21,7 +21,8 @@ describe("order deletion", () => {
     vi.resetAllMocks();
     mocks.permission.mockResolvedValue({ id: "admin-1" });
     mocks.find.mockResolvedValue({ id: "order-1", number: "3DP-123", status: "NEW", total: "1200" });
-    mocks.transaction.mockImplementation((callback) => callback({ $executeRaw: vi.fn(), order: { findUnique: mocks.find, delete: mocks.remove }, auditLog: { create: mocks.audit } }));
+    mocks.fiscalCount.mockResolvedValue(0);
+    mocks.transaction.mockImplementation((callback) => callback({ $executeRaw: vi.fn(), order: { findUnique: mocks.find, delete: mocks.remove }, auditLog: { create: mocks.audit }, fiscalReceipt: { count: mocks.fiscalCount, deleteMany: mocks.fiscalDelete } }));
   });
 
   it("requires order management permission before accessing the order", async () => {
@@ -67,5 +68,10 @@ describe("order deletion", () => {
     await expect(deleteOrderAction(form("3DP-123"))).rejects.toThrow("error=delete");
     expect(mocks.revalidate).not.toHaveBeenCalled();
     log.mockRestore();
+  });
+  it("retains mandatory fiscal history instead of cascading its deletion", async () => {
+    mocks.fiscalCount.mockResolvedValue(1);
+    await expect(deleteOrderAction(form("3DP-123"))).rejects.toThrow("error=fiscal-history");
+    expect(mocks.remove).not.toHaveBeenCalled(); expect(mocks.fiscalDelete).not.toHaveBeenCalled();
   });
 });

@@ -8,7 +8,7 @@ export const taxSystems = ["osn", "usn_income", "usn_income_outcome", "esn", "pa
 export const tochkaConfigSchema = z.object({
   enabled: z.boolean(), token: z.string().max(16000),
   customerCode: z.string().regex(/^(?:[a-zA-Z0-9]{9})?$/), merchantId: z.string().regex(/^(?:\d{15})?$/),
-  card: z.boolean(), sbp: z.boolean(), receiptMode: z.enum(["provider", "external"]),
+  card: z.boolean(), sbp: z.boolean(), receiptMode: z.enum(["provider", "external", "cloudkassir"]),
   vatType: z.enum(["", ...vatTypes]), taxSystemCode: z.enum(["", ...taxSystems]),
   externalReceiptsConfirmed: z.boolean().default(false), checkedAt: z.iso.datetime().optional(),
 });
@@ -21,7 +21,7 @@ export async function getTochkaConfig(database: Pick<typeof prisma, "siteSetting
     const config = tochkaConfigSchema.extend({ token: z.string().max(24000) }).parse(row.value);
     return tochkaConfigSchema.parse({ ...config, token: config.token ? decryptSecret(config.token, TOCHKA_SETTING) : "" });
   }
-  return tochkaConfigSchema.parse({ enabled: process.env.PAYMENT_PROVIDER === "tochka", token: process.env.TOCHKA_TOKEN ?? "", customerCode: process.env.TOCHKA_CUSTOMER_CODE ?? "", merchantId: process.env.TOCHKA_MERCHANT_ID ?? "", card: true, sbp: true, receiptMode: "provider", vatType: "", taxSystemCode: "", externalReceiptsConfirmed: false });
+  return tochkaConfigSchema.parse({ enabled: process.env.PAYMENT_PROVIDER === "tochka", token: process.env.TOCHKA_TOKEN ?? "", customerCode: process.env.TOCHKA_CUSTOMER_CODE ?? "", merchantId: process.env.TOCHKA_MERCHANT_ID ?? "", card: true, sbp: true, receiptMode: "cloudkassir", vatType: "none", taxSystemCode: "usn_income", externalReceiptsConfirmed: false });
 }
 
 export function validProductionToken(token: string) {
@@ -29,5 +29,5 @@ export function validProductionToken(token: string) {
 }
 
 export function tochkaReady(config: TochkaConfig) {
-  return config.enabled && Boolean(config.checkedAt) && validProductionToken(config.token) && Boolean(config.customerCode && config.merchantId && (config.card || config.sbp)) && (config.receiptMode === "external" ? config.externalReceiptsConfirmed : Boolean(config.vatType && config.taxSystemCode));
+  return config.enabled && Boolean(config.checkedAt) && validProductionToken(config.token) && Boolean(config.customerCode && config.merchantId && (config.card || config.sbp)) && (config.receiptMode === "cloudkassir" || (config.receiptMode === "external" ? config.externalReceiptsConfirmed : Boolean(config.vatType && config.taxSystemCode)));
 }

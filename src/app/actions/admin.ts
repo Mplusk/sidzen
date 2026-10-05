@@ -14,6 +14,7 @@ import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { arrangeProductImages, assertImageCapacity, parseProductForm, storedProductImageName, type ProductGalleryEntry } from "@/lib/product-admin";
 import { guardProductWrite } from "@/lib/marketplaces/sync";
+import { queueDerivedReceipt } from "@/lib/cloudkassir/lifecycle";
 
 const orderStatuses = ["NEW", "ESTIMATING", "APPROVED", "AWAITING_PAYMENT", "PAID", "QUEUED", "PRINTING", "POST_PROCESSING", "PACKED", "SHIPPED", "DELIVERED", "CANCELED", "REFUNDED"] as const;
 
@@ -21,9 +22,21 @@ export async function updateOrderStatusAction(formData: FormData) {
   const user = await requirePermission(PERMISSIONS.ordersWrite);
   const parsed = z.object({ orderId: z.string().min(1), status: z.enum(orderStatuses), note: z.string().trim().max(1000) }).safeParse({ orderId: formData.get("orderId"), status: formData.get("status"), note: formData.get("note") ?? "" });
   if (!parsed.success) redirect("/admin/orders/?error=invalid");
-  const before = await prisma.order.findUniqueOrThrow({ where: { id: parsed.data.orderId }, select: { status: true, internalNote: true } });
-  const order = await prisma.order.update({ where: { id: parsed.data.orderId }, data: { status: parsed.data.status, internalNote: parsed.data.note || undefined } });
-  await writeAudit({ actorId: user.id, action: "order.status.update", entityType: "Order", entityId: order.id, before, after: { status: order.status, internalNote: order.internalNote } });
+  const order = await prisma.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412026)`;
+    const before = await tx.order.findUniqueOrThrow({ where: { id: parsed.data.orderId }, include: { payment: true, fiscalReceipts: true } });
+    if (before.fiscalReceipts.length) {
+      const status = parsed.data.status;
+      if (["QUEUED", "PRINTING", "POST_PROCESSING", "PACKED", "SHIPPED"].includes(status) && before.payment?.status !== "PAID") return null;
+      if ((status === "PAID" && before.payment?.status !== "PAID") || (status === "REFUNDED" && before.payment?.status !== "REFUNDED") || (status === "CANCELED" && before.payment?.status === "PAID") || (before.fiscalReceipts.some(row => row.kind === "SETTLEMENT") && status !== "DELIVERED" && status !== "REFUNDED")) return null;
+      if (status === "DELIVERED" && (formData.get("deliveryConfirmed") !== "on" || before.payment?.status !== "PAID" || before.payment.refundReviewRequired)) return null;
+      if (status === "DELIVERED") await queueDerivedReceipt(tx, before.id, "SETTLEMENT");
+    }
+    const updated = await tx.order.update({ where: { id: before.id }, data: { status: parsed.data.status, internalNote: parsed.data.note || undefined } });
+    await tx.auditLog.create({ data: { actorId: user.id, action: "order.status.update", entityType: "Order", entityId: before.id, before: { status: before.status }, after: { status: updated.status, deliveryConfirmed: formData.get("deliveryConfirmed") === "on" } } });
+    return updated;
+  });
+  if (!order) redirect("/admin/orders/?error=fiscal-status");
   revalidatePath("/admin/orders/");
   redirect(`/admin/orders/${order.number}/?saved=1`);
 }
