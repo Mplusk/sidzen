@@ -33,9 +33,16 @@ describe("checkout delivery failure diagnostics", () => {
   it("distinguishes missing consent from provider timeout", async () => {
     m.consent.mockRejectedValueOnce(new Error("delivery-consent-missing"));
     await expect(createOrderAction(form())).rejects.toThrow("error=ozon-consent"); expect(m.checkout).not.toHaveBeenCalled();
-    m.checkout.mockRejectedValueOnce(new OzonDeliveryError("transport"));
+    m.checkout.mockRejectedValue(new OzonDeliveryError("transport"));
     await expect(createOrderAction(form())).rejects.toThrow("error=ozon-transport");
     expect(m.log).toHaveBeenLastCalledWith("delivery.transport", expect.objectContaining({ stage: "recheck" })); expect(m.transaction).not.toHaveBeenCalled();
+  });
+  it("recovers a transient recheck before saving an order and records two attempts", async () => {
+    m.checkout.mockRejectedValueOnce(new OzonDeliveryError("transport"));
+    m.transaction.mockRejectedValue(new Error("isolated fixture stops order creation"));
+    await expect(createOrderAction(form())).rejects.toThrow("error=changed");
+    expect(m.checkout).toHaveBeenCalledTimes(2);
+    expect(m.log).toHaveBeenCalledWith("delivery.recheck.ok", expect.objectContaining({ attempts: 2 }));
   });
   it("records changed carrier expense in kopecks and does not mistake redirect for an API error", async () => {
     m.checkout.mockResolvedValue({ cost: 181, days: 3 });

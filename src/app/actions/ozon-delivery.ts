@@ -13,6 +13,7 @@ import { normalizePhone } from "@/lib/checkout-validation";
 import { OzonDeliveryClient, OzonDeliveryError, positiveId } from "@/lib/delivery/ozon-client";
 import { deliveryConfigFingerprint, getOzonDeliveryConfig, OZON_DELIVERY_SETTING, ozonDeliveryConfigSchema, requireOzonDelivery } from "@/lib/delivery/ozon-config";
 import { buildOzonPostings, cartDeliveryFingerprint, signOzonQuote } from "@/lib/delivery/ozon-quote";
+import { retryOzonQuote } from "@/lib/delivery/ozon-retry";
 import { consentDocument, privacySubject, operatorReady } from "@/lib/privacy";
 import { CONSENT_VERSION } from "@/lib/privacy-documents";
 import { getCurrentUser } from "@/lib/auth";
@@ -79,18 +80,19 @@ export async function quoteOzonDelivery(phoneInput: string, pointInput: string, 
     const [cart, config] = await Promise.all([getCart(), getOzonDeliveryConfig()]);
     requireOzonDelivery(config);
     if (!cart?.items.length || cart.items.some(item => !item.available)) throw new OzonDeliveryError("cart");
-    const api = new OzonDeliveryClient(config);
-    const point = (await api.pointInfo([id])).find(point => point.delivery_point_id === id && point.is_active);
-    if (!point) throw new OzonDeliveryError("point");
     const request = { recipient: { phone_number: phone }, delivery: { delivery_point: { delivery_point_id: id } }, postings: buildOzonPostings(cart.items, config) };
     const user = await getCurrentUser();
     const consent = await prisma.privacyConsent.create({ data: { userId: user?.id, subjectHash: privacySubject(cart.id, phone), purpose: "ozon", version: CONSENT_VERSION, document: await consentDocument("ozon"), expiresAt: new Date(Date.now() + 15 * 60000) } });
-    const calculation = await api.checkout(request);
-    await writeDiagnostic("delivery.quote.ok", { stage: "quote", durationMs: Date.now() - started });
+    const { value: { point, calculation }, attempts } = await retryOzonQuote(config, async api => {
+      const point = (await api.pointInfo([id])).find(point => point.delivery_point_id === id && point.is_active);
+      if (!point) throw new OzonDeliveryError("point");
+      return { point, calculation: await api.checkout(request) };
+    });
+    await writeDiagnostic("delivery.quote.ok", { stage: "quote", durationMs: Date.now() - started, attempts });
     return { ...calculation, cost: customerDeliveryPrice(), address: point.full_address, token: signOzonQuote({ ...calculation, consentId: consent.id, address: point.full_address, request, cart: cartDeliveryFingerprint(cart), config: deliveryConfigFingerprint(config), expires: consent.expiresAt!.getTime() }) };
   } catch (error) {
     const code = error instanceof OzonDeliveryError ? error.code : "provider";
-    const reference = await writeDiagnostic(ozonDiagnosticCode(code), { stage: "quote", durationMs: Date.now() - started, reason: code });
+    const reference = await writeDiagnostic(ozonDiagnosticCode(code), { stage: "quote", durationMs: Date.now() - started, reason: code, attempts: error instanceof OzonDeliveryError ? error.attempts : undefined });
     const message = code === "packaging" ? "Для товаров не заполнены параметры упаковки. Выберите другую доставку или свяжитесь с магазином." : code === "recipient" ? "Ozon Доставка доступна для номера телефона, зарегистрированного на Ozon. Проверьте номер или выберите другую доставку." : code === "parcels" ? "Для Ozon Доставки можно оформить не более 100 отдельных посылок." : code === "transport" ? "Ozon не ответил на проверку доставки. Повторите попытку чуть позже." : "Не удалось рассчитать доставку. Проверьте выбранный ПВЗ или выберите другой способ.";
     return { error: `${message}${reference ? ` Код обращения: ${reference}` : ""}` };
   }

@@ -11,22 +11,25 @@ export const postingSchema = z.object({ request_id: positiveId, shipment_method_
 export const checkoutRequestSchema = z.object({ recipient: z.object({ phone_number: z.string().regex(/^\+7\d{10}$/) }), delivery: z.object({ delivery_point: z.object({ delivery_point_id: positiveId }) }), postings: z.array(postingSchema).min(1).max(100) });
 export type OzonCheckoutRequest = z.infer<typeof checkoutRequestSchema>;
 export class OzonDeliveryError extends Error {
-  constructor(public readonly code: string) { super(code); }
+  attempts = 1;
+  constructor(public readonly code: string, public readonly retryable = false) { super(code); }
 }
 
 export class OzonDeliveryClient {
   private cookies = new Map<string, Map<string, string>>();
   private token?: string;
-  constructor(private credentials: { clientId: string; clientSecret: string }, private transport: typeof fetch = fetch) {}
+  constructor(private credentials: { clientId: string; clientSecret: string }, private transport: typeof fetch = fetch, private quoteDeadline?: number) {}
 
   private async request(url: string, body: unknown, authorization?: string, extra: Record<string, string> = {}) {
     const origin = new URL(url).origin;
     const jar = this.cookies.get(origin) ?? new Map<string, string>();
     this.cookies.set(origin, jar);
     for (let redirects = 0; redirects < 4; redirects++) {
+      const remaining = this.quoteDeadline === undefined ? 15_000 : Math.min(15_000, this.quoteDeadline - Date.now());
+      if (remaining <= 0) throw new OzonDeliveryError("transport");
       let response: Response;
       try {
-        response = await this.transport(url, { method: "POST", body: JSON.stringify(body), cache: "no-store", redirect: "manual", signal: AbortSignal.timeout(15_000), headers: { "Content-Type": "application/json", ...extra, ...(authorization ? { Authorization: authorization } : {}), ...(jar.size ? { Cookie: [...jar].map(([k, v]) => `${k}=${v}`).join("; ") } : {}) } });
+        response = await this.transport(url, { method: "POST", body: JSON.stringify(body), cache: "no-store", redirect: "manual", signal: AbortSignal.timeout(remaining), headers: { "Content-Type": "application/json", ...extra, ...(authorization ? { Authorization: authorization } : {}), ...(jar.size ? { Cookie: [...jar].map(([k, v]) => `${k}=${v}`).join("; ") } : {}) } });
       } catch { throw new OzonDeliveryError("transport"); }
       for (const cookie of response.headers.getSetCookie()) {
         const pair = cookie.split(";")[0]; const at = pair.indexOf("=");
@@ -40,26 +43,37 @@ export class OzonDeliveryClient {
         url = next.href;
         continue; // Documented testcookie handshake: retain POST body and cookies.
       }
-      if (!response.ok) throw new OzonDeliveryError(response.status === 401 || response.status === 403 ? "credentials" : response.status === 429 ? "rate" : "provider");
+      if (!response.ok) {
+        // Discard error bodies without logging provider/customer data.
+        await response.body?.cancel().catch(() => undefined);
+        throw new OzonDeliveryError(response.status === 401 || response.status === 403 ? "credentials" : response.status === 429 ? "rate" : "provider", [502, 503, 504].includes(response.status));
+      }
       return response;
     }
     throw new OzonDeliveryError("redirect");
   }
 
+  private async readJson(response: Response): Promise<unknown> {
+    try { return await response.json(); }
+    catch (error) { throw new OzonDeliveryError(error instanceof SyntaxError ? "response" : "transport"); }
+  }
+
   async authorize() {
     if (!this.credentials.clientId || !this.credentials.clientSecret) throw new OzonDeliveryError("credentials");
     const response = await this.request("https://xapi.ozon.ru/oauth/token", { client_id: this.credentials.clientId, client_secret: this.credentials.clientSecret, grant_type: "client_credentials", scope: OZON_DELIVERY_SCOPES });
-    const result = z.object({ access_token: z.string().min(1) }).safeParse(await response.json());
+    const result = z.object({ access_token: z.string().min(1) }).safeParse(await this.readJson(response));
     if (!result.success) throw new OzonDeliveryError("response");
     this.token = result.data.access_token;
   }
 
   async call(path: string, body: unknown, extra?: Record<string, string>) {
     if (!/^\/v1\/[a-z-]+\/[a-z-]+$/.test(path)) throw new OzonDeliveryError("path");
+    // A retrying quote client must never create/cancel shipments, even by mistake.
+    if (this.quoteDeadline !== undefined && !["/v1/delivery-point/info", "/v1/delivery/check-client", "/v1/order/checkout"].includes(path)) throw new OzonDeliveryError("path");
     if (!this.token) await this.authorize();
     return this.request(`https://api-delivery.ozon.ru${path}`, body, `Bearer ${this.token}`, extra);
   }
-  async json(path: string, body: unknown, extra?: Record<string, string>): Promise<unknown> { return (await this.call(path, body, extra)).json(); }
+  async json(path: string, body: unknown, extra?: Record<string, string>): Promise<unknown> { return this.readJson(await this.call(path, body, extra)); }
 
   async verifyMethod(id: number) {
     const result = z.object({ shipment_methods: z.array(z.object({ shipment_method_id: positiveId, name: z.string(), status: z.string() })) }).parse(await this.json("/v1/shipment-method/info", { shipment_method_ids: [id] }));

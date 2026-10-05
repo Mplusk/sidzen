@@ -11,7 +11,8 @@ import { createOnlinePayment, onlinePaymentReady } from "@/lib/payments";
 import { getTochkaConfig, tochkaReady } from "@/lib/tochka/config";
 import { deliveryConfigFingerprint, getOzonDeliveryConfig, OZON_DELIVERY_CODE, requireOzonDelivery } from "@/lib/delivery/ozon-config";
 import { verifyOzonQuote, OzonQuoteError, type OzonQuote } from "@/lib/delivery/ozon-quote";
-import { OzonDeliveryClient, OzonDeliveryError } from "@/lib/delivery/ozon-client";
+import { OzonDeliveryError } from "@/lib/delivery/ozon-client";
+import { retryOzonQuote } from "@/lib/delivery/ozon-retry";
 import { ozonCreateBody } from "@/lib/delivery/ozon-worker";
 import { verifyDeliveryConsent, operatorReady } from "@/lib/privacy";
 import { CONSENT_VERSION } from "@/lib/privacy-documents";
@@ -36,13 +37,15 @@ export async function createOrderAction(formData: FormData) {
     let stage: "verify" | "consent" | "recheck" = "verify";
     const started = Date.now();
     let freshCost = 0;
+    let attempts = 1;
     try {
       const config = await getOzonDeliveryConfig(); requireOzonDelivery(config);
       ozonQuote = verifyOzonQuote(parsed.data.ozonQuote, cart, config, parsed.data.phone);
       stage = "consent";
       await verifyDeliveryConsent(ozonQuote.consentId ?? "", cart.id, parsed.data.phone);
       stage = "recheck";
-      const fresh = await new OzonDeliveryClient(config).checkout(ozonQuote.request);
+      const result = await retryOzonQuote(config, api => api.checkout(ozonQuote!.request));
+      const fresh = result.value; attempts = result.attempts;
       freshCost = fresh.cost;
       ozonClientId = config.clientId;
     } catch (error) {
@@ -50,14 +53,14 @@ export async function createOrderAction(formData: FormData) {
       let publicCode = stage === "consent" ? "ozon-consent" : "ozon-provider";
       if (error instanceof OzonQuoteError) { code = `delivery.quote.${error.reason}`; publicCode = `ozon-${error.reason}`; }
       else if (error instanceof OzonDeliveryError) { code = ozonDiagnosticCode(error.code); publicCode = ["transport", "recipient", "disabled", "credentials", "rate", "unavailable"].includes(error.code) ? `ozon-${error.code}` : "ozon-provider"; }
-      const reference = await writeDiagnostic(code, { stage, durationMs: Date.now() - started });
+      const reference = await writeDiagnostic(code, { stage, durationMs: Date.now() - started, attempts: error instanceof OzonDeliveryError ? error.attempts : undefined });
       redirect(`/checkout/?error=${publicCode}${reference ? `&reference=${reference}` : ""}`);
     }
     if (Math.abs(freshCost - ozonQuote!.cost) > 0.005) {
       const reference = await writeDiagnostic("delivery.price", { stage: "recheck", carrierCostKopecks: Math.round(freshCost * 100), expectedCarrierCostKopecks: Math.round(ozonQuote!.cost * 100) });
       redirect(`/checkout/?error=ozon-price${reference ? `&reference=${reference}` : ""}`);
     }
-    await writeDiagnostic("delivery.recheck.ok", { stage: "recheck", durationMs: Date.now() - started });
+    await writeDiagnostic("delivery.recheck.ok", { stage: "recheck", durationMs: Date.now() - started, attempts });
   }
   const deliveryMethod = isOzon ? { active: true, code: OZON_DELIVERY_CODE, name: "Ozon Доставка · ПВЗ", basePrice: ozonQuote!.cost } : await prisma.deliveryMethod.findFirst({ where: { code: parsed.data.delivery, active: true, deletedAt: null } });
   if (!deliveryMethod?.active) redirect("/checkout/?error=delivery");

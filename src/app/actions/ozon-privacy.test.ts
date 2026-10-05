@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ ready: vi.fn(), config: vi.fn(), cart: vi.fn(), user: vi.fn(), point: vi.fn(), checkout: vi.fn(), record: vi.fn(), document: vi.fn(), postings: vi.fn() }));
+vi.mock("@/lib/diagnostics", () => ({ writeDiagnostic: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: { privacyConsent: { create: m.record } } }));
 vi.mock("@/lib/auth", () => ({ getCurrentUser: m.user, requirePermission: vi.fn() }));
 vi.mock("@/lib/privacy", () => ({ operatorReady: m.ready, privacySubject: () => "hmac-not-raw-phone", consentDocument: m.document }));
@@ -39,5 +40,12 @@ describe("Ozon phone transfer consent boundary", () => {
     m.record.mockRejectedValue(new Error("database")); await quoteOzonDelivery("+79991234567", "8", true); expect(m.checkout).not.toHaveBeenCalled();
     m.postings.mockImplementation(() => { throw new OzonDeliveryError("packaging"); }); m.record.mockClear();
     expect(await quoteOzonDelivery("+79991234567", "8", true)).toEqual({ error: expect.stringContaining("упаковки") }); expect(m.record).not.toHaveBeenCalled(); expect(m.checkout).not.toHaveBeenCalled();
+  });
+  it("reuses one consent record and the same recipient/parcel data on retry", async () => {
+    m.checkout.mockRejectedValueOnce(new OzonDeliveryError("transport"));
+    const result = await quoteOzonDelivery("+79991234567", "8", true);
+    expect(result).toMatchObject({ cost: 0, address: "QA point" });
+    expect(m.record).toHaveBeenCalledTimes(1); expect(m.checkout).toHaveBeenCalledTimes(2);
+    expect(m.checkout.mock.calls[0][0]).toEqual(m.checkout.mock.calls[1][0]);
   });
 });
