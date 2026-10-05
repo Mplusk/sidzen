@@ -44,14 +44,36 @@ export async function savePaymentIntegration(form: FormData) {
 
 export async function saveDeliveryMethod(form: FormData) {
   const user = await requirePermission("settings.write");
+  if (!rateLimit(`delivery-settings:${user.id}`, 30, 60_000).allowed) result("rate");
   const id = String(form.get("id") ?? "");
   const parsed = deliveryConfigSchema.safeParse({ name: form.get("name"), description: form.get("description"), basePrice: form.get("basePrice"), sortOrder: form.get("sortOrder"), active: form.get("active") === "on" });
   if (!parsed.success) result("invalid");
-  if (id && !await prisma.deliveryMethod.findUnique({ where: { id } })) result("invalid");
-  await prisma.$transaction(async (tx) => {
+  const saved = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412028)`;
+    if (id && !await tx.deliveryMethod.findFirst({ where: { id, deletedAt: null } })) return false;
     const method = id ? await tx.deliveryMethod.update({ where: { id }, data: parsed.data }) : await tx.deliveryMethod.create({ data: { ...parsed.data, code: `custom-${randomUUID()}` } });
     await tx.auditLog.create({ data: { actorId: user.id, action: "integration.delivery.update", entityType: "DeliveryMethod", entityId: method.id, after: parsed.data } });
+    return true;
   });
+  if (!saved) result("delivery-missing");
   revalidatePath("/", "layout");
   result("saved");
+}
+
+export async function deleteDeliveryMethod(form: FormData) {
+  const user = await requirePermission("settings.write");
+  if (!rateLimit(`delivery-settings:${user.id}`, 30, 60_000).allowed) result("rate");
+  const id = String(form.get("id") ?? "");
+  if (!id || id.length > 100 || form.get("confirmation") !== id) result("delivery-confirmation");
+  const removed = await prisma.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412028)`;
+    const method = await tx.deliveryMethod.findFirst({ where: { id, deletedAt: null } });
+    if (!method) return false;
+    await tx.deliveryMethod.update({ where: { id }, data: { active: false, deletedAt: new Date() } });
+    await tx.auditLog.create({ data: { actorId: user.id, action: "integration.delivery.delete", entityType: "DeliveryMethod", entityId: id, before: { code: method.code, name: method.name, description: method.description, basePrice: String(method.basePrice), sortOrder: method.sortOrder, active: method.active }, after: { active: false, deleted: true } } });
+    return true;
+  });
+  if (!removed) result("delivery-missing");
+  revalidatePath("/", "layout");
+  result("delivery-deleted");
 }

@@ -242,6 +242,7 @@ async function seedContent() {
     ["russian-post", "Почта России", "Посылка с отслеживанием", 390],
     ["pickup", "Самовывоз", "По предварительному согласованию", 0],
   ] as const;
+  // Do not reset active/deletedAt: removed defaults must stay removed on every deploy.
   for (const [code, name, description, basePrice] of deliveryMethods) await prisma.deliveryMethod.upsert({ where: { code }, update: {}, create: { code, name, description, basePrice } });
 
   const seoPages = [

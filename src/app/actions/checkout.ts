@@ -39,7 +39,7 @@ export async function createOrderAction(formData: FormData) {
       ozonClientId = config.clientId;
     } catch { redirect("/checkout/?error=ozon"); }
   }
-  const deliveryMethod = isOzon ? { active: true, code: OZON_DELIVERY_CODE, name: "Ozon Доставка · ПВЗ", basePrice: ozonQuote!.cost } : await prisma.deliveryMethod.findUnique({ where: { code: parsed.data.delivery } });
+  const deliveryMethod = isOzon ? { active: true, code: OZON_DELIVERY_CODE, name: "Ozon Доставка · ПВЗ", basePrice: ozonQuote!.cost } : await prisma.deliveryMethod.findFirst({ where: { code: parsed.data.delivery, active: true, deletedAt: null } });
   if (!deliveryMethod?.active) redirect("/checkout/?error=delivery");
   const subtotal = cart.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
   const { deliveryPrice, carrierCost, total } = deliveryTotals(subtotal, Number(deliveryMethod.basePrice));
@@ -48,6 +48,12 @@ export async function createOrderAction(formData: FormData) {
   let order;
   try {
     order = await prisma.$transaction(async (tx) => {
+      if (!isOzon) {
+        // Serialize checkout with delivery deletion; stale forms cannot reuse removed methods.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412028)`;
+        const current = await tx.deliveryMethod.findFirst({ where: { code: deliveryMethod.code, active: true, deletedAt: null } });
+        if (!current || Number(current.basePrice) !== Number(deliveryMethod.basePrice)) throw new Error("delivery-config-changed");
+      }
       if (ozonQuote) {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412027)`;
         const config = await getOzonDeliveryConfig(tx); requireOzonDelivery(config);

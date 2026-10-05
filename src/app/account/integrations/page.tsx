@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getPaymentConfig } from "@/lib/integrations";
 import { saveDeliveryMethod, savePaymentIntegration } from "@/app/actions/integrations";
 import { OzonDeliverySettings } from "@/components/ozon-delivery-settings";
+import { AdminDeleteDelivery } from "@/components/admin-delete-delivery";
 
 export const metadata: Metadata = { title: "Подключения — доставка и оплата", robots: { index: false, follow: false } };
 const messages: Record<string, string> = {
@@ -14,6 +15,9 @@ const messages: Record<string, string> = {
   connection: "Проверка не пройдена. Проверьте ключ и Shop ID действующего магазина ЮKassa. Тестовый магазин на рабочем сайте не допускается. Настройки не изменены.",
   pending: "Нельзя менять платёжный магазин или ключ, пока есть незавершённые платежи. Сначала сверьте их в ЮKassa.",
   rate: "Слишком много проверок. Повторите через минуту.",
+  "delivery-deleted": "Способ доставки удалён. Старые заказы и их доставка не изменены.",
+  "delivery-missing": "Способ доставки уже удалён или больше не существует. Обновите страницу.",
+  "delivery-confirmation": "Для удаления подтвердите выбранный способ доставки в открывшемся окне.",
   "ozon-invalid": "Проверьте Client ID, секрет, ID метода отгрузки и срок подготовки.",
   "ozon-incomplete": "Для включения Ozon Доставки заполните Client ID, Client Secret и ID метода отгрузки.",
   "ozon-connection": "Проверка Delivery API не пройдена. Нужны ключи частного приложения Ozon Доставки с указанными правами и активный shipment_method_id. Настройки не изменены.",
@@ -37,7 +41,7 @@ function DeliveryForm({ method }: { method?: { id: string; name: string; descrip
 
 export default async function IntegrationsPage({ searchParams }: { searchParams: Promise<{ result?: string }> }) {
   await requirePermission("settings.write");
-  const [config, methods, params] = await Promise.all([getPaymentConfig(), prisma.deliveryMethod.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }), searchParams]);
+  const [config, methods, params] = await Promise.all([getPaymentConfig(), prisma.deliveryMethod.findMany({ where: { deletedAt: null }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }), searchParams]);
   return <>
     <h1>Доставка и оплата</h1><p className="muted">Подключения магазина. Доступны только администраторам с правом изменения настроек.</p>
     <p><Link className="text-link" href="/account/marketplaces/">Подключить Ozon / Wildberries и синхронизировать товары →</Link></p>
@@ -59,8 +63,9 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
     </section>
     <section className="content-card"><h2>Оплата по счёту</h2><p>Доступна без платёжного сервиса. Реквизиты передаются покупателю после подтверждения заказа. Онлайн-списаний этот способ не выполняет.</p></section>
     <OzonDeliverySettings />
-    <h2>Другие способы доставки</h2><p className="muted">Управляйте способами с фиксированными тарифами. Эти способы не используют API перевозчика. Ozon Delivery API подключается отдельно выше. Отключённый способ исчезает из оформления новых заказов; старые заказы не меняются.</p>
-    {methods.map((method) => <section className="content-card" key={method.id}><h3>{method.name} · {method.active ? "включён" : "выключен"}</h3><DeliveryForm method={{ ...method, basePrice: Number(method.basePrice) }} /></section>)}
+    <h2>Другие способы доставки</h2><p className="muted">Управляйте способами с фиксированными тарифами. Эти способы не используют API перевозчика. Ozon Delivery API подключается отдельно выше. Способ можно отключить или удалить с подтверждением — старые заказы не меняются.</p>
+    {!methods.length && <p className="notice">Другие способы доставки не добавлены. При включённом Ozon покупателю доступна только Ozon Доставка.</p>}
+    {methods.map((method) => <section className="content-card" key={method.id}><h3>{method.name} · {method.active ? "включён" : "выключен"}</h3><DeliveryForm method={{ ...method, basePrice: Number(method.basePrice) }} /><AdminDeleteDelivery id={method.id} name={method.name} /></section>)}
     <section className="content-card"><h3>Новый способ доставки</h3><DeliveryForm /></section>
   </>;
 }

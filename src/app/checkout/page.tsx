@@ -13,7 +13,7 @@ import { operatorReady } from "@/lib/privacy";
 
 export const metadata: Metadata = { title: "Оформление заказа", robots: { index: false, follow: false } };
 export default async function CheckoutPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const [cart, user, methods, params] = await Promise.all([getCart(), getCurrentUser(), prisma.deliveryMethod.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }), searchParams]);
+  const [cart, user, methods, params] = await Promise.all([getCart(), getCurrentUser(), prisma.deliveryMethod.findMany({ where: { active: true, deletedAt: null }, orderBy: { sortOrder: "asc" } }), searchParams]);
   if (!cart?.items.length) redirect("/cart/");
   if (cart.items.some((item) => !item.available)) redirect("/cart/?error=unavailable");
   if (!await operatorReady()) return <section className="container shop-page"><h1>Оформление заказа</h1><p className="notice notice--danger">Оформление временно недоступно: продавец должен заполнить сведения оператора — наименование, адрес и email — и подтвердить размещение базы данных и резервных копий в России. Товары в корзине сохранены.</p>{user && (user.roles.includes("superadmin") || user.permissions.has("settings.write")) && <Link className="button" href="/admin/settings/">Заполнить реквизиты магазина</Link>}</section>;

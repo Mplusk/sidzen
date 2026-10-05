@@ -10,9 +10,9 @@ import { OzonDeliveryPicker, type DeliveryQuoteView } from "@/components/ozon-de
 import { customerDeliveryPrice } from "@/lib/delivery/pricing";
 
 type Delivery = { code: string; name: string; description: string | null; basePrice: number };
-function Submit({ total, online, needsQuote }: { total: number; online: boolean; needsQuote: boolean }) {
+function Submit({ total, online, needsQuote, noDelivery }: { total: number; online: boolean; needsQuote: boolean; noDelivery: boolean }) {
   const { pending } = useFormStatus();
-  return <button className="button" type="submit" disabled={pending || needsQuote}>{pending ? "Оформляем…" : needsQuote ? "Сначала подтвердите ПВЗ" : `${online ? "Перейти к оплате" : "Оформить заказ"} · ${formatPrice(total)}`}</button>;
+  return <button className="button" type="submit" disabled={pending || needsQuote || noDelivery}>{pending ? "Оформляем…" : noDelivery ? "Доставка временно недоступна" : needsQuote ? "Сначала подтвердите ПВЗ" : `${online ? "Перейти к оплате" : "Оформить заказ"} · ${formatPrice(total)}`}</button>;
 }
 
 export function CheckoutForm({ items, methods, user, onlinePayment, error, ozonDelivery = false, ozonUnavailable, packingReady = true }: {
@@ -50,6 +50,6 @@ export function CheckoutForm({ items, methods, user, onlinePayment, error, ozonD
       <p className="muted">Контактные данные и адрес нужны для заключения и исполнения вашего заказа. <Link className="text-link" href="/legal/privacy/" target="_blank">Как обрабатываются данные и кому передаются</Link>. Не указывайте в комментарии паспортные данные или реквизиты карты.</p>
       <label className="checkout-consent"><input type="checkbox" name="legal" required /><span>Принимаю <Link href="/legal/offer/" target="_blank">условия оферты</Link>. Это не согласие на рекламу или рассылки.</span></label>
     </div>
-    <aside className="order-summary"><h2>Ваш заказ</h2><ul className="checkout-items">{items.map((item) => <li key={item.id}><strong>{item.name} × {item.quantity}</strong><small>{item.configuration}</small><span>{formatPrice(item.total)}</span></li>)}</ul><div className="summary-line"><span>Товары</span><strong>{formatPrice(subtotal)}</strong></div><div className="summary-line"><span>Доставка</span><strong>Бесплатно · 0 ₽</strong></div><div className="summary-line summary-line--total" aria-live="polite" aria-atomic="true"><span>Итого к оплате</span><strong>{formatPrice(total)}</strong></div><input type="hidden" name="expectedTotal" value={total.toFixed(2)} /><Submit total={total} online={payment === "yookassa"} needsQuote={isOzon && !ozonQuote} /><p>Доставка за счёт магазина. Все выбранные параметры сохранятся в заказе.</p></aside>
+    <aside className="order-summary"><h2>Ваш заказ</h2><ul className="checkout-items">{items.map((item) => <li key={item.id}><strong>{item.name} × {item.quantity}</strong><small>{item.configuration}</small><span>{formatPrice(item.total)}</span></li>)}</ul><div className="summary-line"><span>Товары</span><strong>{formatPrice(subtotal)}</strong></div><div className="summary-line"><span>Доставка</span><strong>Бесплатно · 0 ₽</strong></div><div className="summary-line summary-line--total" aria-live="polite" aria-atomic="true"><span>Итого к оплате</span><strong>{formatPrice(total)}</strong></div><input type="hidden" name="expectedTotal" value={total.toFixed(2)} /><Submit total={total} online={payment === "yookassa"} needsQuote={isOzon && !ozonQuote} noDelivery={!methods.length && !ozonDelivery} /><p>Доставка за счёт магазина. Все выбранные параметры сохранятся в заказе.</p></aside>
   </form>;
 }

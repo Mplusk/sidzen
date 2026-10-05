@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
 import { decryptSecret, encryptSecret } from "../src/lib/integration-secrets";
@@ -14,8 +15,8 @@ async function request(path: string, body?: FormData, authenticated = true, orig
   if (authenticated) for (const cookie of response.headers.getSetCookie()) { const pair = cookie.split(";")[0], at = pair.indexOf("="); jar.set(pair.slice(0, at), pair.slice(at + 1)); }
   return response;
 }
-function actionForm(html: string, containing: string) {
-  const markup = [...html.matchAll(/<form\b[\s\S]*?<\/form>/g)].map(m => m[0]).find(text => text.includes(containing));
+function actionForm(html: string, containing: string, alsoContaining?: string) {
+  const markup = [...html.matchAll(/<form\b[\s\S]*?<\/form>/g)].map(m => m[0]).find(text => text.includes(containing) && (!alsoContaining || text.includes(alsoContaining)));
   assert(markup, `Missing form ${containing}`);
   const body = new FormData();
   for (const match of markup.matchAll(/<input\b[^>]*>/g)) {
@@ -28,9 +29,12 @@ const path = "/account/integrations/", secret = "fixture-delivery-secret-never-p
 const old = await prisma.siteSetting.findUnique({ where: { key: OZON_DELIVERY_SETTING } });
 const operatorKeys = ["legal.seller", "legal.address", "contacts.email"];
 const oldOperator = await prisma.siteSetting.findMany({ where: { key: { in: operatorKeys } } });
+const oldDeliveryAuditIds = (await prisma.auditLog.findMany({ where: { entityType: "DeliveryMethod" }, select: { id: true } })).map(row => row.id);
 const pointId = "9100000001";
 let productId: string | undefined, cartId: string | undefined;
 let fixtureOrderId: string | undefined;
+let deletedCarrier: { id: string; active: boolean; deletedAt: Date | null } | undefined;
+let customDeliveryId: string | undefined;
 const privacyRequests: string[] = [];
 let fixtureRole: string | undefined, qaUserId: string | undefined;
 let originalRoles: string[] = [];
@@ -135,6 +139,43 @@ try {
   assert(![...jar.keys()].some(key => key.startsWith("3dp_order_")), "Signed-in orders must not receive guest access cookies");
   // Restore only the QA cart row consumed by this isolated test.
   await prisma.cartItem.create({ data: { cartId: cart.id, productId: product.id, quantity: 1, unitPrice: 240, config: {} } });
+  const integrationsHtml = await (await request(path)).text();
+  const newDelivery = actionForm(integrationsHtml, "Добавить доставку");
+  const deliveryName = `QA delivery ${randomUUID()}`;
+  for (const [key, value] of Object.entries({ name: deliveryName, description: "QA only", basePrice: "125.50", sortOrder: "9", active: "on" })) newDelivery.set(key, value);
+  assert.equal((await request(path, newDelivery)).headers.get("location"), path + "?result=saved");
+  const custom = await prisma.deliveryMethod.findFirstOrThrow({ where: { name: deliveryName } }); customDeliveryId = custom.id;
+  assert.equal(Number(custom.basePrice), 125.5); assert.equal(custom.deletedAt, null);
+  const customDelete = actionForm(await (await request(path)).text(), 'name="confirmation"', `value="${custom.id}"`);
+  customDelete.set("confirmation", custom.id);
+  assert.match((await request(path, customDelete, false)).headers.get("location") || "", /^\/login/);
+  assert.equal((await prisma.deliveryMethod.findUniqueOrThrow({ where: { id: custom.id } })).deletedAt, null);
+  assert.equal((await request(path, customDelete)).headers.get("location"), path + "?result=delivery-deleted");
+  assert((await prisma.deliveryMethod.findUniqueOrThrow({ where: { id: custom.id } })).deletedAt);
+  const removal = actionForm(integrationsHtml, 'name="confirmation"', `value="${carrier.id}"`);
+  const staleEdit = actionForm(integrationsHtml, `name="id" value="${carrier.id}"`);
+  assert.equal((await request(path, removal)).headers.get("location"), path + "?result=delivery-confirmation");
+  removal.set("confirmation", "wrong-method");
+  assert.equal((await request(path, removal)).headers.get("location"), path + "?result=delivery-confirmation");
+  assert.equal((await prisma.deliveryMethod.findUniqueOrThrow({ where: { id: carrier.id } })).deletedAt, null);
+  deletedCarrier = { id: carrier.id, active: carrier.active, deletedAt: carrier.deletedAt };
+  removal.set("confirmation", carrier.id);
+  assert.equal((await request(path, removal)).headers.get("location"), path + "?result=delivery-deleted");
+  const removed = await prisma.deliveryMethod.findUniqueOrThrow({ where: { id: carrier.id } });
+  assert.equal(removed.active, false); assert(removed.deletedAt);
+  assert(await prisma.auditLog.findFirst({ where: { action: "integration.delivery.delete", entityId: carrier.id } }));
+  assert(!(await (await request(path)).text()).includes(carrier.id));
+  assert(!(await (await request("/delivery/")).text()).includes(carrier.name));
+  assert.equal((await request("/checkout/", manualOrder)).headers.get("location"), "/checkout/?error=delivery");
+  for (const [key, value] of Object.entries({ name: carrier.name, description: carrier.description || "", basePrice: String(carrier.basePrice), sortOrder: String(carrier.sortOrder), active: "on" })) staleEdit.set(key, value);
+  assert.equal((await request(path, staleEdit)).headers.get("location"), path + "?result=delivery-missing");
+  assert.equal((await request(path, removal)).headers.get("location"), path + "?result=delivery-missing");
+  execFileSync("pnpm", ["db:seed"], { env: { ...process.env, BOOTSTRAP_ADMIN_EMAIL: "qa@example.test", BOOTSTRAP_ADMIN_PASSWORD: "LocalGalleryQA-2026" }, stdio: "pipe" });
+  const afterSeed = await prisma.deliveryMethod.findUniqueOrThrow({ where: { id: carrier.id } });
+  assert.equal(afterSeed.active, false); assert(afterSeed.deletedAt, "Deployment seed must not revive removed defaults");
+  const oldShipment = await prisma.shipment.findUniqueOrThrow({ where: { orderId: createdOrder.id } });
+  assert.equal(oldShipment.provider, carrier.code); assert.equal(oldShipment.method, carrier.name); assert.equal(Number(oldShipment.cost), Number(carrier.basePrice));
+  assert.equal(await prisma.order.count(), ordersBefore + 1);
   await prisma.siteSetting.update({ where: { key: "legal.seller" }, data: { value: "" } });
   assert((await (await request("/checkout/")).text()).includes("продавец должен заполнить сведения оператора"));
   assert((await (await request("/register/")).text()).includes("Регистрация временно недоступна"));
@@ -146,7 +187,11 @@ try {
   console.log("PASS: Ozon Delivery settings, secret redaction/preservation, admin and anonymous permissions, CSRF, scoped PVZ search, packaging fields, enabled/disabled checkout and refusal of unquoted delivery. No Ozon API calls or real orders/payments.");
   console.log("PASS: separate registration/profile consent, missing-operator gate, private export, own data requests, per-section personal-data access controls.");
   console.log("PASS: isolated QA manual order with accepted-offer evidence; no guest access grant for signed-in buyer.");
+  console.log("PASS: delivery creation/deletion with confirmation, anonymous denial, stale edits/orders rejected, historical shipments unchanged and deployment seed does not revive deleted methods.");
 } finally {
+  if (deletedCarrier) await prisma.deliveryMethod.update({ where: { id: deletedCarrier.id }, data: { active: deletedCarrier.active, deletedAt: deletedCarrier.deletedAt } });
+  if (customDeliveryId) await prisma.deliveryMethod.deleteMany({ where: { id: customDeliveryId } });
+  await prisma.auditLog.deleteMany({ where: { id: { notIn: oldDeliveryAuditIds }, entityType: "DeliveryMethod", entityId: { in: [deletedCarrier?.id, customDeliveryId].filter((id): id is string => !!id) } } });
   if (fixtureOrderId) { await prisma.order.deleteMany({ where: { id: fixtureOrderId } }); await prisma.auditLog.deleteMany({ where: { entityId: fixtureOrderId, action: "order.offer.accept" } }); }
   if (qaUserId && fixtureRole) { await prisma.userRole.deleteMany({ where: { userId: qaUserId } }); await prisma.userRole.createMany({ data: originalRoles.map(roleId => ({ userId: qaUserId!, roleId })) }); }
   if (fixtureRole) await prisma.role.delete({ where: { id: fixtureRole } });

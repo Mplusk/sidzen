@@ -752,6 +752,7 @@ model DeliveryMethod {
   basePrice   Decimal @default(0) @db.Decimal(10, 2)
   active      Boolean @default(true)
   sortOrder   Int     @default(0)
+  deletedAt   DateTime?
 }
 
 model SiteSetting {
