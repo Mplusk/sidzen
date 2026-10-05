@@ -136,7 +136,7 @@ export async function createOnlinePayment(orderId: string) {
   return tochkaPaymentUrl(remote);
 }
 
-export async function reconcileTochkaPayments() {
+export async function reconcileTochkaPayments(shouldStop = () => false) {
   // New money / owed prepayment checks must not wait behind years of paid
   // history. Reserve capacity for refund checks while prioritizing live links.
   const pending = await prisma.payment.findMany({ where: { provider: "tochka", status: { in: ["PENDING", "AUTHORIZED"] }, OR: [{ externalId: { not: null } }, { payload: { path: ["version"], equals: 1 } }] }, orderBy: { updatedAt: "asc" }, take: 8 });
@@ -144,7 +144,7 @@ export async function reconcileTochkaPayments() {
   const payments = [...pending, ...paid];
   const deadline = Date.now() + 20_000;
   for (const payment of payments) {
-    if (Date.now() >= deadline) break;
+    if (shouldStop() || Date.now() >= deadline) break;
     try { await refreshTochkaPayment(payment.id); }
     catch { /* Retry without logging bank responses or personal data. */ }
     finally { await prisma.payment.updateMany({ where: { id: payment.id, status: { in: ["PENDING", "AUTHORIZED", "PAID"] } }, data: { updatedAt: new Date() } }); }

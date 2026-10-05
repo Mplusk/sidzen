@@ -24,11 +24,11 @@ async function financeLoop() {
     try {
       if (Date.now() >= nextPaymentCheck) {
         nextPaymentCheck = Date.now() + 60_000;
-        await reconcileTochkaPayments().catch(() => console.warn("Payment reconciliation will retry; no payment data logged."));
+        await reconcileTochkaPayments(() => stopping).catch(() => console.warn("Payment reconciliation will retry; no payment data logged."));
       }
-      await processFiscalReceipt();
+      if (!stopping) await processFiscalReceipt();
     } catch { console.warn("Fiscal reconciliation will retry; no receipt or customer data logged."); }
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    if (!stopping) await new Promise(resolve => setTimeout(resolve, 2000));
   }
 }
 const finances = financeLoop();
