@@ -728,6 +728,12 @@ body:has(.admin-shell) > .cookie-banner { display: none; }
 .ozon-map-wrapper { margin: 0 0 12px; }
 .ozon-map-pin { background: #2456ee; color: white; border: 2px solid white; border-radius: 14px 14px 14px 3px; box-shadow: 0 2px 8px #13254055; display: grid; place-items: center; font-size: 16px; }
 .ozon-map-pin--selected { background: #13834d; box-shadow: 0 0 0 3px #13834d44; }
+.ozon-pickup-map .ozon-point-button--selected { background: #22734d; border-color: #22734d; }
+.ozon-pickup-map .ozon-point-button--selected:hover { background: #185c3c; border-color: #185c3c; }
+.ozon-recipient-step { scroll-margin-top: 24px; border-radius: 12px; }
+.ozon-recipient-step:focus-visible { outline: 2px solid #22734d; outline-offset: 6px; }
+.ozon-point-confirmation { display: grid; gap: 6px; margin: 0 0 16px; overflow-wrap: anywhere; }
+.ozon-point-confirmation small { font-size: .85rem; }
 .ozon-pickup-map .leaflet-popup-content { margin: 12px; line-height: 1.5; }
 .ozon-pickup-map .leaflet-popup-content p { margin: 8px 0; }
 .ozon-pickup-map .leaflet-control-attribution { font-size: 10px; }

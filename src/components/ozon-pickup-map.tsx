@@ -4,10 +4,17 @@ import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import { hasPointCoordinates, initialMapPoints, type PickupPoint } from "@/lib/delivery/points";
 
+function showSelection(button: HTMLButtonElement, selected: boolean) {
+  button.classList.toggle("ozon-point-button--selected", selected);
+  button.textContent = selected ? "✓ ПВЗ выбран" : "Выбрать этот ПВЗ";
+  button.setAttribute("aria-pressed", String(selected));
+}
+
 export default function OzonPickupMap({ points, selected, onSelect }: { points: PickupPoint[]; selected: string; onSelect: (id: string) => void }) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markersRef = useRef(new Map<string, L.Marker>());
+  const buttonsRef = useRef(new Map<string, HTMLButtonElement>());
   const selectRef = useRef(onSelect);
   const [tileError, setTileError] = useState(false);
   useEffect(() => { selectRef.current = onSelect; }, [onSelect]);
@@ -30,7 +37,10 @@ export default function OzonPickupMap({ points, selected, onSelect }: { points: 
       const content = document.createElement("div");
       const title = document.createElement("strong"); title.textContent = point.name;
       const address = document.createElement("p"); address.textContent = point.address;
-      const button = document.createElement("button"); button.type = "button"; button.className = "button button--small"; button.textContent = "Выбрать этот ПВЗ"; button.onclick = () => selectRef.current(point.id);
+      const button = document.createElement("button"); button.type = "button"; button.className = "button button--small";
+      showSelection(button, false);
+      button.onclick = () => { showSelection(button, true); selectRef.current(point.id); };
+      buttonsRef.current.set(point.id, button);
       content.append(title, address, button);
       const marker = L.marker([point.latitude, point.longitude], { title: `ПВЗ: ${point.address}`, alt: `ПВЗ: ${point.address}`, icon: L.divIcon({ className: "ozon-map-pin", html: '<span aria-hidden="true">●</span>', iconSize: [28, 36], iconAnchor: [14, 36] }) }).bindPopup(content).addTo(map);
       markersRef.current.set(point.id, marker);
@@ -39,11 +49,13 @@ export default function OzonPickupMap({ points, selected, onSelect }: { points: 
     const focus = initialMapPoints(points);
     map.fitBounds(L.latLngBounds(focus.map(point => [point.latitude, point.longitude])), { padding: [28, 28], maxZoom: 15 });
     const markerIndex = markersRef.current;
-    return () => { for (const marker of markers) marker.remove(); markerIndex.clear(); };
+    const buttonIndex = buttonsRef.current;
+    return () => { for (const marker of markers) marker.remove(); markerIndex.clear(); buttonIndex.clear(); };
   }, [points]);
   useEffect(() => {
     const point = points.find(point => point.id === selected);
     for (const [id, marker] of markersRef.current) marker.getElement()?.classList.toggle("ozon-map-pin--selected", id === selected);
+    for (const [id, button] of buttonsRef.current) showSelection(button, id === selected);
     if (point && hasPointCoordinates(point)) {
       mapRef.current?.panTo([point.latitude, point.longitude]);
       markersRef.current.get(point.id)?.openPopup();
