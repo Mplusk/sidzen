@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requestPersonalData } from "@/app/actions/privacy";
 import { rfStorageReady } from "@/lib/privacy";
 export const metadata: Metadata = { title: "Персональные данные", robots: { index: false, follow: false } };
-const types: Record<string, string> = { ACCESS: "Сведения об обработке", CORRECT: "Исправление данных", DELETE: "Блокирование / удаление", WITHDRAW: "Отзыв согласия" };
+const types: Record<string, string> = { ACCESS: "Сведения об обработке", CORRECT: "Исправление данных", DELETE: "Блокирование / удаление", WITHDRAW: "Отзыв согласия — отключить соцсети и расчёты Ozon" };
 const statuses: Record<string, string> = { OPEN: "Получен", IN_PROGRESS: "В работе", RESOLVED: "Ответ получен" };
 export default async function PrivacyAccountPage({ searchParams }: { searchParams: Promise<{ sent?: string; error?: string }> }) {
   const [user, params] = await Promise.all([requireUser(), searchParams]);

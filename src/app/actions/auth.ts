@@ -14,7 +14,7 @@ const credentialsSchema = z.object({ email: z.email().transform((value) => value
 
 function safeReturnTo(value: FormDataEntryValue | null, fallback: string) {
   const path = String(value ?? "");
-  return path.startsWith("/") && !path.startsWith("//") ? path : fallback;
+  return path.startsWith("/") && !path.startsWith("//") && !/[\\\x00-\x20\x7f]/.test(path) && path.length <= 1000 ? path : fallback;
 }
 
 export async function loginAction(formData: FormData) {

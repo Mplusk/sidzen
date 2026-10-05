@@ -35,6 +35,10 @@ export async function destroySession() {
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (token) await prisma.session.deleteMany({ where: { tokenHash: tokenHash(token) } });
   cookieStore.delete(SESSION_COOKIE);
+  for (const cookie of cookieStore.getAll()) if (/^(?:__Host-)?3dp_oauth_/.test(cookie.name)) {
+    await prisma.oAuthAttempt.deleteMany({ where: { bindingHash: tokenHash(cookie.value) } });
+    cookieStore.delete(cookie.name);
+  }
   // A shared browser must not retain guest order access after signing out.
   for (const cookie of cookieStore.getAll()) if (cookie.name.startsWith("3dp_order_")) cookieStore.delete(cookie.name);
 }

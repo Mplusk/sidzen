@@ -6,9 +6,13 @@ import { getTochkaConfig, tochkaReady } from "@/lib/tochka/config";
 import { saveDeliveryMethod, savePaymentIntegration } from "@/app/actions/integrations";
 import { OzonDeliverySettings } from "@/components/ozon-delivery-settings";
 import { AdminDeleteDelivery } from "@/components/admin-delete-delivery";
+import { SocialSettings } from "@/components/social-settings";
 
 export const metadata: Metadata = { title: "Подключения — доставка и оплата", robots: { index: false, follow: false } };
 const messages: Record<string, string> = {
+  "social-saved": "Настройки входа сохранены. Ключи и адрес возврата проверяются при настоящем входе в сервис.",
+  "social-incomplete": "Для включения нужны корректный ID, секрет (Google / Яндекс), проверка оператором условий обработки и заполненные реквизиты магазина. Для Google также нужно подтверждение при настройке сервера.",
+  "social-invalid": "Проверьте ID и секрет приложения.", "social-rate": "Слишком много изменений. Повторите через минуту.", "social-changed": "Настройки изменились параллельно. Обновите страницу и повторите.",
   saved: "Настройки сохранены.", verified: "Настройки сохранены. Доступ к компании и эквайрингу Точки проверен без списания денег.",
   invalid: "Проверьте заполнение полей и тариф (до двух знаков после запятой).",
   incomplete: "Для включения нужны рабочий JWT-ключ, customerCode, merchantId, хотя бы один способ оплаты и настройки чеков. Для внешней кассы подтвердите самостоятельную выдачу чеков.",
@@ -68,6 +72,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
     </section>
     <section className="content-card"><h2>Оплата по счёту</h2><p>Доступна без платёжного сервиса. Реквизиты передаются покупателю после подтверждения заказа. Онлайн-списаний этот способ не выполняет.</p></section>
     <OzonDeliverySettings />
+    <SocialSettings />
     <h2>Другие способы доставки</h2><p className="muted">Управляйте способами с фиксированными тарифами. Эти способы не используют API перевозчика. Ozon Delivery API подключается отдельно выше. Способ можно отключить или удалить с подтверждением — старые заказы не меняются.</p>
     {!methods.length && <p className="notice">Другие способы доставки не добавлены. При включённом Ozon покупателю доступна только Ozon Доставка.</p>}
     {methods.map((method) => <section className="content-card" key={method.id}><h3>{method.name} · {method.active ? "включён" : "выключен"}</h3><DeliveryForm method={{ ...method, basePrice: Number(method.basePrice) }} /><AdminDeleteDelivery id={method.id} name={method.name} /></section>)}

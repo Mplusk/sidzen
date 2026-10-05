@@ -9,6 +9,7 @@ import { reconcileTochkaPayments } from "../src/lib/payments";
 let stopping = false;
 let nextPrivacyCleanup = 0;
 let nextPaymentCheck = 0;
+let nextOAuthCleanup = 0;
 process.on("SIGTERM", () => { stopping = true; });
 process.on("SIGINT", () => { stopping = true; });
 async function heartbeat() { await writeFile("/tmp/3dprinta-marketplace-heartbeat", String(Date.now())); }
@@ -18,6 +19,10 @@ console.log("Marketplace and delivery worker ready. Catalog sync runs on request
 try {
   while (!stopping) {
     try {
+      if (Date.now() >= nextOAuthCleanup) {
+        await prisma.oAuthAttempt.deleteMany({ where: { expiresAt: { lte: new Date() } } });
+        nextOAuthCleanup = Date.now() + 60_000;
+      }
       if (Date.now() >= nextPrivacyCleanup) {
         await pruneTransientPersonalData();
         nextPrivacyCleanup = Date.now() + 3600000;

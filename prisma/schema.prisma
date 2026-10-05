@@ -77,6 +77,43 @@ model User {
   auditLogs     AuditLog[]          @relation("AuditActor")
   privacyConsents PrivacyConsent[]
   privacyRequests PrivacyRequest[]
+  socialAccounts SocialAccount[]
+  oauthAttempts OAuthAttempt[]
+}
+
+model SocialAccount {
+  id        String   @id @default(cuid())
+  userId    String
+  provider  String
+  clientId  String
+  subject   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, clientId, subject])
+  @@unique([userId, provider, clientId])
+}
+
+// Ten-minute, browser-bound authorization attempts. Tokens are never persisted.
+model OAuthAttempt {
+  id             String   @id @default(cuid())
+  provider       String
+  stateHash      String   @unique
+  bindingHash    String   @unique
+  configRevision String
+  verifier       String
+  nonce          String
+  returnTo       String
+  stage          String   @default("STARTED")
+  profile        String?
+  consent        Json
+  linkUserId     String?
+  sessionHash    String?
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  user           User?    @relation(fields: [linkUserId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
 }
 
 model PrivacyConsent {

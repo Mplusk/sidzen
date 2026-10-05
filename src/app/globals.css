@@ -350,6 +350,14 @@ input[type="range"] { accent-color: var(--blue); }
 .auth-card h1 { font-size: 2.5rem; }
 .auth-card form { display: grid; gap: 16px; }
 .auth-card .button { width: 100%; }
+.social-login { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+.social-login h2 { font-size: 1.1rem; margin: 0 0 16px; }
+.social-login__buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.social-login__buttons .button { flex: 1 1 110px; width: auto; padding: 12px 10px; font-size: .9rem; border-radius: 12px; }
+.social-login__button span { font-weight: 800; margin-right: 8px; }
+.social-login__button--vk span { color: #0077ff; }
+.social-login__button--yandex span { color: #fc3f1d; }
+.social-settings__provider { padding: 20px 0; border-top: 1px solid var(--line); }
 .auth-links { display: flex; justify-content: space-between; margin-top: 22px; color: var(--blue); font-size: .85rem; }
 .account-shell { display: grid; grid-template-columns: 250px 1fr; gap: 38px; padding: 46px 0 96px; }
 .account-nav { align-self: start; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--white); }

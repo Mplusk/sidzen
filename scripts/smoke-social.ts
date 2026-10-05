@@ -1,0 +1,70 @@
+// Isolated PostgreSQL tests: no real OAuth calls, users or provider credentials.
+import assert from "node:assert/strict";
+import { prisma } from "../src/lib/prisma";
+import { claimCallback, hash, pendingProfile, randomToken, registerSocial, resolveIdentity } from "../src/lib/social/flow";
+import { encryptSecret } from "../src/lib/integration-secrets";
+import { verifyPassword } from "../src/lib/password";
+const url = new URL(process.env.DATABASE_URL || "");
+assert(["localhost", "127.0.0.1"].includes(url.hostname) && url.pathname === "/shop_qa");
+const key = "auth.social.yandex", old = await prisma.siteSetting.findUnique({ where: { key } });
+const revision = randomToken(), clientId = "a".repeat(32), tag = randomToken().slice(0, 8);
+const userIds: string[] = [], attemptIds: string[] = [];
+const originalRole = await prisma.role.findUnique({ where: { code: "customer" } });
+const role = originalRole ?? await prisma.role.create({ data: { code: "customer", name: "Synthetic QA buyer" } });
+const document = { purpose: "account", version: "fixture", text: "Synthetic consent" };
+async function attempt(linkUserId?: string) {
+  const state = randomToken(), binding = randomToken();
+  const row = await prisma.oAuthAttempt.create({ data: { provider: "yandex", stateHash: hash(state), bindingHash: hash(binding), verifier: "fixture", nonce: randomToken(), configRevision: revision, returnTo: "/account/", consent: document, expiresAt: new Date(Date.now() + 600000), linkUserId, sessionHash: linkUserId ? hash("owner-session") : null } });
+  attemptIds.push(row.id); return { row, state, binding };
+}
+try {
+  await prisma.siteSetting.upsert({ where: { key }, create: { key, group: "integrations", value: { enabled: true, operatorReviewed: true, clientId, clientSecret: encryptSecret("fixture-secret", key), revision } }, update: { value: { enabled: true, operatorReviewed: true, clientId, clientSecret: encryptSecret("fixture-secret", key), revision } } });
+  const owner = await prisma.user.create({ data: { email: `social-owner-${tag}@example.test`, passwordHash: "fixture", name: "Synthetic owner" } }); userIds.push(owner.id);
+  await prisma.session.create({ data: { userId: owner.id, tokenHash: hash("owner-session"), expiresAt: new Date(Date.now() + 600000) } });
+  const first = await attempt();
+  await assert.rejects(() => claimCallback("vk", first.state, first.binding));
+  await assert.rejects(() => claimCallback("yandex", first.state, randomToken()));
+  const claims = await Promise.allSettled(Array.from({ length: 5 }, () => claimCallback("yandex", first.state, first.binding)));
+  assert.equal(claims.filter(r => r.status === "fulfilled").length, 1, "callback exactly once across concurrent callers");
+  const row = await prisma.oAuthAttempt.findUniqueOrThrow({ where: { id: first.row.id } });
+  const profile = { subject: `qa-subject-${tag}`, name: "Synthetic buyer", email: owner.email };
+  assert.equal((await resolveIdentity(row, profile, null, "")).kind, "register", "matching email never logs in / links owner");
+  await assert.rejects(() => registerSocial(row.id, first.binding, { email: owner.email, name: profile.name, password: "" }, document), /email-exists/);
+  assert.equal(await prisma.socialAccount.count({ where: { userId: owner.id } }), 0);
+  const pending = await pendingProfile("yandex", first.binding); assert(pending); assert(!pending.attempt.profile!.includes(owner.email), "transient profile encrypted");
+  await assert.rejects(() => registerSocial(row.id, randomToken(), { email: `social-buyer-${tag}@example.test`, name: profile.name, password: "" }, document));
+  const creations = await Promise.allSettled(Array.from({ length: 3 }, () => registerSocial(row.id, first.binding, { email: `social-buyer-${tag}@example.test`, name: profile.name, password: "" }, document)));
+  assert.equal(creations.filter(r => r.status === "fulfilled").length, 1);
+  const result = creations.find(r => r.status === "fulfilled") as PromiseFulfilledResult<string>; userIds.push(result.value);
+  const buyer = await prisma.user.findUniqueOrThrow({ where: { id: result.value }, include: { roles: { include: { role: true } } } });
+  assert.deepEqual(buyer.roles.map(r => r.role.code), ["customer"]); assert.equal(verifyPassword("anything", buyer.passwordHash), false);
+  assert.equal(await prisma.privacyConsent.count({ where: { userId: buyer.id } }), 2);
+  const login = await attempt(); const loginRow = await claimCallback("yandex", login.state, login.binding);
+  assert.deepEqual(await resolveIdentity(loginRow, { ...profile, email: "changed@example.test" }, null, ""), { kind: "login", userId: buyer.id });
+  const inactive = await attempt(); const inactiveRow = await claimCallback("yandex", inactive.state, inactive.binding);
+  await prisma.user.update({ where: { id: buyer.id }, data: { isActive: false } });
+  await assert.rejects(() => resolveIdentity(inactiveRow, profile, null, ""), /inactive/); await prisma.user.update({ where: { id: buyer.id }, data: { isActive: true } });
+  const link = await attempt(owner.id); const linkRow = await claimCallback("yandex", link.state, link.binding);
+  await assert.rejects(() => resolveIdentity(linkRow, profile, owner.id, "different-session"), /link-session/);
+  await assert.rejects(() => resolveIdentity(linkRow, profile, owner.id, "owner-session"), /conflict/, "cannot steal buyer identity");
+  const ownProfile = { ...profile, subject: `qa-owner-${tag}` };
+  assert.equal((await resolveIdentity(linkRow, ownProfile, owner.id, "owner-session")).kind, "linked");
+  const secondLink = await attempt(owner.id); const secondRow = await claimCallback("yandex", secondLink.state, secondLink.binding);
+  await assert.rejects(() => resolveIdentity(secondRow, { ...profile, subject: "third-identity" }, owner.id, "owner-session"), /conflict/);
+  const switched = await attempt(); const switchedRow = await claimCallback("yandex", switched.state, switched.binding);
+  await assert.rejects(() => resolveIdentity(switchedRow, profile, owner.id, "owner-session"), /already-authenticated/);
+  const expired = await attempt(); await prisma.oAuthAttempt.update({ where: { id: expired.row.id }, data: { expiresAt: new Date(0) } });
+  await assert.rejects(() => claimCallback("yandex", expired.state, expired.binding), /expired/);
+  const disabled = await attempt(); const disabledRow = await claimCallback("yandex", disabled.state, disabled.binding);
+  await prisma.siteSetting.update({ where: { key }, data: { value: { enabled: false, operatorReviewed: true, clientId, clientSecret: encryptSecret("fixture-secret", key), revision } } });
+  await assert.rejects(() => resolveIdentity(disabledRow, profile, null, ""), /disabled/);
+  console.log("PASS: real PostgreSQL callback replay/concurrency, encrypted onboarding, email collision isolation, buyer-only roles, immutable identity login, inactive users, session-bound linking, identity theft prevention, expiry and disablement. No external OAuth calls.");
+} finally {
+  await prisma.oAuthAttempt.deleteMany({ where: { id: { in: attemptIds } } });
+  await prisma.privacyConsent.deleteMany({ where: { userId: { in: userIds } } });
+  await prisma.auditLog.deleteMany({ where: { entityId: { in: userIds }, action: { startsWith: "auth.social" } } });
+  await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+  if (!originalRole) await prisma.role.delete({ where: { id: role.id } });
+  if (old) await prisma.siteSetting.update({ where: { key }, data: { value: old.value! } }); else await prisma.siteSetting.deleteMany({ where: { key } });
+  await prisma.$disconnect();
+}
