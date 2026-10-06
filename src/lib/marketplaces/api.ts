@@ -2,15 +2,17 @@ import { z } from "zod";
 import { snapshotSchema, type Connection, type Provider, type Snapshot } from "./model";
 import { ozonAttributesSchema, ozonAttributeDictionarySchema, ozonSpecifications, type OzonAttributeCache } from "./ozon-attributes";
 import { ozonMeasurements } from "./ozon-measurements";
+import { wbCharacteristicSchema, wbDimensionsSchema, wbDictionarySchema, wbMeasurements, wbCharacteristicLabel, type WbAttributeCache } from "./wb-measurements";
 
 export class MarketplaceError extends Error {}
 const id = z.union([z.number().int().positive().safe(), z.string().regex(/^\d+$/)]).transform(String);
 const nullableString = z.string().nullish();
 const wbCardSchema = z.object({
-  nmID: id, imtID: id.optional(), vendorCode: z.string(), title: z.string(), description: nullableString,
+  nmID: id, imtID: id.optional(), subjectID: id.optional(), vendorCode: z.string(), title: z.string(), description: nullableString,
+  dimensions: wbDimensionsSchema.nullish(),
   photos: z.array(z.object({ big: z.string() })).default([]),
   sizes: z.array(z.object({ skus: z.array(z.string()).default([]) })).default([]),
-  characteristics: z.array(z.object({ name: z.string(), value: z.union([z.array(z.union([z.string(), z.number()])), z.string(), z.number()]) })).default([]),
+  characteristics: z.array(wbCharacteristicSchema).default([]),
 });
 const wbPageSchema = z.object({ cards: z.array(wbCardSchema), cursor: z.object({ updatedAt: z.string().optional(), nmID: z.number().optional(), total: z.number().int().nonnegative() }) });
 const wbPricesSchema = z.object({ error: z.boolean().optional(), data: z.object({ listGoods: z.array(z.object({
@@ -129,22 +131,34 @@ export async function fetchOzonAttributes(connection: Connection, ids: string[],
   return result;
 }
 
-export async function fetchPage(provider: Provider, connection: Connection, cursor: Record<string, unknown>, transport: Transport = fetch, wbPrices?: Map<string, WbPrice>, ozonAttributeCache?: OzonAttributeCache): Promise<Page> {
+export async function fetchPage(provider: Provider, connection: Connection, cursor: Record<string, unknown>, transport: Transport = fetch, wbPrices?: Map<string, WbPrice>, ozonAttributeCache?: OzonAttributeCache, wbAttributeCache: WbAttributeCache = new Map()): Promise<Page> {
   try {
     if (provider === "wb") {
       const paging = { limit: 20, ...(cursor.updatedAt && cursor.nmID ? { updatedAt: cursor.updatedAt, nmID: cursor.nmID } : {}) };
       const page = wbPageSchema.parse(await apiJson("https://content-api.wildberries.ru/content/v2/get/cards/list", connection, "POST", { settings: { sort: { ascending: true }, cursor: paging, filter: { withPhoto: -1 } } }, transport));
       if (!page.cards.length) return { items: [], cursor: {}, done: true };
       const prices = wbPrices ?? await fetchWbPrices(connection, transport);
+      const subjects = new Set(page.cards.map(card => card.subjectID).filter((value): value is string => Boolean(value)));
+      if (wbAttributeCache.size + [...subjects].filter(subject => !wbAttributeCache.has(subject)).length > 500) wbAttributeCache.clear();
+      for (const subject of subjects) {
+        if (wbAttributeCache.has(subject)) continue;
+        // Share one dictionary per subject for the entire run and respect the Content API interval.
+        await new Promise(resolve => setTimeout(resolve, 700));
+        const dictionary = wbDictionarySchema.parse(await apiJson(`https://content-api.wildberries.ru/content/v2/object/charcs/${subject}`, connection, "GET", undefined, transport));
+        if (dictionary.error) throw new MarketplaceError("format");
+        wbAttributeCache.set(subject, new Map(dictionary.data.map(item => [item.charcID, { name: item.name, unit: item.unitName?.trim() ?? "" }])));
+      }
       const done = page.cursor.total < 20;
       if (!done && (!page.cursor.updatedAt || !page.cursor.nmID || (page.cursor.updatedAt === cursor.updatedAt && page.cursor.nmID === cursor.nmID))) throw new MarketplaceError("format");
       return { done, cursor: { updatedAt: page.cursor.updatedAt ?? "", nmID: page.cursor.nmID ?? 0 }, items: page.cards.map((card) => {
         const price = prices.get(card.nmID);
         const size = price?.sizes[0];
         const priceValues = new Set(price?.sizes.map((value) => value.discountedPrice));
+        const dictionary = card.subjectID ? wbAttributeCache.get(card.subjectID) ?? new Map() : new Map();
         return checkedSnapshot({ externalId: card.nmID, sku: card.vendorCode, name: card.title.trim().slice(0, 180), barcodes: [...new Set(card.sizes.flatMap((value) => value.skus))],
           description: plainText(card.description ?? "") || null,
-          specifications: Object.fromEntries(card.characteristics.map((item) => [item.name, Array.isArray(item.value) ? item.value.join(", ") : String(item.value)])),
+          specifications: Object.fromEntries(card.characteristics.map((item) => [wbCharacteristicLabel(item, dictionary), Array.isArray(item.value) ? item.value.join(", ") : String(item.value)])),
+          measurements: wbMeasurements(card.dimensions, card.characteristics, dictionary),
           price: size?.discountedPrice ?? 1, oldPrice: size && size.price > size.discountedPrice ? size.price : null,
           images: [...new Set(card.photos.map((photo) => photo.big))].slice(0, 20),
           ...(card.imtID ? { group: { id: card.imtID, label: card.characteristics.filter(item => /^цвет(?:\s|$)/i.test(item.name.trim())).map(item => Array.isArray(item.value) ? item.value.join(", ") : String(item.value)).join(", ").slice(0, 180) } } : {}),

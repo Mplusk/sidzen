@@ -6,6 +6,7 @@ import { slugify } from "@/lib/format";
 import { getConnection, getPolicy } from "./config";
 import { canonicalSnapshot, identityKeys, normalizeSku, providers, snapshotSchema, type Provider, type Snapshot } from "./model";
 import { fetchPage, fetchWbPrices, MarketplaceError } from "./api";
+import type { WbAttributeCache } from "./wb-measurements";
 import { importImages } from "./images";
 import type { OzonAttributeCache } from "./ozon-attributes";
 
@@ -157,10 +158,11 @@ export async function processRun(run: MarketplaceSyncRun) {
     if (!connection || connection.accountId !== run.accountId) throw new MarketplaceError("credentials");
     const wbPrices = provider === "wb" ? await fetchWbPrices(connection) : undefined;
     const ozonAttributeCache: OzonAttributeCache = new Map();
+    const wbAttributeCache: WbAttributeCache = new Map();
     for (;;) {
       const current = await prisma.marketplaceSyncRun.findUniqueOrThrow({ where: { id: run.id } });
       if (current.status !== "RUNNING" || current.leaseToken !== run.leaseToken) return;
-      const page = await fetchPage(provider, connection, cursor, fetch, wbPrices, ozonAttributeCache);
+      const page = await fetchPage(provider, connection, cursor, fetch, wbPrices, ozonAttributeCache, wbAttributeCache);
       for (const item of page.items) {
         if (!item.issue) {
           try { item.images = await importImages(item.images, provider); }

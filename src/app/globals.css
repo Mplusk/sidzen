@@ -778,3 +778,9 @@ body:has(.admin-shell) > .cookie-banner { display: none; }
 .product-group-option small { display: block; margin: 5px 2px 2px; font-size: 11px; line-height: 1.25; overflow-wrap: anywhere; }
 .product-group-option--selected { border-color: var(--primary, #2459ed); background: #edf3ff; }
 .product-group-option:hover, .product-group-option:focus-visible { border-color: #2459ed; }
+.admin-products-bulk__toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 14px; padding: 18px 0; }
+.admin-products-bulk__toolbar .field { flex: 1 1 210px; margin: 0; }
+.admin-products-bulk__toolbar > span { align-self: center; white-space: nowrap; }
+.admin-products-bulk__toolbar > p { flex-basis: 100%; margin: 0; font-size: 13px; }
+.admin-products-bulk input[type="checkbox"] { width: 20px; height: 20px; accent-color: #2459ed; cursor: pointer; }
+.admin-products-bulk__selected { background: #edf3ff; }
