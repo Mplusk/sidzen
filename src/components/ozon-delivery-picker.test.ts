@@ -93,7 +93,8 @@ describe("delivery verification interaction", () => {
     expect(container.textContent).not.toContain("Проверка действительна"); expect(container.querySelector("select")!.value).toBe("42");
   });
   it("synchronizes both phone fields in the real checkout without remounting the pickup picker", async () => {
-    await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, total: 240 }], methods: [], user: { name: "", email: "", phone: "" }, onlinePayment: false, ozonDelivery: true })));
+    await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, total: 240 }], methods: [], user: { name: "", email: "", phone: "" }, ozonDelivery: true })));
+    expect(container.querySelector('[name="payment"]')).toBeNull(); expect(container.textContent).not.toContain("По счёту");
     await choosePoint(); await consent();
     expect(container.querySelectorAll('input[name="delivery"]')).toHaveLength(1);
     expect(container.querySelector<HTMLInputElement>('input[name="delivery"]')!.value).toBe("ozon-delivery");
@@ -110,7 +111,7 @@ describe("delivery verification interaction", () => {
     expect(container.querySelector("select")!.value).toBe("42"); expect(container.textContent).not.toContain("Проверка действительна");
   });
   it("does not offer to place an order if the last delivery method is removed and Ozon is off", async () => {
-    await act(async () => root.render(createElement(CheckoutForm, { items: [], methods: [], user: { name: "", email: "", phone: "" }, onlinePayment: false, ozonDelivery: false })));
+    await act(async () => root.render(createElement(CheckoutForm, { items: [], methods: [], user: { name: "", email: "", phone: "" }, ozonDelivery: false })));
     expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
     expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')!.textContent).toBe("Доставка временно недоступна");
     expect(m.quote).not.toHaveBeenCalled();

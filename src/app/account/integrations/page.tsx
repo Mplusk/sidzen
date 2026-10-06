@@ -3,14 +3,13 @@ import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTochkaConfig } from "@/lib/tochka/config";
-import { onlinePaymentReady } from "@/lib/payments";
 import { saveDeliveryMethod, savePaymentIntegration } from "@/app/actions/integrations";
 import { OzonDeliverySettings } from "@/components/ozon-delivery-settings";
 import { AdminDeleteDelivery } from "@/components/admin-delete-delivery";
 import { SocialSettings } from "@/components/social-settings";
 import { CloudKassirSettings } from "@/components/cloudkassir-settings";
 
-export const metadata: Metadata = { title: "Подключения — доставка и оплата", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "Подключения магазина", robots: { index: false, follow: false } };
 const messages: Record<string, string> = {
   "cloud-saved": "Настройки CloudKassir сохранены. Автоматическая выдача чеков пока выключена.",
   "cloud-verified": "Доступ к CloudKassir и состояние кассы проверены. Проверка не создаёт чеков и не списывает деньги.",
@@ -56,11 +55,12 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
   await requirePermission("settings.write");
   const [config, methods, params] = await Promise.all([getTochkaConfig(), prisma.deliveryMethod.findMany({ where: { deletedAt: null }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }), searchParams]);
   return <>
-    <h1>Доставка и оплата</h1><p className="muted">Подключения магазина. Доступны только администраторам с правом изменения настроек.</p>
+    <h1>Подключения магазина</h1><p className="notice">Сайт принимает только заявки. Все способы оплаты убраны из оформления; платёжные ссылки, чеки и отправления для новых заявок автоматически не создаются.</p>
     <p><Link className="text-link" href="/account/marketplaces/">Подключить Ozon / Wildberries и синхронизировать товары →</Link></p>
     {params.result && messages[params.result] && <p role="status" className="content-card">{messages[params.result]}</p>}
+    <details className="content-card"><summary>Архивные платёжные интеграции — только для ранее созданных заказов</summary><p className="muted">Настройки и проверка старых обязательств сохранены. Даже включённая здесь интеграция не добавляет способы оплаты к новым заявкам.</p>
     <section className="content-card"><h2>Точка · интернет-эквайринг</h2>
-      <p>{await onlinePaymentReady() ? "Онлайн-оплата включена" : "Онлайн-оплата выключена"}. JWT-ключ: {config.token ? "сохранён, скрыт" : "не задан"}.</p>
+      <p>Оплата новых заявок на сайте отключена. JWT-ключ: {config.token ? "сохранён, скрыт" : "не задан"}.</p>
       {config.checkedAt && <p className="muted">Последняя успешная проверка: {new Date(config.checkedAt).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })} МСК.</p>}
       <form action={savePaymentIntegration} className="form-grid" autoComplete="off">
         <label className="field">JWT-ключ Точка API<input type="password" name="token" autoComplete="new-password" maxLength={16000} placeholder={config.token ? "Оставьте пустым, чтобы сохранить ключ" : "Из раздела «Интеграции и API» Точки"} /><small>Ключ хранится зашифрованным. Не добавляйте префикс Bearer. Тестовый ключ песочницы не подходит.</small></label>
@@ -80,7 +80,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
       <p><a className="text-link" href="https://developers.tochka.com/docs/tochka-api/opisanie-metodov/platyozhnye-ssylki" target="_blank" rel="noreferrer">Документация Точки и права API →</a></p>
     </section>
     <CloudKassirSettings />
-    <section className="content-card"><h2>Оплата по счёту</h2><p>Доступна без платёжного сервиса. Реквизиты передаются покупателю после подтверждения заказа. Онлайн-списаний этот способ не выполняет. Для этого способа необходимые чеки оформляются продавцом отдельно; автоматическая связка CloudKassir действует для онлайн-оплаты через Точку.</p></section>
+    </details>
     <OzonDeliverySettings />
     <SocialSettings />
     <h2>Другие способы доставки</h2><p className="muted">Управляйте способами с фиксированными тарифами. Эти способы не используют API перевозчика. Ozon Delivery API подключается отдельно выше. Способ можно отключить или удалить с подтверждением — старые заказы не меняются.</p>

@@ -31,6 +31,7 @@ enum ModelFileStatus {
 
 enum OrderStatus {
   NEW
+  IN_PROGRESS
   ESTIMATING
   APPROVED
   AWAITING_PAYMENT
@@ -527,6 +528,9 @@ model Order {
   number          String              @unique
   userId          String?
   status          OrderStatus         @default(NEW)
+  kind            String              @default("ORDER")
+  deletedAt       DateTime?
+  purchaseConfirmedAt DateTime?
   customerName    String
   customerEmail   String
   customerPhone   String
@@ -550,6 +554,7 @@ model Order {
 
   @@index([status, createdAt])
   @@index([userId, createdAt])
+  @@index([deletedAt, status, createdAt])
 }
 
 model OrderItem {

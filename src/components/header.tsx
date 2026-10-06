@@ -10,7 +10,7 @@ export async function Header() {
       <div className="utility-bar">
         <div className="container utility-bar__inner">
           <span>Интернет-магазин изделий с доставкой по России</span>
-          <div><Link href="/delivery/">Доставка и оплата</Link><Link href="/contacts/">Контакты</Link>{contacts.email && <a href={"mailto:" + contacts.email}>{contacts.email}</a>}</div>
+          <div><Link href="/delivery/">Доставка и заказ</Link><Link href="/contacts/">Контакты</Link>{contacts.email && <a href={"mailto:" + contacts.email}>{contacts.email}</a>}</div>
         </div>
       </div>
       <div className="container header-main">

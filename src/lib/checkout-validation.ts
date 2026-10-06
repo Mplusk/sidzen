@@ -11,7 +11,7 @@ export const checkoutSchema = z.object({
   phone: z.string().transform(normalizePhone).refine((value) => /^\+7\d{10}$/.test(value), "Укажите российский номер телефона"),
   city: z.string().trim().max(120), address: z.string().trim().max(300), postalCode: z.string().trim().max(6),
   delivery: z.string().min(1).max(80), comment: z.string().trim().max(1000), legal: z.literal("on"),
-  payment: z.enum(["manual", "tochka"]), expectedTotal: z.coerce.number().positive(),
+  expectedTotal: z.coerce.number().positive().finite(),
   ozonQuote: z.string().max(100000).optional().default(""),
   ozonConsent: z.string().optional().default(""),
 }).superRefine((data, context) => {

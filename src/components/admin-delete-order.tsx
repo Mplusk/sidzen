@@ -17,7 +17,7 @@ export function AdminDeleteOrder({ id, number }: { id: string; number: string })
     <button type="button" className="admin-delete-link" onClick={() => dialog.current?.showModal()} aria-label={`Удалить заказ ${number}`}>Удалить заказ</button>
     <dialog className="confirm-dialog" ref={dialog} aria-labelledby={titleId} aria-describedby={descriptionId}>
       <h2 id={titleId}>Удалить заказ {number}?</h2>
-      <p id={descriptionId}>Заказ исчезнет из кабинета клиента и списка заказов вместе с данными об оплате и доставке. Восстановить его через сайт нельзя. Удаление не возвращает оплату покупателю. Заказы с обязательной историей кассовых чеков удалить нельзя.</p>
+      <p id={descriptionId}>Заказ исчезнет из рабочих списков и списка заказов покупателя. История сохранится в разделе «Удалённые» для сверки и документов. Это действие не отменяет уже созданную доставку и не возвращает ранее принятую оплату — их необходимо урегулировать отдельно.</p>
       <form action={deleteOrderAction}>
         <input type="hidden" name="orderId" value={id} />
         <input type="hidden" name="confirmation" value={number} />

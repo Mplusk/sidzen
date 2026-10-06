@@ -27,21 +27,20 @@ const deliveryErrors: Record<string, string> = {
   "ozon-credentials": "Ozon отклонил подключение магазина. Сообщите об этом продавцу.",
   "ozon-rate": "Ozon ограничил частоту проверок. Повторите чуть позже.",
 };
-function Submit({ total, online, needsQuote, noDelivery }: { total: number; online: boolean; needsQuote: boolean; noDelivery: boolean }) {
+function Submit({ needsQuote, noDelivery }: { needsQuote: boolean; noDelivery: boolean }) {
   const { pending } = useFormStatus();
-  return <button className="button" type="submit" disabled={pending || needsQuote || noDelivery}>{pending ? "Оформляем…" : noDelivery ? "Доставка временно недоступна" : needsQuote ? "Сначала подтвердите ПВЗ" : `${online ? "Перейти к оплате" : "Оформить заказ"} · ${formatPrice(total)}`}</button>;
+  return <button className="button" type="submit" disabled={pending || needsQuote || noDelivery}>{pending ? "Отправляем заявку…" : noDelivery ? "Доставка временно недоступна" : needsQuote ? "Сначала подтвердите ПВЗ" : "Отправить заявку"}</button>;
 }
 
-export function CheckoutForm({ items, methods, user, onlinePayment, error, reference, ozonDelivery = false, ozonUnavailable, packingReady = true }: {
+export function CheckoutForm({ items, methods, user, error, reference, ozonDelivery = false, ozonUnavailable, packingReady = true }: {
   items: Array<{ id: string; name: string; configuration: string; quantity: number; total: number }>;
-  methods: Delivery[]; user: { name: string; email: string; phone: string }; onlinePayment: boolean; error?: string; reference?: string;
+  methods: Delivery[]; user: { name: string; email: string; phone: string }; error?: string; reference?: string;
   ozonDelivery?: boolean;
   ozonUnavailable?: string;
   packingReady?: boolean;
 }) {
   const [delivery, setDelivery] = useState(methods[0]?.code ?? (ozonDelivery ? "ozon-delivery" : ""));
   const [ozonQuote, setOzonQuote] = useState<DeliveryQuoteView | null>(null);
-  const [payment, setPayment] = useState(onlinePayment ? "tochka" : "manual");
   const [phone, setPhone] = useState(phoneMask(user.phone));
   const changePhone = (value: string) => { const next = phoneMask(value); setPhone(next); if (next !== phone) setOzonQuote(null); };
   const changeDelivery = (code: string) => { setDelivery(code); setOzonQuote(null); };
@@ -51,7 +50,8 @@ export function CheckoutForm({ items, methods, user, onlinePayment, error, refer
   const total = subtotal + deliveryPrice;
   return <form action={createOrderAction} className="commerce-grid checkout-form">
     <div className="checkout-panel">
-      {error && <p className="notice notice--danger" role="alert">{deliveryErrors[error] ?? (error === "price" ? "Цена или условия доставки изменились. Проверьте обновлённую сумму и подтвердите заказ." : error === "payment" ? "Онлайн-оплата временно недоступна. Выберите счёт или повторите попытку позже." : "Проверьте контактные данные, адрес и согласие с условиями.")}{reference && /^[a-f0-9-]{36}$/i.test(reference) && <><br /><small>Код обращения: {reference}</small></>}</p>}
+      {error && <p className="notice notice--danger" role="alert">{deliveryErrors[error] ?? (error === "price" ? "Цена или условия доставки изменились. Проверьте обновлённую сумму и отправьте заявку заново." : "Проверьте контактные данные, адрес и согласие с условиями.")}{reference && /^[a-f0-9-]{36}$/i.test(reference) && <><br /><small>Код обращения: {reference}</small></>}</p>}
+      <p className="notice">Это заявка без оплаты на сайте. Продавец свяжется с вами, подтвердит наличие и согласует дальнейшие действия.</p>
       <h2>Контактные данные</h2><div className="form-grid">
         <label className="field"><span>ФИО получателя *</span><input name="name" autoComplete="name" defaultValue={user.name} required minLength={2} maxLength={120} /></label>
         <label className="field"><span>Телефон *</span><input name="phone" type="tel" autoComplete="tel" inputMode="tel" value={phone} onChange={event => changePhone(event.target.value)} placeholder="+7 (999) 123-45-67" pattern="\+7 \([0-9]{3}\) [0-9]{3}-[0-9]{2}-[0-9]{2}" required /><small>Для связи по заказу и доставке</small></label>
@@ -62,11 +62,10 @@ export function CheckoutForm({ items, methods, user, onlinePayment, error, refer
       {isOzon && <><OzonDeliveryPicker phone={phone} onPhoneChange={changePhone} onQuote={setOzonQuote} packingReady={packingReady} /><input type="hidden" name="ozonQuote" value={ozonQuote?.token ?? ""} /></>}
       {delivery !== "pickup" && !isOzon && <div className="form-grid"><label className="field"><span>Город *</span><input name="city" autoComplete="address-level2" required minLength={2} maxLength={120} /></label><label className="field"><span>Индекс{delivery === "russian-post" ? " *" : ""}</span><input name="postalCode" autoComplete="postal-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required={delivery === "russian-post"} placeholder="6 цифр" /></label><label className="field field--full"><span>Улица, дом, квартира или пункт выдачи *</span><input name="address" autoComplete="street-address" required minLength={4} maxLength={300} /></label></div>}
       {delivery === "pickup" && <p className="notice">Место и время самовывоза согласуем при подтверждении заказа.</p>}
-      <fieldset className="checkout-delivery"><legend>Оплата</legend>{onlinePayment && <label className="delivery-option"><input type="radio" name="payment" value="tochka" checked={payment === "tochka"} onChange={() => setPayment("tochka")} /><span><strong>Онлайн-оплата · Точка</strong><small>Безопасная страница Точка Банка</small></span></label>}<label className="delivery-option"><input type="radio" name="payment" value="manual" checked={payment === "manual"} onChange={() => setPayment("manual")} /><span><strong>По счёту</strong><small>Реквизиты для оплаты после подтверждения заказа</small></span></label></fieldset>
-      <label className="field"><span>Комментарий</span><textarea name="comment" maxLength={1000} placeholder="Пожелания к доставке или реквизиты для счёта" /></label>
-      <p className="muted">Контактные данные и адрес нужны для заключения и исполнения вашего заказа. <Link className="text-link" href="/legal/privacy/" target="_blank">Как обрабатываются данные и кому передаются</Link>. Не указывайте в комментарии паспортные данные или реквизиты карты.</p>
-      <label className="checkout-consent"><input type="checkbox" name="legal" required /><span>Принимаю <Link href="/legal/offer/" target="_blank">условия оферты</Link>. Это не согласие на рекламу или рассылки.</span></label>
+      <label className="field"><span>Комментарий</span><textarea name="comment" maxLength={1000} placeholder="Пожелания к заказу и удобное время для связи" /></label>
+      <p className="muted">Контактные данные и адрес нужны для обработки заявки и согласования заказа. <Link className="text-link" href="/legal/privacy/" target="_blank">Как обрабатываются данные и кому передаются</Link>. Не указывайте в комментарии паспортные данные или реквизиты карты.</p>
+      <label className="checkout-consent"><input type="checkbox" name="legal" required /><span>Принимаю <Link href="/legal/offer/" target="_blank">условия оформления заявки</Link> и прошу связаться со мной по заказу. Это не согласие на рекламу или рассылки.</span></label>
     </div>
-    <aside className="order-summary"><h2>Ваш заказ</h2><ul className="checkout-items">{items.map((item) => <li key={item.id}><strong>{item.name} × {item.quantity}</strong><small>{item.configuration}</small><span>{formatPrice(item.total)}</span></li>)}</ul><div className="summary-line"><span>Товары</span><strong>{formatPrice(subtotal)}</strong></div><div className="summary-line"><span>Доставка</span><strong>Бесплатно · 0 ₽</strong></div><div className="summary-line summary-line--total" aria-live="polite" aria-atomic="true"><span>Итого к оплате</span><strong>{formatPrice(total)}</strong></div><input type="hidden" name="expectedTotal" value={total.toFixed(2)} /><Submit total={total} online={payment === "tochka"} needsQuote={isOzon && !ozonQuote} noDelivery={!methods.length && !ozonDelivery} /><p>Доставка за счёт магазина. Все выбранные параметры сохранятся в заказе.</p></aside>
+    <aside className="order-summary"><h2>Ваша заявка</h2><ul className="checkout-items">{items.map((item) => <li key={item.id}><strong>{item.name} × {item.quantity}</strong><small>{item.configuration}</small><span>{formatPrice(item.total)}</span></li>)}</ul><div className="summary-line"><span>Товары</span><strong>{formatPrice(subtotal)}</strong></div><div className="summary-line"><span>Доставка</span><strong>Бесплатно · 0 ₽</strong></div><div className="summary-line summary-line--total" aria-live="polite" aria-atomic="true"><span>Стоимость товаров</span><strong>{formatPrice(total)}</strong></div><input type="hidden" name="expectedTotal" value={total.toFixed(2)} /><Submit needsQuote={isOzon && !ozonQuote} noDelivery={!methods.length && !ozonDelivery} /><p>Ничего оплачивать сейчас не нужно. Состав заявки, выбранный ПВЗ и ваши контакты получит продавец.</p></aside>
   </form>;
 }

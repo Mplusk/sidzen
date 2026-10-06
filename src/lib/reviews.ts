@@ -14,7 +14,10 @@ export const publicReviewWhere: Prisma.ReviewWhereInput = {
 // Match a real account-owned, paid and delivered line item. Neither an email
 // match, a guest cookie, nor a posted order/user ID grants this right.
 export function purchasedProductWhere(userId: string, productId?: string): Prisma.OrderWhereInput {
-  return { userId, status: "DELIVERED", payment: { is: { status: "PAID", refundReviewRequired: false } },
+  return { userId, status: "DELIVERED", OR: [
+    { kind: "ORDER", payment: { is: { status: "PAID", refundReviewRequired: false } } },
+    { kind: "APPLICATION", purchaseConfirmedAt: { not: null }, payment: { is: null } },
+  ],
     ...(productId ? { items: { some: { productId, quantity: { gt: 0 } } } } : {}) };
 }
 

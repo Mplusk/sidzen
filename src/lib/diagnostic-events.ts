@@ -31,6 +31,7 @@ export const diagnosticEvents = {
   "checkout.price": ["checkout", "WARN", "Изменилась итоговая сумма заказа"],
   "checkout.changed": ["checkout", "WARN", "Заказ не создан: корзина или настройки изменились либо возникла ошибка сохранения"],
   "checkout.created": ["checkout", "INFO", "Заказ сохранён"],
+  "checkout.application": ["checkout", "INFO", "Заявка передана продавцу без оплаты и отправления"],
   "payment.create.failed": ["payment", "ERROR", "Не удалось получить платёжную ссылку Точки; заказ сохранён"],
   "payment.reconcile.failed": ["payment", "ERROR", "Не удалось сверить платёж с Точкой; проверка будет повторена"],
   "fiscal.failed": ["fiscal", "ERROR", "Ошибка отправки или сверки чека CloudKassir"],

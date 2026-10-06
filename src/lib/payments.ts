@@ -86,6 +86,7 @@ export async function refreshPayment(externalId: string) {
 
 export async function createOnlinePayment(orderId: string) {
   const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: { payment: true, items: true } });
+  if (order.kind === "APPLICATION" || order.deletedAt) throw new Error("payment-state");
   const payment = order.payment;
   if (!payment || !isOnlineProvider(payment.provider) || payment.status !== "PENDING" || !["NEW", "APPROVED", "AWAITING_PAYMENT"].includes(order.status)) throw new Error("payment-state");
   if (payment.provider === "yookassa") {

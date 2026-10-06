@@ -50,7 +50,7 @@ export async function processOzonJob(id?: string) {
   // Public pickup-directory reads and cancellation/status reconciliation remain available.
   if (!await operatorReady()) return false;
   const eligibleStatus = id ? { in: ["PENDING", "REVIEW"] } : "PENDING";
-  const job = await prisma.ozonDeliveryJob.findFirst({ where: { ...(id ? { id } : { nextAttemptAt: { lte: new Date() }, shipment: { order: { OR: [{ payment: { status: "PAID" } }, { status: { in: [...paidOrderStatuses] } }] } } }), status: eligibleStatus, ...unlocked() }, include: { shipment: { include: { order: { include: { payment: true } } } } }, orderBy: { nextAttemptAt: "asc" } });
+  const job = await prisma.ozonDeliveryJob.findFirst({ where: { shipment: { order: { kind: "ORDER", deletedAt: null, ...(!id ? { OR: [{ payment: { status: "PAID" } }, { status: { in: [...paidOrderStatuses] } }] } : {}) } }, ...(id ? { id } : { nextAttemptAt: { lte: new Date() } }), status: eligibleStatus, ...unlocked() }, include: { shipment: { include: { order: { include: { payment: true } } } } }, orderBy: { nextAttemptAt: "asc" } });
   if (!job) return false;
   const lockToken = randomUUID();
   if (!(await prisma.ozonDeliveryJob.updateMany({ where: { id: job.id, status: eligibleStatus, ...unlocked() }, data: { lockToken, lockedUntil: new Date(Date.now() + 120000), attempts: { increment: 1 } } })).count) return false;

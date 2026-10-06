@@ -54,7 +54,6 @@ try {
   status.set("deliveryConfirmed", "on"); assert.match((await request(path, status)).headers.get("location")!, /saved=1/);
   assert.equal(await db.fiscalReceipt.count({ where: { orderId: order.id, kind: "SETTLEMENT" } }), 1);
   assert.match((await request(path, status)).headers.get("location")!, /saved=1/); assert.equal(await db.fiscalReceipt.count({ where: { orderId: order.id } }), 2);
-  const deletion = await form(path, "Да, удалить заказ"); assert.match((await request(path, deletion)).headers.get("location")!, /fiscal-history/); assert(await db.order.findUnique({ where: { id: order.id } }));
   status.set("status", "SHIPPED"); assert.match((await request(path, status)).headers.get("location")!, /fiscal-status/); status.set("status", "DELIVERED");
   const deleteMarkup = await (await request(path)).text(); assert(!deleteMarkup.includes("fixture@example.test\",\"CalculationPlace"));
   assert(deleteMarkup.includes("Кассовые чеки") && deleteMarkup.includes("Предоплата 100%"));
@@ -62,6 +61,10 @@ try {
   assert.equal((await request(`/checkout/success/${order.number}/`, undefined, false)).status, 404);
   const roles = await db.userRole.findMany({ where: { userId: user.id } });
   try { await db.userRole.deleteMany({ where: { userId: user.id } }); assert.match((await request(settings, cloud)).headers.get("location")!, /forbidden/); assert.match((await request(path, status)).headers.get("location")!, /forbidden/); } finally { await db.userRole.createMany({ data: roles, skipDuplicates: true }); }
+  const deletion = await form(path, "Да, удалить заказ"); assert.match((await request(path, deletion)).headers.get("location")!, /deleted=/);
+  assert((await db.order.findUniqueOrThrow({ where: { id: order.id } })).deletedAt);
+  assert.equal(await db.fiscalReceipt.count({ where: { orderId: order.id } }), 2);
+  assert((await (await request(path)).text()).includes("Кассовые чеки"));
   console.log("PASS CloudKassir HTTP: admin-only / CSRF, encrypted hidden retained secret, fixed AUSN / no VAT, fail-closed enablement, signed idempotent webhook, handover confirmation / no duplicate settlement, buyer receipt privacy, order ownership. No real bank or cashbox calls.");
 } finally {
   await db.fiscalReceipt.deleteMany({ where: { orderId: { in: ids } } }); await db.order.deleteMany({ where: { id: { in: ids } } });

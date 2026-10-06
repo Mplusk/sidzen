@@ -18,22 +18,17 @@ export async function deleteOrderAction(formData: FormData) {
     number = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412027)`;
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412026)`;
-      const order = await tx.order.findUnique({ where: { id: input.data.orderId }, select: { id: true, number: true, status: true, total: true, payment: { select: { provider: true, status: true, externalId: true, payload: true } }, shipment: { select: { ozonJob: { select: { status: true } } } } } });
-      if (!order) return null;
+      const order = await tx.order.findUnique({ where: { id: input.data.orderId }, select: { id: true, number: true, status: true, total: true, deletedAt: true } });
+      if (!order || order.deletedAt) return null;
       if (order.number !== input.data.confirmation) throw new Error("confirmation");
-      if (await tx.fiscalReceipt.count({ where: { orderId: order.id, OR: [{ firstAttemptAt: { not: null } }, { status: { notIn: ["WAITING_PAYMENT", "CANCELED"] } }] } })) throw new Error("fiscal-history");
-      if (order.payment && ["tochka", "yookassa"].includes(order.payment.provider) && ["PENDING", "AUTHORIZED"].includes(order.payment.status) && (order.payment.externalId || order.payment.payload)) throw new Error("payment-active");
-      if (order.shipment?.ozonJob && !["CANCELED", "FINISHED"].includes(order.shipment.ozonJob.status)) throw new Error("delivery-active");
-      await tx.fiscalReceipt.deleteMany({ where: { orderId: order.id } });
-      await tx.order.delete({ where: { id: order.id } });
-      await tx.auditLog.create({ data: { actorId: user.id, action: "order.delete", entityType: "Order", entityId: order.id, ip, before: { number: order.number, status: order.status, total: String(order.total) } } });
+      // Hide from working lists, preserving payment, receipt and carrier
+      // history for reconciliation. This does not cancel external operations.
+      await tx.order.update({ where: { id: order.id }, data: { deletedAt: new Date() } });
+      await tx.auditLog.create({ data: { actorId: user.id, action: "order.delete", entityType: "Order", entityId: order.id, ip, before: { number: order.number, status: order.status, total: String(order.total) }, after: { archived: true } } });
       return order.number;
     });
   } catch (error) {
     if (error instanceof Error && error.message === "confirmation") redirect("/admin/orders/?error=confirmation");
-    if (error instanceof Error && error.message === "delivery-active") redirect("/admin/orders/?error=delivery-active");
-    if (error instanceof Error && error.message === "payment-active") redirect("/admin/orders/?error=payment-active");
-    if (error instanceof Error && error.message === "fiscal-history") redirect("/admin/orders/?error=fiscal-history");
     console.error("Could not delete order");
     redirect("/admin/orders/?error=delete");
   }

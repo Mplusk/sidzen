@@ -134,8 +134,10 @@ try {
   assert.equal(createdOrder.userId, user.id); assert.equal(createdOrder.customerPhone, "+79991234567"); assert.equal(Number(createdOrder.total), 240);
   assert.equal(Number(createdOrder.deliveryPrice), 0);
   assert.equal(Number((await prisma.shipment.findUniqueOrThrow({ where: { orderId: createdOrder.id } })).cost), Number(carrier.basePrice));
-  assert.equal(Number((await prisma.payment.findUniqueOrThrow({ where: { orderId: createdOrder.id } })).amount), 240);
-  assert(await prisma.auditLog.findFirst({ where: { entityId: createdOrder.id, action: "order.offer.accept" } }));
+  assert.equal(createdOrder.kind, "APPLICATION"); assert.equal(createdOrder.status, "NEW");
+  assert.equal(await prisma.payment.count({ where: { orderId: createdOrder.id } }), 0);
+  assert.equal(await prisma.fiscalReceipt.count({ where: { orderId: createdOrder.id } }), 0);
+  assert(await prisma.auditLog.findFirst({ where: { entityId: createdOrder.id, action: "order.application.create" } }));
   assert(![...jar.keys()].some(key => key.startsWith("3dp_order_")), "Signed-in orders must not receive guest access cookies");
   // Restore only the QA cart row consumed by this isolated test.
   await prisma.cartItem.create({ data: { cartId: cart.id, productId: product.id, quantity: 1, unitPrice: 240, config: {} } });
@@ -186,7 +188,7 @@ try {
   for (const protectedPage of ["/admin/orders/", "/admin/users/", "/admin/audit/", "/admin/settings/", "/admin/privacy/"]) assert.match((await request(protectedPage)).headers.get("location") || "", /forbidden/, protectedPage);
   console.log("PASS: Ozon Delivery settings, secret redaction/preservation, admin and anonymous permissions, CSRF, scoped PVZ search, packaging fields, enabled/disabled checkout and refusal of unquoted delivery. No Ozon API calls or real orders/payments.");
   console.log("PASS: separate registration/profile consent, missing-operator gate, private export, own data requests, per-section personal-data access controls.");
-  console.log("PASS: isolated QA manual order with accepted-offer evidence; no guest access grant for signed-in buyer.");
+  console.log("PASS: isolated QA application without payment / fiscal receipt and with accepted-terms evidence; no guest access grant for signed-in buyer.");
   console.log("PASS: delivery creation/deletion with confirmation, anonymous denial, stale edits/orders rejected, historical shipments unchanged and deployment seed does not revive deleted methods.");
 } finally {
   if (deletedCarrier) await prisma.deliveryMethod.update({ where: { id: deletedCarrier.id }, data: { active: deletedCarrier.active, deletedAt: deletedCarrier.deletedAt } });

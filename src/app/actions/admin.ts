@@ -16,15 +16,25 @@ import { arrangeProductImages, assertImageCapacity, parseProductForm, storedProd
 import { guardProductWrite } from "@/lib/marketplaces/sync";
 import { queueDerivedReceipt } from "@/lib/cloudkassir/lifecycle";
 
-const orderStatuses = ["NEW", "ESTIMATING", "APPROVED", "AWAITING_PAYMENT", "PAID", "QUEUED", "PRINTING", "POST_PROCESSING", "PACKED", "SHIPPED", "DELIVERED", "CANCELED", "REFUNDED"] as const;
+import { applicationStatuses, orderStatuses } from "@/lib/order-status";
 
 export async function updateOrderStatusAction(formData: FormData) {
   const user = await requirePermission(PERMISSIONS.ordersWrite);
   const parsed = z.object({ orderId: z.string().min(1), status: z.enum(orderStatuses), note: z.string().trim().max(1000) }).safeParse({ orderId: formData.get("orderId"), status: formData.get("status"), note: formData.get("note") ?? "" });
   if (!parsed.success) redirect("/admin/orders/?error=invalid");
+  let statusError = "fiscal-status";
   const order = await prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412026)`;
-    const before = await tx.order.findUniqueOrThrow({ where: { id: parsed.data.orderId }, include: { payment: true, fiscalReceipts: true } });
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412032)`;
+    const before = await tx.order.findUnique({ where: { id: parsed.data.orderId }, include: { payment: true, fiscalReceipts: true } });
+    if (!before || before.deletedAt) { statusError = "missing"; return null; }
+    if (before.kind === "APPLICATION") {
+      statusError = "application-status";
+      if (!applicationStatuses.some(status => status === parsed.data.status)) return null;
+      // An administrator must attest to the actual completed sale. Requests
+      // and intermediate statuses never grant verified-purchase reviews.
+      if (parsed.data.status === "DELIVERED" && !before.purchaseConfirmedAt && formData.get("purchaseConfirmed") !== "on") return null;
+    }
     if (before.fiscalReceipts.length) {
       const status = parsed.data.status;
       if (["QUEUED", "PRINTING", "POST_PROCESSING", "PACKED", "SHIPPED"].includes(status) && before.payment?.status !== "PAID") return null;
@@ -32,12 +42,14 @@ export async function updateOrderStatusAction(formData: FormData) {
       if (status === "DELIVERED" && (formData.get("deliveryConfirmed") !== "on" || before.payment?.status !== "PAID" || before.payment.refundReviewRequired)) return null;
       if (status === "DELIVERED") await queueDerivedReceipt(tx, before.id, "SETTLEMENT");
     }
-    const updated = await tx.order.update({ where: { id: before.id }, data: { status: parsed.data.status, internalNote: parsed.data.note || undefined } });
-    await tx.auditLog.create({ data: { actorId: user.id, action: "order.status.update", entityType: "Order", entityId: before.id, before: { status: before.status }, after: { status: updated.status, deliveryConfirmed: formData.get("deliveryConfirmed") === "on" } } });
+    const updated = await tx.order.update({ where: { id: before.id }, data: { status: parsed.data.status, internalNote: parsed.data.note || null, ...(before.kind === "APPLICATION" ? { purchaseConfirmedAt: parsed.data.status === "DELIVERED" ? before.purchaseConfirmedAt ?? new Date() : null } : {}) } });
+    await tx.auditLog.create({ data: { actorId: user.id, action: "order.status.update", entityType: "Order", entityId: before.id, before: { status: before.status }, after: { status: updated.status, deliveryConfirmed: formData.get("deliveryConfirmed") === "on", purchaseConfirmed: Boolean(updated.purchaseConfirmedAt) } } });
     return updated;
   });
-  if (!order) redirect("/admin/orders/?error=fiscal-status");
+  if (!order) redirect(`/admin/orders/?error=${statusError}`);
   revalidatePath("/admin/orders/");
+  revalidatePath("/account", "layout");
+  revalidatePath("/catalog", "layout");
   redirect(`/admin/orders/${order.number}/?saved=1`);
 }
 
@@ -45,9 +57,16 @@ export async function updateTrackingAction(formData: FormData) {
   const user = await requirePermission(PERMISSIONS.ordersWrite);
   const orderId = String(formData.get("orderId") ?? "");
   const tracking = String(formData.get("tracking") ?? "").trim().slice(0, 120);
-  const shipment = await prisma.shipment.update({ where: { orderId }, data: { tracking, shippedAt: tracking ? new Date() : undefined } });
+  const shipment = await prisma.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412026)`;
+    const order = await tx.order.findUnique({ where: { id: orderId } });
+    if (!order || order.deletedAt) return null;
+    return tx.shipment.update({ where: { orderId }, data: { tracking, shippedAt: tracking ? new Date() : undefined } });
+  });
+  if (!shipment) redirect("/admin/orders/?error=missing");
   await writeAudit({ actorId: user.id, action: "shipment.tracking.update", entityType: "Shipment", entityId: shipment.id, after: { tracking } });
   revalidatePath("/admin/orders/");
+  revalidatePath("/account", "layout");
 }
 
 const productUploadDirectory = join(process.cwd(), "public", "uploads", "products");
