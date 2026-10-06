@@ -24,13 +24,16 @@ export async function requestPersonalData(form: FormData) {
     // reviewed by the operator; do not silently erase contracts or staff accounts.
     if (parsed.data.type === "WITHDRAW") await tx.privacyConsent.updateMany({ where: { userId: user.id, purpose: "ozon", revokedAt: null }, data: { revokedAt: new Date() } });
     if (parsed.data.type === "WITHDRAW") {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412032)`;
+      await tx.privacyConsent.updateMany({ where: { userId: user.id, purpose: "review", revokedAt: null }, data: { revokedAt: new Date() } });
+      await tx.review.updateMany({ where: { userId: user.id, verifiedPurchase: true }, data: { approved: false, status: "HIDDEN" } });
       await tx.privacyConsent.updateMany({ where: { userId: user.id, purpose: { startsWith: "social:" }, revokedAt: null }, data: { revokedAt: new Date() } });
       await tx.socialAccount.deleteMany({ where: { userId: user.id } });
       await tx.oAuthAttempt.deleteMany({ where: { linkUserId: user.id } });
       await tx.session.deleteMany({ where: { userId: user.id, tokenHash: { not: hash(session) } } });
     }
   });
-  revalidatePath("/account/privacy/"); redirect("/account/privacy/?sent=1");
+  revalidatePath("/account/privacy/"); revalidatePath("/catalog", "layout"); revalidatePath("/about/"); revalidatePath("/account/reviews/"); redirect("/account/privacy/?sent=1");
 }
 
 export async function answerPersonalDataRequest(form: FormData) {

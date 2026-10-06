@@ -79,6 +79,7 @@ jobs:
           pnpm exec tsx scripts/smoke-cloudkassir-http.ts
           pnpm exec tsx scripts/smoke-social-http.ts
           pnpm exec tsx scripts/smoke-diagnostics-http.ts
+          pnpm exec tsx scripts/smoke-reviews-http.ts
 
   deploy:
     name: Deploy production

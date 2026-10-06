@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ user: vi.fn(), permission: vi.fn(), create: vi.fn(), revoke: vi.fn(), update: vi.fn(), audit: vi.fn(), tx: vi.fn(), rate: vi.fn() }));
+const m = vi.hoisted(() => ({ user: vi.fn(), permission: vi.fn(), create: vi.fn(), revoke: vi.fn(), hideReviews: vi.fn(), update: vi.fn(), audit: vi.fn(), tx: vi.fn(), rate: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ requireUser: m.user, requirePermission: m.permission, SESSION_COOKIE: "3dp_session" }));
 vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: m.tx } }));
 vi.mock("@/lib/rate-limit", () => ({ rateLimit: m.rate }));
@@ -9,12 +9,13 @@ vi.mock("next/navigation", () => ({ redirect: (url: string) => { throw new Error
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => ({ value: "fixture" }) }) }));
 import { answerPersonalDataRequest, requestPersonalData } from "./privacy";
 describe("privacy requests authorization", () => {
-  beforeEach(() => { vi.resetAllMocks(); m.user.mockResolvedValue({ id: "owner" }); m.permission.mockResolvedValue({ id: "staff" }); m.rate.mockReturnValue({ allowed: true }); m.tx.mockImplementation(fn => fn({ $executeRaw: vi.fn(), socialAccount: { deleteMany: vi.fn() }, oAuthAttempt: { deleteMany: vi.fn() }, session: { deleteMany: vi.fn() }, privacyRequest: { create: m.create, update: m.update }, privacyConsent: { updateMany: m.revoke }, auditLog: { create: m.audit } })); });
+  beforeEach(() => { vi.resetAllMocks(); m.user.mockResolvedValue({ id: "owner" }); m.permission.mockResolvedValue({ id: "staff" }); m.rate.mockReturnValue({ allowed: true }); m.tx.mockImplementation(fn => fn({ $executeRaw: vi.fn(), review: { updateMany: m.hideReviews }, socialAccount: { deleteMany: vi.fn() }, oAuthAttempt: { deleteMany: vi.fn() }, session: { deleteMany: vi.fn() }, privacyRequest: { create: m.create, update: m.update }, privacyConsent: { updateMany: m.revoke }, auditLog: { create: m.audit } })); });
   it("ignores forged user IDs and revokes only this buyer's pre-order permissions", async () => {
     const form = new FormData(); form.set("userId", "victim"); form.set("type", "WITHDRAW"); form.set("message", "Withdraw consent");
     await expect(requestPersonalData(form)).rejects.toThrow("sent=1");
     expect(m.create).toHaveBeenCalledWith({ data: { userId: "owner", type: "WITHDRAW", message: "Withdraw consent" } });
     expect(m.revoke.mock.calls[0][0].where).toEqual({ userId: "owner", purpose: "ozon", revokedAt: null });
+    expect(m.hideReviews).toHaveBeenCalledWith({ where: { userId: "owner", verifiedPurchase: true }, data: { approved: false, status: "HIDDEN" } });
   });
   it("rejects anonymous requests and unprivileged staff before writing", async () => {
     m.user.mockRejectedValue(new Error("login")); await expect(requestPersonalData(new FormData())).rejects.toThrow("login");

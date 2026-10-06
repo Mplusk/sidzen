@@ -13,6 +13,8 @@ import { productOptionInclude, productOptions } from "@/lib/product-options-serv
 import { pluralRu } from "@/lib/format";
 import { productSpecificationRows } from "@/lib/product-specifications";
 import { TruckIcon } from "@/components/icons";
+import { ProductReviews } from "@/components/product-reviews";
+import { publicReviewWhere } from "@/lib/reviews";
 
 type Params = Promise<{ category: string; product: string }>;
 
@@ -30,7 +32,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   };
 }
 
-export default async function ProductPage({ params }: { params: Params }) {
+export default async function ProductPage({ params, searchParams }: { params: Params; searchParams: Promise<{ reviewsPage?: string }> }) {
   const { product: slug, category: categorySlug } = await params;
   const product = await prisma.product.findUnique({
     where: { slug },
@@ -42,7 +44,6 @@ export default async function ProductPage({ params }: { params: Params }) {
       colors: { where: { active: true }, orderBy: { name: "asc" } },
       technologies: { where: { active: true } },
       qualityProfiles: { where: { active: true }, orderBy: { layerHeightMm: "desc" } },
-      reviews: { where: { approved: true }, orderBy: { createdAt: "desc" }, take: 8 },
     },
   });
   if (!product || product.status !== "PUBLISHED" || (product.type !== "READY" && product.type !== "PARAMETRIC")) notFound();
@@ -51,7 +52,9 @@ export default async function ProductPage({ params }: { params: Params }) {
   const related = await prisma.product.findMany({ where: { status: "PUBLISHED", type: { in: ["READY", "PARAMETRIC"] }, id: { not: product.id }, categories: { some: { categoryId: category.id } } }, include: { images: { orderBy: { sortOrder: "asc" } }, categories: { include: { category: true } } }, take: 4 });
   const options = productOptions(product);
   const defaultPrice = priceProduct(options, defaultSelection(options)).unitPrice;
-  const rating = product.reviews.length ? product.reviews.reduce((sum, review) => sum + review.rating, 0) / product.reviews.length : 5;
+  const aggregate = await prisma.review.aggregate({ where: { productId: product.id, ...publicReviewWhere }, _avg: { rating: true }, _count: { _all: true } });
+  const reviewCount = aggregate._count._all, rating = aggregate._avg.rating ?? 0;
+  const query = await searchParams;
   const schema = {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -61,7 +64,7 @@ export default async function ProductPage({ params }: { params: Params }) {
     sku: product.sku,
     brand: { "@type": "Brand", name: "3DPRINTA" },
     offers: { "@type": "Offer", url: `https://3dprinta.shop/catalog/${category.slug}/${product.slug}/`, priceCurrency: "RUB", price: defaultPrice, availability: product.stock > 0 ? "https://schema.org/InStock" : product.madeToOrder ? "https://schema.org/PreOrder" : "https://schema.org/OutOfStock" },
-    ...(product.reviews.length ? { aggregateRating: { "@type": "AggregateRating", ratingValue: rating.toFixed(1), reviewCount: product.reviews.length } } : {}),
+    ...(reviewCount ? { aggregateRating: { "@type": "AggregateRating", ratingValue: rating.toFixed(1), reviewCount } } : {}),
   };
   const specs = productSpecificationRows(product);
   const description = product.description || product.shortDescription;
@@ -75,7 +78,7 @@ export default async function ProductPage({ params }: { params: Params }) {
           <div className="product-summary">
             <span className="product-summary__sku">Артикул: {product.sku}</span>
             <h1>{product.h1 ?? product.name}</h1>
-            {product.reviews.length > 0 && <a className="product-rating" href="#reviews-heading">★ {rating.toFixed(1)} · {product.reviews.length} {pluralRu(product.reviews.length, ["отзыв", "отзыва", "отзывов"])}</a>}
+            <a className="product-rating" href="#reviews-heading">{reviewCount ? `★ ${rating.toFixed(1)} · ${reviewCount} ${pluralRu(reviewCount, ["отзыв", "отзыва", "отзывов"])}` : "Отзывы покупателей"}</a>
             {specs.length > 0 && <section className="product-overview" aria-labelledby="product-overview-heading"><div className="product-overview__heading"><h2 id="product-overview-heading">О товаре</h2><a href="#specifications">Все характеристики</a></div><dl>{specs.slice(0, 6).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl></section>}
             <a className="product-description-link" href="#description">Перейти к описанию →</a>
           </div>
@@ -86,7 +89,7 @@ export default async function ProductPage({ params }: { params: Params }) {
           </aside>
         </div>
         <div className="content-tabs"><nav className="content-tabs__nav"><a href="#description">Описание</a>{specs.length > 0 && <a href="#specifications">Характеристики</a>}<a href="#delivery">Доставка</a></nav><div className="rich-text"><h2 id="description">Описание</h2>{description && <p className="product-description">{description}</p>}{product.usage && <p>{product.usage}</p>}{specs.length > 0 && <><h2 id="specifications">Характеристики</h2><table className="spec-table"><tbody>{specs.map(([key, value]) => <tr key={key}><th scope="row">{key}</th><td>{value}</td></tr>)}</tbody></table></>}<h2 id="delivery">Доставка и уход</h2><p>Доставка для покупателя бесплатная. Доступные способы и ПВЗ можно выбрать при оформлении заказа. {product.instructions}</p></div></div>
-        <section aria-labelledby="reviews-heading"><h2 id="reviews-heading">Отзывы покупателей</h2>{product.reviews.length ? product.reviews.map((review) => <article className="review-card" key={review.id}><strong>{review.author} · {review.rating}/5</strong><p>{review.text}</p><small>{review.createdAt.toLocaleDateString("ru-RU")}</small></article>) : <p>Опубликованных отзывов пока нет.</p>}</section>
+        <ProductReviews productId={product.id} path={`/catalog/${category.slug}/${product.slug}/`} total={reviewCount} rating={rating} requestedPage={query.reviewsPage} />
         {related.length > 0 && <section><h2>Вам также может подойти</h2><div className="product-grid">{related.map((item) => <ProductCard key={item.id} product={item} />)}</div></section>}
       </article>
     </>

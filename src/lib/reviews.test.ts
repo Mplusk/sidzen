@@ -1,0 +1,19 @@
+import { describe, expect, it } from "vitest";
+import sharp from "sharp";
+import { parseReview, purchasedProductWhere, publicReviewWhere, reviewPage } from "./reviews";
+import { normalizeReviewPhoto, reviewImagePath, reviewPhotoFiles } from "./review-images";
+function form() { const value = new FormData(); for (const [key, field] of Object.entries({ productId: "p", author: "Максим", text: "Отличный товар, хорошо сделан", rating: "5", consent: "on" })) value.set(key, field); return value; }
+describe("verified buyer review input and privacy", () => {
+  it("accepts a public pseudonym, never takes identity or purchase from the form", () => { const value = form(); value.set("userId", "victim"); value.set("orderId", "fake"); expect(parseReview(value).success).toBe(true); expect(parseReview(value).data).not.toHaveProperty("userId"); });
+  it.each(["0", "6", "2.5", "NaN", ""])("rejects invalid rating %s", rating => { const value = form(); value.set("rating", rating); expect(parseReview(value).success).toBe(false); });
+  it("requires explicit consent and substantive bounded text", () => { const value = form(); value.delete("consent"); expect(parseReview(value).success).toBe(false); value.set("consent", "on"); value.set("text", "short"); expect(parseReview(value).success).toBe(false); value.set("text", "x".repeat(3001)); expect(parseReview(value).success).toBe(false); });
+  it("uses account ownership, delivery, paid payment and no refund ambiguity", () => { expect(purchasedProductWhere("buyer", "product")).toEqual({ userId: "buyer", status: "DELIVERED", payment: { is: { status: "PAID", refundReviewRequired: false } }, items: { some: { productId: "product", quantity: { gt: 0 } } } }); });
+  it("new verified public reviews require a live consent, legacy rows survive unchanged", () => { expect(publicReviewWhere).toEqual({ approved: true, OR: [{ verifiedPurchase: false }, { consent: { is: { revokedAt: null } } }] }); });
+  it("bounds pagination including malformed requests", () => { expect(reviewPage("99999999", 21)).toEqual({ page: 3, pages: 3 }); for (const value of ["abc", "-1", "NaN", ["2"], "Infinity"]) expect(reviewPage(value, 21).page).toBe(1); });
+});
+describe("review photo safety", () => {
+  it("limits count, bytes and allowed mime types before reading bytes", () => { const value = form(); value.append("photos", new File(["svg"], "photo.jpg", { type: "image/svg+xml" })); expect(() => reviewPhotoFiles(value)).toThrow(); value.delete("photos"); for (let i = 0; i < 6; i++) value.append("photos", new File(["x"], "a.jpg", { type: "image/jpeg" })); expect(() => reviewPhotoFiles(value)).toThrow(); value.delete("photos"); value.append("photos", new File([new Uint8Array(5 * 1024 * 1024 + 1)], "a.jpg", { type: "image/jpeg" })); expect(() => reviewPhotoFiles(value)).toThrow(); });
+  it("rejects path traversal and arbitrary names", () => { for (const name of ["../../secret", "anything.webp", "a.svg"]) expect(() => reviewImagePath(name)).toThrow(); });
+  it("rejects fake signatures and disguised vector input", async () => { await expect(normalizeReviewPhoto(Buffer.from([255,216,255]), "image/jpeg")).rejects.toThrow(); await expect(normalizeReviewPhoto(Buffer.from('<svg width="10" height="10" xmlns="http://www.w3.org/2000/svg"></svg>'), "image/png")).rejects.toThrow(); });
+  it("re-encodes, resizes and removes EXIF, including user-controlled metadata", async () => { const input = await sharp({ create: { width: 1800, height: 200, channels: 3, background: "blue" } }).withMetadata({ exif: { IFD0: { Artist: "Private Metadata" } } }).jpeg().toBuffer(); const output = await normalizeReviewPhoto(input, "image/jpeg"), metadata = await sharp(output.data).metadata(); expect(output.info.width).toBe(1600); expect(metadata.format).toBe("webp"); expect(metadata.exif).toBeUndefined(); expect(metadata.xmp).toBeUndefined(); await expect(normalizeReviewPhoto(input, "image/png")).rejects.toThrow(); });
+});
