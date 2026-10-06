@@ -5,10 +5,11 @@ import { AdminProductForm, type ProductFormOptions, type ProductFormValue } from
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/auth";
 import { PERMISSIONS } from "@/lib/permissions";
+import { saveProductGroup } from "@/app/actions/product-groups";
 
 export const metadata: Metadata = { title: "Редактирование товара", robots: { index: false, follow: false } };
 
-export default async function AdminProductPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; created?: string; error?: string }> }) {
+export default async function AdminProductPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; created?: string; error?: string; groupError?: string }> }) {
   const user = await requirePermission(PERMISSIONS.productsWrite);
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const [product, categories, materials, colors, technologies, qualityProfiles, postProcesses] = await Promise.all([
@@ -52,6 +53,24 @@ export default async function AdminProductPage({ params, searchParams }: { param
     postProcessIds: product.postProcesses.map((item) => item.id),
   };
   const publicHref = primaryCategory && product.status === "PUBLISHED" ? `/catalog/${primaryCategory.category.slug}/${product.slug}/` : null;
+  const canGroup = user.permissions.has(PERMISSIONS.productsPublish) || user.roles.includes("superadmin");
+  const groups = canGroup ? await prisma.productGroup.findMany({ orderBy: { name: "asc" }, include: { _count: { select: { products: true } } } }) : [];
+  const members = product.groupId && canGroup ? await prisma.product.findMany({ where: { groupId: product.groupId }, select: { id: true, sku: true, groupLabel: true, status: true }, orderBy: { sku: "asc" } }) : [];
 
-  return <><div className="admin-header"><div><span className="eyebrow">{product.sku}</span><h1>{product.name}</h1></div><div className="admin-header__actions"><Link className="button button--outline" href="/admin/products/">К списку</Link>{publicHref && <Link className="button button--outline" href={publicHref} target="_blank">Открыть на сайте</Link>}</div></div>{(query.saved || query.created) && <p className="notice notice--success">Изменения сохранены.</p>}<AdminProductForm options={options} product={value} error={query.error} canPublish={user.permissions.has(PERMISSIONS.productsPublish) || user.roles.includes("superadmin")} /></>;
+  return <><div className="admin-header"><div><span className="eyebrow">{product.sku}</span><h1>{product.name}</h1></div><div className="admin-header__actions"><Link className="button button--outline" href="/admin/products/">К списку</Link>{publicHref && <Link className="button button--outline" href={publicHref} target="_blank">Открыть на сайте</Link>}</div></div>{(query.saved || query.created) && <p className="notice notice--success">Изменения сохранены.</p>}<AdminProductForm options={options} product={value} error={query.error} canPublish={canGroup} />
+    {canGroup && <section className="content-card" id="product-group"><h2>Группа карточек — цвета и варианты</h2>
+      <p>Варианты показываются фотографиями в карточке товара. У каждого остаются свои артикул, цена, остаток, отзывы и фотографии. Покупатель видит только опубликованные варианты с доступной категорией.</p>
+      <p className="muted">{product.groupingMode === "AUTO" ? "Группировка из WB обновляется при синхронизации." : "Ручная группировка защищена от синхронизации."}</p>
+      {query.groupError && <p role="alert" className="notice notice--error">Не удалось сохранить группу. Дождитесь завершения синхронизации и проверьте выбранную группу.</p>}
+      <form action={saveProductGroup} className="form-grid">
+        <input type="hidden" name="productId" value={product.id} />
+        <label className="field">Группа<select name="groupId" defaultValue={product.groupId ?? ""}><option value="">Без группы — исключить карточку</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name} · {group._count.products} шт. · {group.id.slice(-6)}</option>)}</select></label>
+        <label className="field">Или создать новую группу<input name="newName" maxLength={180} placeholder="Например, Чаша Коралл" /></label>
+        <label className="field">Подпись варианта<input name="label" maxLength={180} defaultValue={product.groupLabel ?? product.sku} placeholder="Например, Зелёный" /></label>
+        <label className="field">Управление группой<select name="mode" defaultValue="MANUAL"><option value="MANUAL">Сохранить вручную — не менять при импорте</option><option value="AUTO">Восстановить группировку WB при следующем импорте</option></select></label>
+        <button className="button">Сохранить группу карточки</button>
+      </form>
+      {members.length > 0 && <p>Карточки группы: {members.map(member => <Link key={member.id} className="text-link" style={{ marginRight: 12 }} href={`/admin/products/${member.id}/#product-group`}>{member.sku} · {member.groupLabel || member.sku} · {member.status}</Link>)}</p>}
+    </section>}
+  </>;
 }

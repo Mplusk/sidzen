@@ -77,7 +77,9 @@ export async function applySnapshot(tx: Tx, provider: Provider, accountId: strin
   const policy = await getPolicy(tx);
   let created = 0;
   if (!conflict && !productId) {
-    if (await tx.product.count({ where: { name: { equals: snapshot.name, mode: "insensitive" } } })) conflict = "name";
+    // WB has distinct nmIDs/SKUs for colours with identical titles. A title
+    // must neither merge these identities nor prevent their creation.
+    if (provider !== "wb" && await tx.product.count({ where: { name: { equals: snapshot.name, mode: "insensitive" } } })) conflict = "name";
     else {
       const categoryExists = policy.categoryId && await tx.category.findUnique({ where: { id: policy.categoryId } });
       // A draft without a category is allowed; publication requires assigning one.
@@ -97,6 +99,14 @@ export async function applySnapshot(tx: Tx, provider: Provider, accountId: strin
   if (!conflict && productId) {
     for (const key of keys) await tx.marketplaceIdentity.upsert({ where: { key }, create: { key, productId }, update: {} });
     await reconcileProduct(tx, productId, policy.primary);
+    if (provider === "wb" && snapshot.group) {
+      const product = await tx.product.findUniqueOrThrow({ where: { id: productId } });
+      if (product.groupingMode === "AUTO") {
+        const sourceKey = `wb:${accountId}:${snapshot.group.id}`;
+        const group = await tx.productGroup.upsert({ where: { sourceKey }, create: { name: snapshot.name, sourceKey }, update: {} });
+        await tx.product.update({ where: { id: productId }, data: { groupId: group.id, groupLabel: snapshot.group.label || snapshot.sku } });
+      }
+    }
   }
   return { created, updated: !conflict && !created ? 1 : 0, conflicts: listing.conflict ? 1 : 0, processed: 1 };
 }

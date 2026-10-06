@@ -769,3 +769,12 @@ body:has(.admin-shell) > .cookie-banner { display: none; }
 .ozon-pickup-map .leaflet-popup-content p { margin: 8px 0; }
 .ozon-pickup-map .leaflet-control-attribution { font-size: 10px; }
 @media (max-width: 600px) { .ozon-point-search { flex-direction: column; align-items: stretch; } }
+/* Linked cards keep individual identities; compact photo navigation. */
+.product-group-options { margin: 16px 0; min-width: 0; }
+.product-group-options p { margin: 0 0 10px; font-size: 14px; color: var(--muted); }
+.product-group-options__items { display: flex; flex-wrap: wrap; gap: 8px; }
+.product-group-option { width: 78px; padding: 3px; border: 2px solid transparent; border-radius: 12px; color: inherit; text-decoration: none; overflow: hidden; background: #f4f6fa; }
+.product-group-option img { display: block; width: 100%; height: 94px; object-fit: contain; border-radius: 8px; background: white; }
+.product-group-option small { display: block; margin: 5px 2px 2px; font-size: 11px; line-height: 1.25; overflow-wrap: anywhere; }
+.product-group-option--selected { border-color: var(--primary, #2459ed); background: #edf3ff; }
+.product-group-option:hover, .product-group-option:focus-visible { border-color: #2459ed; }

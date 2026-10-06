@@ -15,6 +15,7 @@ import { productSpecificationRows } from "@/lib/product-specifications";
 import { TruckIcon } from "@/components/icons";
 import { ProductReviews } from "@/components/product-reviews";
 import { publicReviewWhere } from "@/lib/reviews";
+import { ProductGroupOptions, type GroupOption } from "@/components/product-group-options";
 
 type Params = Promise<{ category: string; product: string }>;
 
@@ -50,6 +51,12 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
   const category = product.categories.find((item) => item.category.slug === categorySlug)?.category ?? product.categories.find((item) => item.isPrimary)?.category ?? product.categories[0]?.category;
   if (!category || !category.visible || !product.categories.some((item) => item.category.slug === categorySlug)) notFound();
   const related = await prisma.product.findMany({ where: { status: "PUBLISHED", type: { in: ["READY", "PARAMETRIC"] }, id: { not: product.id }, categories: { some: { categoryId: category.id } } }, include: { images: { orderBy: { sortOrder: "asc" } }, categories: { include: { category: true } } }, take: 4 });
+  const members = product.groupId ? await prisma.product.findMany({
+    where: { groupId: product.groupId, status: "PUBLISHED", type: { in: ["READY", "PARAMETRIC"] }, categories: { some: { category: { visible: true } } } },
+    select: { id: true, name: true, sku: true, slug: true, groupLabel: true, images: { orderBy: { sortOrder: "asc" }, take: 1, select: { path: true } }, categories: { where: { category: { visible: true } }, orderBy: { isPrimary: "desc" }, take: 1, select: { category: { select: { slug: true } } } } },
+    orderBy: { sku: "asc" },
+  }) : [];
+  const groupOptions: GroupOption[] = members.map(member => ({ id: member.id, name: member.name, label: member.groupLabel || member.sku, image: member.images[0]?.path ?? null, href: `/catalog/${member.categories[0].category.slug}/${member.slug}/` }));
   const options = productOptions(product);
   const defaultPrice = priceProduct(options, defaultSelection(options)).unitPrice;
   const aggregate = await prisma.review.aggregate({ where: { productId: product.id, ...publicReviewWhere }, _avg: { rating: true }, _count: { _all: true } });
@@ -79,6 +86,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
             <span className="product-summary__sku">Артикул: {product.sku}</span>
             <h1>{product.h1 ?? product.name}</h1>
             <a className="product-rating" href="#reviews-heading">{reviewCount ? `★ ${rating.toFixed(1)} · ${reviewCount} ${pluralRu(reviewCount, ["отзыв", "отзыва", "отзывов"])}` : "Отзывы покупателей"}</a>
+            <ProductGroupOptions options={groupOptions} currentId={product.id} />
             {specs.length > 0 && <section className="product-overview" aria-labelledby="product-overview-heading"><div className="product-overview__heading"><h2 id="product-overview-heading">О товаре</h2><a href="#specifications">Все характеристики</a></div><dl>{specs.slice(0, 6).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl></section>}
             <a className="product-description-link" href="#description">Перейти к описанию →</a>
           </div>

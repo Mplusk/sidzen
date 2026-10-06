@@ -69,6 +69,13 @@ describe("marketplace catalog contracts", () => {
     const page = await fetchPage("wb", connection, {}, transport, new Map([["11", { nmID: "11", currencyIsoCode4217: "RUB", sizes: [{ price: 200, discountedPrice: 150 }, { price: 300, discountedPrice: 220 }] }]]));
     expect(page.items[0].issue).toBe("prices");
   });
+  it("preserves distinct WB nmIDs and shared imtID with colour labels", async () => {
+    const cards = [11, 12].map((nmID, index) => ({ nmID, imtID: 900, vendorCode: `COLOUR-${nmID}`, title: "Same bowl title", characteristics: [{ name: "Цвет", value: [index ? "белый" : "зеленый"] }] }));
+    const prices = new Map(cards.map(card => [String(card.nmID), { nmID: String(card.nmID), currencyIsoCode4217: "RUB", sizes: [{ price: 200, discountedPrice: 150 }] }]));
+    const page = await fetchPage("wb", connection, {}, async () => json({ cards, cursor: { total: 2 } }), prices);
+    expect(page.items.map(item => item.externalId)).toEqual(["11", "12"]);
+    expect(page.items.map(item => item.group)).toEqual([{ id: "900", label: "зеленый" }, { id: "900", label: "белый" }]);
+  });
   it("fails closed when a marketplace returns an unexpected response", async () => {
     await expect(fetchPage("ozon", connection, {}, async () => json({ items: [] }))).rejects.toThrow("format");
   });

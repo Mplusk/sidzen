@@ -7,7 +7,7 @@ export class MarketplaceError extends Error {}
 const id = z.union([z.number().int().positive().safe(), z.string().regex(/^\d+$/)]).transform(String);
 const nullableString = z.string().nullish();
 const wbCardSchema = z.object({
-  nmID: id, vendorCode: z.string(), title: z.string(), description: nullableString,
+  nmID: id, imtID: id.optional(), vendorCode: z.string(), title: z.string(), description: nullableString,
   photos: z.array(z.object({ big: z.string() })).default([]),
   sizes: z.array(z.object({ skus: z.array(z.string()).default([]) })).default([]),
   characteristics: z.array(z.object({ name: z.string(), value: z.union([z.array(z.union([z.string(), z.number()])), z.string(), z.number()]) })).default([]),
@@ -147,6 +147,7 @@ export async function fetchPage(provider: Provider, connection: Connection, curs
           specifications: Object.fromEntries(card.characteristics.map((item) => [item.name, Array.isArray(item.value) ? item.value.join(", ") : String(item.value)])),
           price: size?.discountedPrice ?? 1, oldPrice: size && size.price > size.discountedPrice ? size.price : null,
           images: [...new Set(card.photos.map((photo) => photo.big))].slice(0, 20),
+          ...(card.imtID ? { group: { id: card.imtID, label: card.characteristics.filter(item => /^цвет(?:\s|$)/i.test(item.name.trim())).map(item => Array.isArray(item.value) ? item.value.join(", ") : String(item.value)).join(", ").slice(0, 180) } } : {}),
           issue: !size || price?.currencyIsoCode4217 !== "RUB" ? "currency" : priceValues.size > 1 ? "prices" : null,
         });
       }) };

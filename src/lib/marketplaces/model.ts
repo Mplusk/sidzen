@@ -12,6 +12,7 @@ export const snapshotSchema = z.object({
   price: z.number().finite().positive().max(999_999_999),
   oldPrice: z.number().finite().positive().max(999_999_999).nullable(),
   images: z.array(z.string().max(1000)).max(20),
+  group: z.object({ id: z.string().regex(/^\d+$/).max(100), label: z.string().trim().max(180) }).optional(),
   measurements: z.object({
     // Dimensions of the item, never silently substituted with its packaging.
     weightGrams: z.number().finite().positive().max(1_000_000).optional(),

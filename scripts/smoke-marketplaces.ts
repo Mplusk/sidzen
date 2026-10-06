@@ -81,10 +81,10 @@ try {
   await apply("ozon", { ...base, externalId: "105" });
   assert.equal((await prisma.marketplaceListing.findUniqueOrThrow({ where: { provider_accountId_externalId: { provider: "ozon", accountId, externalId: "105" } } })).conflict, "multiple");
 
-  const manual = { ...base, externalId: "202", sku: `${prefix}-manual-map`, barcodes: [], name: `${prefix} legacy updated` };
+  const manual = { ...base, externalId: "202", sku: `${prefix}-manual-map`, barcodes: [], name: `${prefix} legacy updated`, issue: "prices" };
   await apply("wb", manual);
   const manualListing = await prisma.marketplaceListing.findUniqueOrThrow({ where: { provider_accountId_externalId: { provider: "wb", accountId, externalId: "202" } } });
-  assert.equal(manualListing.conflict, "name");
+  assert.equal(manualListing.conflict, "prices");
   await prisma.$transaction(async (tx) => { await marketplaceLock(tx); await mapListing(tx, manualListing.id, legacy.id); });
   assert.equal((await prisma.marketplaceListing.findUniqueOrThrow({ where: { id: manualListing.id } })).productId, legacy.id);
   await apply("wb", { ...manual, issue: "prices" });
@@ -137,12 +137,34 @@ try {
   const recovered = await prisma.marketplaceSyncRun.findUniqueOrThrow({ where: { id: stale.id } });
   assert.equal(recovered.status, "SUCCEEDED"); assert.equal(recovered.processed, 21); assert.equal(recovered.created, 0); assert.equal(recovered.updated, 21);
   assert.equal(await prisma.product.count({ where: { id: { in: productIds } } }), 23);
-  console.log("PASS: cross-provider/order-independent identity, repeat/concurrent import, barcode aliases, legacy site SKUs, conflicts, manual protection, queue, stale lease recovery, page replay and counters. Mock HTTP only.");
+  // Four colours are four products, not duplicates merely because titles match.
+  for (const [index, label] of ["розовый", "белый", "черный", "зеленый"].entries()) {
+    const colour = { ...base, externalId: `${700 + index}`, sku: `${prefix}-colour-${index}`, barcodes: [`${prefix}-colour-barcode-${index}`], name: `${prefix} same bowl title`, group: { id: "4240851203", label } };
+    if (index === 0) await prisma.marketplaceListing.create({ data: { provider: "wb", accountId, externalId: colour.externalId, sellerSku: colour.sku, normalizedSku: colour.sku.toUpperCase(), barcodes: colour.barcodes, snapshot: colour, conflict: "name" } });
+    assert.equal((await apply("wb", colour)).created, 1);
+    assert.equal((await apply("wb", colour)).created, 0);
+  }
+  const colours = await prisma.product.findMany({ where: { sku: { startsWith: `${prefix}-COLOUR-` } }, orderBy: { sku: "asc" } });
+  productIds.push(...colours.map(product => product.id));
+  assert.equal(colours.length, 4);
+  assert.equal(new Set(colours.map(product => product.groupId)).size, 1);
+  assert(colours[0].groupId);
+  assert.deepEqual(colours.map(product => product.groupLabel), ["розовый", "белый", "черный", "зеленый"]);
+  await prisma.product.update({ where: { id: colours[0].id }, data: { groupingMode: "MANUAL", groupId: null, groupLabel: null } });
+  await apply("wb", { ...base, externalId: "700", sku: `${prefix}-colour-0`, barcodes: [`${prefix}-colour-barcode-0`], name: `${prefix} same bowl title`, group: { id: "4240851203", label: "новая подпись" } });
+  assert.equal((await prisma.product.findUniqueOrThrow({ where: { id: colours[0].id } })).groupId, null);
+  const otherAccount = `${accountId}-other`;
+  await prisma.$transaction(async tx => { await marketplaceLock(tx); await applySnapshot(tx, "wb", otherAccount, { ...base, externalId: "800", sku: `${prefix}-other-colour`, barcodes: [], name: `${prefix} same bowl title`, group: { id: "4240851203", label: "синий" } }); });
+  const separate = await prisma.product.findUniqueOrThrow({ where: { sku: `${prefix}-OTHER-COLOUR` } }); productIds.push(separate.id);
+  assert.notEqual(separate.groupId, colours[1].groupId);
+  await prisma.marketplaceListing.deleteMany({ where: { accountId: otherAccount } });
+  console.log("PASS: cross-provider/order-independent identity, repeat/concurrent import, barcode aliases, legacy site SKUs, conflicts, manual protection, queue, stale lease recovery, page replay/counters, separate same-title WB colours, recovery of old name conflicts, idempotent account-scoped groups and protected manual exclusion. Mock HTTP only.");
 } finally {
   globalThis.fetch = originalFetch;
   await prisma.marketplaceListing.deleteMany({ where: { accountId } });
   await prisma.marketplaceSyncRun.deleteMany({ where: { id: { in: runIds } } });
   await prisma.product.deleteMany({ where: { id: { in: productIds } } });
+  await prisma.productGroup.deleteMany({ where: { sourceKey: { startsWith: `wb:${accountId}` } } });
   await prisma.category.delete({ where: { id: category.id } });
   for (const [key, row] of [[POLICY_KEY, oldPolicy], [connectionKey("ozon"), oldConnection]] as const) {
     if (row) await prisma.siteSetting.upsert({ where: { key }, create: { ...row, value: row.value === null ? Prisma.JsonNull : row.value as Prisma.InputJsonValue }, update: { value: row.value === null ? Prisma.JsonNull : row.value as Prisma.InputJsonValue, group: row.group } });

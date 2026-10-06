@@ -286,9 +286,22 @@ model Product {
   marketplaceMode  String              @default("AUTO")
   marketplaceListings MarketplaceListing[]
   marketplaceIdentities MarketplaceIdentity[]
+  groupId          String?
+  group            ProductGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  groupLabel       String?
+  groupingMode     String @default("AUTO")
 
+  @@index([groupId])
   @@index([status, publishedAt])
   @@index([basePrice])
+}
+
+// Presentation only: each member keeps its own identity, inventory and orders.
+model ProductGroup {
+  id        String @id @default(cuid())
+  name      String
+  sourceKey String? @unique
+  products  Product[]
 }
 
 // Stable cross-marketplace identities. Names alone are never sufficient to merge.
