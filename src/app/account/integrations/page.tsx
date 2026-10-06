@@ -55,7 +55,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
   await requirePermission("settings.write");
   const [config, methods, params] = await Promise.all([getTochkaConfig(), prisma.deliveryMethod.findMany({ where: { deletedAt: null }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }), searchParams]);
   return <>
-    <h1>Подключения магазина</h1><p className="notice">Сайт принимает только заявки. Все способы оплаты убраны из оформления; платёжные ссылки, чеки и отправления для новых заявок автоматически не создаются.</p>
+    <h1>Подключения магазина</h1><p className="notice">Сайт принимает только заявки. Все способы оплаты убраны из оформления; платёжные ссылки и чеки для новых заявок не создаются. Отправления выбранной Ozon Доставки создаются автоматически, а при удалении заявки запрашивается их отмена.</p>
     <p><Link className="text-link" href="/account/marketplaces/">Подключить Ozon / Wildberries и синхронизировать товары →</Link></p>
     {params.result && messages[params.result] && <p role="status" className="content-card">{messages[params.result]}</p>}
     <details className="content-card"><summary>Архивные платёжные интеграции — только для ранее созданных заказов</summary><p className="muted">Настройки и проверка старых обязательств сохранены. Даже включённая здесь интеграция не добавляет способы оплаты к новым заявкам.</p>

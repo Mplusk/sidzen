@@ -31,7 +31,10 @@ export const diagnosticEvents = {
   "checkout.price": ["checkout", "WARN", "Изменилась итоговая сумма заказа"],
   "checkout.changed": ["checkout", "WARN", "Заказ не создан: корзина или настройки изменились либо возникла ошибка сохранения"],
   "checkout.created": ["checkout", "INFO", "Заказ сохранён"],
-  "checkout.application": ["checkout", "INFO", "Заявка передана продавцу без оплаты и отправления"],
+  "checkout.application": ["checkout", "INFO", "Заявка передана продавцу без оплаты"],
+  "delivery.cancel.ok": ["delivery", "INFO", "Ozon подтвердил отмену отправлений удалённой заявки"],
+  "delivery.cancel.pending": ["delivery", "WARN", "Отмена отправлений Ozon запрошена, ожидается подтверждение"],
+  "delivery.cancel.failed": ["delivery", "ERROR", "Ozon не подтвердил отмену отправлений; задача сохранена для повтора"],
   "payment.create.failed": ["payment", "ERROR", "Не удалось получить платёжную ссылку Точки; заказ сохранён"],
   "payment.reconcile.failed": ["payment", "ERROR", "Не удалось сверить платёж с Точкой; проверка будет повторена"],
   "fiscal.failed": ["fiscal", "ERROR", "Ошибка отправки или сверки чека CloudKassir"],
@@ -47,8 +50,8 @@ export const diagnosticEvents = {
   "server.failed": ["server", "ERROR", "Необработанная серверная ошибка сайта"],
 } as const;
 export type DiagnosticCode = keyof typeof diagnosticEvents;
-export type DiagnosticDetails = { durationMs?: number; carrierCostKopecks?: number; expectedCarrierCostKopecks?: number; attempts?: number; provider?: "vk" | "google" | "yandex" | "ozon" | "wb"; stage?: "quote" | "verify" | "consent" | "recheck" | "shipment" | "status" | "points"; reason?: string };
-const safeReasons = ["expired", "signature", "cart", "config", "phone", "credentials", "transport", "rate", "recipient", "packaging", "point", "parcels", "unavailable", "response", "provider", "disabled", "method", "pagination", "unpaid", "cancel-review", "partial", "redirect", "social-expired", "social-canceled", "social-operator", "social-conflict", "social-link-session", "social-disabled", "social-failed", "provider-rejected", "temporary", "uncertain-submission", "provider-status"];
+export type DiagnosticDetails = { durationMs?: number; carrierCostKopecks?: number; expectedCarrierCostKopecks?: number; attempts?: number; provider?: "vk" | "google" | "yandex" | "ozon" | "wb"; stage?: "quote" | "verify" | "consent" | "recheck" | "shipment" | "status" | "points" | "cancel"; reason?: string };
+const safeReasons = ["expired", "signature", "cart", "config", "phone", "credentials", "transport", "rate", "recipient", "packaging", "point", "parcels", "unavailable", "response", "provider", "disabled", "method", "pagination", "unpaid", "cancel-review", "partial", "redirect", "social-expired", "social-canceled", "social-operator", "social-conflict", "social-link-session", "social-disabled", "social-failed", "provider-rejected", "temporary", "uncertain-submission", "provider-status", "already-delivered", "cancel-pending"];
 export function safeDiagnosticDetails(input: DiagnosticDetails = {}): Record<string, string | number> {
   const result: Record<string, string | number> = {};
   for (const key of ["durationMs", "carrierCostKopecks", "expectedCarrierCostKopecks", "attempts"] as const) {
@@ -56,7 +59,7 @@ export function safeDiagnosticDetails(input: DiagnosticDetails = {}): Record<str
     if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= 1_000_000_000) result[key] = value;
   }
   if (["vk", "google", "yandex", "ozon", "wb"].includes(input.provider ?? "")) result.provider = input.provider!;
-  if (["quote", "verify", "consent", "recheck", "shipment", "status", "points"].includes(input.stage ?? "")) result.stage = input.stage!;
+  if (["quote", "verify", "consent", "recheck", "shipment", "status", "points", "cancel"].includes(input.stage ?? "")) result.stage = input.stage!;
   if (safeReasons.includes(input.reason ?? "")) result.reason = input.reason!;
   return result;
 }

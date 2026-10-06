@@ -649,10 +649,13 @@ model OzonDeliveryJob {
   lockedUntil    DateTime?
   lockToken      String?
   nextAttemptAt  DateTime  @default(now())
+  cancelRequestedAt DateTime?
+  cancelError    String?
   updatedAt      DateTime  @updatedAt
   shipment       Shipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
 
   @@index([status, nextAttemptAt])
+  @@index([cancelRequestedAt, nextAttemptAt])
 }
 
 model OzonDeliveryPoint {

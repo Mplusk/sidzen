@@ -1,16 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ find: vi.fn(), claim: vi.fn(), transaction: vi.fn(), shipment: vi.fn(), config: vi.fn(), json: vi.fn(), privacy: vi.fn() }));
+const mocks = vi.hoisted(() => ({ find: vi.fn(), claim: vi.fn(), transaction: vi.fn(), shipment: vi.fn(), config: vi.fn(), json: vi.fn(), call: vi.fn(), privacy: vi.fn() }));
+vi.mock("@/lib/diagnostics", () => ({ writeDiagnostic: vi.fn() }));
 vi.mock("@/lib/privacy", () => ({ operatorReady: mocks.privacy }));
 vi.mock("@/lib/prisma", () => ({ prisma: { ozonDeliveryJob: { findFirst: mocks.find, updateMany: mocks.claim }, $transaction: mocks.transaction } }));
 vi.mock("./ozon-config", () => ({ getOzonDeliveryConfig: mocks.config }));
 vi.mock("./ozon-client", async importOriginal => {
   const original = await importOriginal<typeof import("./ozon-client")>();
-  return { ...original, OzonDeliveryClient: class { json = mocks.json; } };
+  return { ...original, OzonDeliveryClient: class { json = mocks.json; call = mocks.call; } };
 });
-import { processOzonJob, refreshOzonJob } from "./ozon-worker";
+import { cancelOzonJob, processOzonJob, refreshOzonJob } from "./ozon-worker";
 
-const fixture = () => ({ id: "job-1", shipmentId: "shipment-1", clientId: "app", status: "PENDING", attempts: 0, idempotencyKey: "00000000-0000-4000-8000-000000000001", request: { postings: [{ request_id: 1 }, { request_id: 2 }] }, response: null as unknown, shipment: { order: { status: "AWAITING_PAYMENT", payment: { status: "PAID" } } } });
+const fixture = () => ({ id: "job-1", shipmentId: "shipment-1", clientId: "app", status: "PENDING", attempts: 0, cancelRequestedAt: null as Date | null, idempotencyKey: "00000000-0000-4000-8000-000000000001", request: { postings: [{ request_id: 1 }, { request_id: 2 }] }, response: null as unknown, shipment: { order: { kind: "ORDER", status: "AWAITING_PAYMENT", payment: { status: "PAID" } as { status: string } | null } } });
 describe("Ozon delivery outbox", () => {
   beforeEach(() => {
     vi.resetAllMocks(); mocks.find.mockResolvedValue(fixture()); mocks.claim.mockResolvedValue({ count: 1 });
@@ -18,6 +19,7 @@ describe("Ozon delivery outbox", () => {
     mocks.config.mockResolvedValue({ clientId: "app", clientSecret: "synthetic-secret" });
     mocks.transaction.mockImplementation(callback => callback({ ozonDeliveryJob: { updateMany: mocks.claim }, shipment: { update: mocks.shipment } }));
     mocks.json.mockResolvedValue({ order_number: "test-only", postings: [{ request_id: 1, posting_number: "p1" }, { request_id: 2, posting_number: "p2" }] });
+    mocks.call.mockResolvedValue(new Response(null));
   });
   it("does not claim or transmit existing pending jobs without Russian storage and operator readiness", async () => {
     mocks.privacy.mockResolvedValue(false);
@@ -37,7 +39,7 @@ describe("Ozon delivery outbox", () => {
     expect(mocks.shipment).toHaveBeenCalledWith({ where: { id: job.shipmentId }, data: { tracking: "p1, p2" } });
   });
   it("does not send unpaid orders, despite a manual button press", async () => {
-    const job = fixture(); job.shipment.order.payment.status = "PENDING"; mocks.find.mockResolvedValue(job);
+    const job = fixture(); job.shipment.order.payment!.status = "PENDING"; mocks.find.mockResolvedValue(job);
     await processOzonJob(job.id);
     expect(mocks.json).not.toHaveBeenCalled();
     expect(mocks.claim).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ error: "unpaid" }) }));
@@ -69,5 +71,47 @@ describe("Ozon delivery outbox", () => {
   it("does not send when another worker owns the lease or credentials changed", async () => {
     mocks.claim.mockResolvedValueOnce({ count: 0 }); await processOzonJob(); expect(mocks.json).not.toHaveBeenCalled();
     mocks.config.mockResolvedValue({ clientId: "another-app", clientSecret: "secret" }); await processOzonJob(); expect(mocks.json).not.toHaveBeenCalled();
+  });
+  it("creates new contact applications without requiring a payment", async () => {
+    const job = fixture(); job.shipment.order.kind = "APPLICATION"; job.shipment.order.status = "NEW"; job.shipment.order.payment = null; mocks.find.mockResolvedValue(job);
+    await processOzonJob(); expect(mocks.json).toHaveBeenCalledWith("/v1/order/create", job.request, { "Idempotency-Key": job.idempotencyKey });
+    expect(mocks.find.mock.calls[0][0].where.cancelRequestedAt).toBeNull();
+    expect(mocks.claim.mock.calls[0][0].where.cancelRequestedAt).toBeNull();
+  });
+  it("does not create an unsent order merely to cancel it", async () => {
+    await cancelOzonJob("job-1"); expect(mocks.json).not.toHaveBeenCalled(); expect(mocks.call).not.toHaveBeenCalled();
+    expect(mocks.claim).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "CANCELED", cancelError: null }) }));
+  });
+  it("cancels every known parcel and requires confirmed remote statuses", async () => {
+    const job = fixture(); job.status = "CREATED"; job.attempts = 1; job.response = { order_number: "test-only", postings: [{ request_id: 1, posting_number: "p1" }, { request_id: 2, posting_number: "p2" }] }; mocks.find.mockResolvedValue(job);
+    const status = (value: string) => ({ postings: ["p1", "p2"].map(posting_number => ({ posting_number, status: value, status_changed_at: "2030-01-01T12:00:00Z" })) });
+    mocks.json.mockResolvedValueOnce(status("created")).mockResolvedValueOnce(status("canceled"));
+    await cancelOzonJob(); expect(mocks.call.mock.calls.map(call => call[1].posting_number)).toEqual(["p1", "p2"]);
+    expect(mocks.claim).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "CANCELED", cancelError: null }) }));
+  });
+  it("keeps cancellation pending if Ozon accepts a request but does not confirm", async () => {
+    const job = fixture(); job.status = "CREATED"; job.attempts = 1; job.response = { order_number: "test-only", postings: [{ request_id: 1, posting_number: "p1" }, { request_id: 2, posting_number: "p2" }] }; mocks.find.mockResolvedValue(job);
+    mocks.json.mockResolvedValue({ postings: ["p1", "p2"].map(posting_number => ({ posting_number, status: "created", status_changed_at: "2030-01-01T12:00:00Z" })) });
+    await cancelOzonJob(); expect(mocks.claim).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "CREATED", cancelError: "cancel-pending" }) }));
+  });
+  it("reconciles ambiguous creation with the original idempotency key before canceling", async () => {
+    const job = fixture(); job.attempts = 1; mocks.find.mockResolvedValue(job);
+    mocks.json.mockResolvedValueOnce({ order_number: "test-only", postings: [{ request_id: 1, posting_number: "p1" }, { request_id: 2, posting_number: "p2" }] }).mockResolvedValue({ postings: ["p1", "p2"].map(posting_number => ({ posting_number, status: "canceled", status_changed_at: "2030-01-01T12:00:00Z" })) });
+    await cancelOzonJob(); expect(mocks.json).toHaveBeenNthCalledWith(1, "/v1/order/create", job.request, { "Idempotency-Key": job.idempotencyKey });
+    expect(mocks.call).not.toHaveBeenCalled(); expect(mocks.claim).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "CANCELED" }) }));
+  });
+  it("never declares partial creation fully canceled or calls cancel without all parcel identities", async () => {
+    const job = fixture(); job.attempts = 1; job.status = "REVIEW"; mocks.find.mockResolvedValue(job);
+    mocks.json.mockResolvedValue({ order_number: "test-only", postings: [{ request_id: 1, posting_number: "p1" }] });
+    await cancelOzonJob(); expect(mocks.call).not.toHaveBeenCalled(); expect(mocks.claim).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ cancelError: "partial" }) }));
+  });
+  it("retains cancellation intent on provider errors and never cancels delivered parcels", async () => {
+    const job = fixture(); job.status = "CREATED"; job.attempts = 1; job.response = { order_number: "test-only", postings: [{ request_id: 1, posting_number: "p1" }, { request_id: 2, posting_number: "p2" }] }; mocks.find.mockResolvedValue(job);
+    mocks.json.mockRejectedValueOnce(new Error("synthetic-network")); await cancelOzonJob(); expect(mocks.claim).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ cancelError: "provider" }) }));
+    mocks.json.mockResolvedValue({ postings: ["p1", "p2"].map(posting_number => ({ posting_number, status: "delivered", status_changed_at: "2030-01-01T12:00:00Z" })) });
+    await cancelOzonJob(); expect(mocks.call).not.toHaveBeenCalled(); expect(mocks.claim).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ cancelError: "already-delivered" }) }));
+  });
+  it("does not overlap an in-flight creation or erase its lease during cancellation", async () => {
+    mocks.claim.mockResolvedValueOnce({ count: 0 }); expect(await cancelOzonJob()).toBe(false); expect(mocks.json).not.toHaveBeenCalled();
   });
 });

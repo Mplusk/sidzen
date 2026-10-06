@@ -77,6 +77,9 @@ try {
   status.set("purchaseConfirmed", "on"); assert.match((await request(path, status, staff)).headers.get("location")!, /saved=1/);
   assert.equal(await prisma.order.count({ where: purchasedProductWhere(owner.id, productId) }), 1);
   assert.equal(await prisma.payment.count({ where: { orderId: order.id } }), 0); assert.equal(await prisma.fiscalReceipt.count({ where: { orderId: order.id } }), 0);
+  // Synthetic outbox: deletion must durably request cancellation, never invoke
+  // a carrier from the HTTP action or erase its reconciliation history.
+  const ozonJob = await prisma.ozonDeliveryJob.create({ data: { shipmentId: order.shipment!.id, clientId: "qa-only", request: { postings: [{ request_id: 1 }] }, status: "CREATED", attempts: 1, response: { order_number: "qa-only", postings: [{ request_id: 1, posting_number: "qa-only-posting" }] } } });
   const deletion = actionForm(markup, "Да, удалить заказ"); deletion.set("confirmation", "wrong-order");
   assert.match((await request(path, deletion, staff)).headers.get("location")!, /confirmation/);
   deletion.set("confirmation", number);
@@ -84,6 +87,9 @@ try {
   assert((await request(path, deletion, staff, "https://foreign.invalid")).status >= 400);
   assert.match((await request(path, deletion, staff)).headers.get("location")!, /deleted=/);
   assert((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).deletedAt);
+  assert((await prisma.ozonDeliveryJob.findUniqueOrThrow({ where: { id: ozonJob.id } })).cancelRequestedAt);
+  assert.equal((await prisma.ozonDeliveryJob.findUniqueOrThrow({ where: { id: ozonJob.id } })).status, "CREATED", "No premature remote cancellation success");
+  assert((await (await request(path, undefined, staff)).text()).includes("Отмена запрошена"));
   assert(!(await (await request("/admin/orders/", undefined, staff)).text()).includes(number));
   assert((await (await request("/admin/orders/?view=deleted", undefined, staff)).text()).includes(number));
   assert(!(await (await request("/account/orders/", undefined, buyer)).text()).includes(number));
@@ -99,7 +105,7 @@ try {
   const guestResponse = await request("/checkout/", guestForm), guestLocation = guestResponse.headers.get("location")!; assert(guestLocation.includes("/checkout/success/"));
   const guestOrder = await prisma.order.findUniqueOrThrow({ where: { number: guestLocation.split("/")[3] } }); orderIds.push(guestOrder.id);
   assert.equal(guestOrder.userId, null); assert.equal((await request(guestLocation)).status, 200); assert.equal((await request(guestLocation, undefined, other)).status, 404);
-  console.log("PASS applications HTTP: buyer/guest contact requests, no payment / receipts / delivery jobs, forged/stale payment ignored, validation / price / CSRF / duplicate protection, manual statuses / purchase attestation, scoped access, confirmed archival / retained audit, active and deleted lists. No external APIs.");
+  console.log("PASS applications HTTP: buyer/guest contact requests without payments/receipts, custom delivery without carrier calls, forged/stale payment ignored, validation / price / CSRF / duplicate protection, manual statuses / purchase attestation, scoped access, confirmed archival with durable Ozon cancellation intent / retained history, active and deleted lists. No external APIs.");
 } finally {
   await prisma.auditLog.deleteMany({ where: { entityId: { in: orderIds } } });
   await prisma.order.deleteMany({ where: { id: { in: orderIds } } });

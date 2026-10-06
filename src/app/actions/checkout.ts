@@ -17,6 +17,7 @@ import { deliveryTotals } from "@/lib/delivery/pricing";
 import { revalidatePath } from "next/cache";
 import { writeDiagnostic } from "@/lib/diagnostics";
 import { ozonDiagnosticCode, type DiagnosticCode } from "@/lib/diagnostic-events";
+import { ozonCreateBody } from "@/lib/delivery/ozon-worker";
 
 export async function createOrderAction(formData: FormData) {
   if (!await operatorReady()) redirect("/checkout/?error=operator");
@@ -86,9 +87,9 @@ export async function createOrderAction(formData: FormData) {
         shippingAddress: ozonQuote ? ozonQuote.address : parsed.data.delivery === "pickup" ? "Самовывоз по согласованию" : `${parsed.data.postalCode ? `${parsed.data.postalCode}, ` : ""}${parsed.data.city}, ${parsed.data.address}`,
         customerComment: parsed.data.comment || undefined, subtotal, deliveryPrice, total,
         items: { create: cart.items.map((item) => ({ productId: item.productId, productName: item.product!.name, sku: item.product!.sku, quantity: item.quantity, unitPrice: item.unitPrice, totalPrice: item.unitPrice * item.quantity, configuration: item.quote!.config, materialId: item.quote!.materialId, colorId: item.quote!.colorId, qualityProfileId: item.quote!.qualityProfileId })) },
-        // A preference, not an instruction to a carrier. No payment, fiscal
-        // receipt or delivery job may be created by submitting an application.
-        shipment: { create: { provider: deliveryMethod.code, method: deliveryMethod.name, cost: carrierCost, ...(ozonQuote ? { payload: { pointId: ozonQuote.request.delivery.delivery_point.delivery_point_id, address: ozonQuote.address, estimatedDays: ozonQuote.days } } : {}) } },
+        // Persist the carrier outbox atomically with the application. Retries
+        // reuse this immutable body/key; no payment or receipt is created.
+        shipment: { create: { provider: deliveryMethod.code, method: deliveryMethod.name, cost: carrierCost, ...(ozonQuote ? { payload: { pointId: ozonQuote.request.delivery.delivery_point.delivery_point_id, address: ozonQuote.address, estimatedDays: ozonQuote.days }, ozonJob: { create: { clientId: (await getOzonDeliveryConfig(tx)).clientId, request: ozonCreateBody(ozonQuote.request, number, parsed.data.name, cart.items.flatMap(item => Array.from({ length: item.quantity }, () => item.product!.name))) } } } : {}) } },
         notifications: { create: { channel: "email", recipient: parsed.data.email, template: "order-confirmation", status: "PENDING" } },
       } });
       await tx.auditLog.create({ data: { actorId: user?.id, action: "order.application.create", entityType: "Order", entityId: created.id, after: { version: CONSENT_VERSION, privacyNoticeVersion: CONSENT_VERSION, delivery: deliveryMethod.code, flow: "contact-request" } } });

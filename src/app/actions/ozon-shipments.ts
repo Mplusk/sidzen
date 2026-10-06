@@ -8,8 +8,22 @@ import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { getOzonDeliveryConfig } from "@/lib/delivery/ozon-config";
 import { OzonDeliveryClient } from "@/lib/delivery/ozon-client";
-import { processOzonJob, refreshOzonJob } from "@/lib/delivery/ozon-worker";
+import { cancelOzonJob, processOzonJob, refreshOzonJob } from "@/lib/delivery/ozon-worker";
 import { operatorReady } from "@/lib/privacy";
+import { queueExistingOzonApplication } from "@/lib/delivery/ozon-applications";
+
+export async function queueApplicationDelivery(form: FormData) {
+  const user = await requirePermission("orders.write");
+  const orderId = z.string().min(1).max(100).parse(form.get("orderId"));
+  const order = await prisma.order.findUnique({ where: { id: orderId }, select: { number: true } });
+  if (!order) redirect("/admin/orders/");
+  const path = `/admin/orders/${order.number}/`;
+  if (!rateLimit(`ozon-shipment:${user.id}`, 20, 60000).allowed) redirect(`${path}?delivery=error`);
+  let success = false;
+  try { await queueExistingOzonApplication(orderId, user.id); success = true; } catch { success = false; }
+  revalidatePath(path);
+  redirect(`${path}?delivery=${success ? "updated" : "error"}`);
+}
 
 export async function manageOzonShipment(form: FormData) {
   const user = await requirePermission("orders.write");
@@ -21,7 +35,9 @@ export async function manageOzonShipment(form: FormData) {
   if (!rateLimit(`ozon-shipment:${user.id}`, 20, 60000).allowed) redirect(`${path}?delivery=error`);
   let success = false;
   try {
-    if (intent === "create") success = await processOzonJob(job.id);
+    if (intent === "cancel-status") success = await cancelOzonJob(job.id);
+    else if (job.cancelRequestedAt || (job.shipment.order.deletedAt && intent !== "status")) throw new Error("cancellation-requested");
+    else if (intent === "create") success = await processOzonJob(job.id);
     else if (intent === "status") success = await refreshOzonJob(job.id);
     else if (intent === "cancel-pending") {
       if (form.get("confirmation") !== job.shipment.order.number) throw new Error("confirmation");

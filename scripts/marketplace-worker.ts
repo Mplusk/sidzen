@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { prisma } from "../src/lib/prisma";
 import { claimRun, processRun } from "../src/lib/marketplaces/sync";
 import { catalogInvalidationToken } from "../src/lib/marketplaces/cache-token";
-import { processOzonJob, refreshOzonJob, syncOzonPointsPage } from "../src/lib/delivery/ozon-worker";
+import { cancelOzonJob, processOzonJob, refreshOzonJob, syncOzonPointsPage } from "../src/lib/delivery/ozon-worker";
 import { pruneTransientPersonalData } from "../src/lib/privacy-maintenance";
 import { reconcileTochkaPayments } from "../src/lib/payments";
 import { processFiscalReceipt } from "../src/lib/cloudkassir/worker";
@@ -58,6 +58,7 @@ try {
         } catch { await writeDiagnostic("worker.cache"); }
         console.log("Marketplace job processed", run.id);
       }
+      await cancelOzonJob();
       await processOzonJob();
       await refreshOzonJob();
       await syncOzonPointsPage();
