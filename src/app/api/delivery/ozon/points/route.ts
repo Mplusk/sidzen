@@ -4,7 +4,7 @@ import { getOzonDeliveryConfig } from "@/lib/delivery/ozon-config";
 import { OzonDeliveryClient } from "@/lib/delivery/ozon-client";
 import { hasPointCoordinates } from "@/lib/delivery/points";
 import type { PickupPoint } from "@/lib/delivery/points";
-import { pointSearchTerms } from "@/lib/delivery/point-search";
+import { pointSearchTerms, pointSearchPattern } from "@/lib/delivery/point-search";
 import { Prisma } from "@prisma/client";
 
 export async function GET(request: Request) {
@@ -21,10 +21,16 @@ export async function GET(request: Request) {
   // All values are bound parameters. Do not interpolate user input as SQL.
   // Explicit Cyrillic folding also works in databases created with a C locale.
   const rows = await prisma.$queryRaw<PickupPoint[]>(Prisma.sql`
-    SELECT "id", "name", "address", "type", "latitude", "longitude" FROM "OzonDeliveryPoint"
-    WHERE "clientId" = ${config.clientId} AND "methodId" = ${BigInt(config.shipmentMethodId)} AND "active" = true
-      AND ${Prisma.join(terms.map(term => Prisma.sql`translate(lower("address"), 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯё', 'абвгдеежзийклмнопрстуфхцчшщъыьэюяе') LIKE ${`%${term}%`}`), " AND ")}
-    ORDER BY "address" ASC LIMIT ${limit + 1}
+    WITH directory AS (
+      SELECT *, translate(lower("address"), 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯё', 'абвгдеежзийклмнопрстуфхцчшщъыьэюяе') AS normalized
+      FROM "OzonDeliveryPoint"
+      WHERE "clientId" = ${config.clientId} AND "methodId" = ${BigInt(config.shipmentMethodId)} AND "active" = true
+    )
+    SELECT "id", "name", "address", "type", "latitude", "longitude" FROM directory
+    WHERE ${Prisma.join(terms.map(term => Prisma.sql`normalized ~ ${pointSearchPattern(term)}`), " AND ")}
+    ORDER BY (${Prisma.join(terms.map(term => Prisma.sql`CASE WHEN normalized ~ ${pointSearchPattern(term, true)} THEN 0 ELSE 1 END`), " + ")}) ASC,
+      (${Prisma.join(terms.map(term => Prisma.sql`strpos(normalized, ${term})`), " + ")}) ASC, "address" ASC, "id" ASC
+    LIMIT ${limit + 1}
   `);
   const points = rows.slice(0, limit);
   const inactive = new Set<string>();

@@ -8,5 +8,5 @@ const nav = [["Дашборд", "/admin/"], ["Заявки и заказы", "/a
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requirePermission(PERMISSIONS.dashboardView);
-  return <div className="admin-shell"><aside className="admin-sidebar"><Logo inverse /><CollapsibleNavigation label="Разделы управления магазином">{nav.map(([label, href]) => <Link href={href} key={href}>{label}</Link>)}</CollapsibleNavigation><div className="admin-sidebar__bottom"><strong>{user.name ?? user.email}</strong><br /><span>{user.roles.join(", ")}</span><br /><Link href="/account/">В личный кабинет</Link></div></aside><section className="admin-main">{children}</section></div>;
+  return <div className="admin-shell"><aside className="admin-sidebar"><Logo inverse /><CollapsibleNavigation label="Разделы управления магазином">{nav.map(([label, href]) => <Link href={href} key={href}>{label}</Link>)}{(user.permissions.has(PERMISSIONS.customersRead) || user.roles.includes("superadmin")) && <Link href="/account/clients/">Клиенты</Link>}</CollapsibleNavigation><div className="admin-sidebar__bottom"><strong>{user.name ?? user.email}</strong><br /><span>{user.roles.join(", ")}</span><br /><Link href="/account/">В личный кабинет</Link></div></aside><section className="admin-main">{children}</section></div>;
 }

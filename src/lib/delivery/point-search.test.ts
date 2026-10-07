@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pointSearchTerms } from "./point-search";
+import { pointSearchTerms, pointSearchPattern } from "./point-search";
 describe("pickup address search terms", () => {
   it("accepts partial words, arbitrary word order and separators in house numbers", () => {
     expect(pointSearchTerms("Омск, Бульварная 20/2")).toEqual(["омск", "бульварная", "20", "2"]);
@@ -12,5 +12,10 @@ describe("pickup address search terms", () => {
     expect(pointSearchTerms("%__'")).toEqual([]);
     expect(pointSearchTerms("а б")).toEqual([]);
     expect(pointSearchTerms(Array.from({ length: 13 }, (_, i) => `слово${i}`).join(" "))).toEqual([]);
+  });
+  it("matches word prefixes, not embedded city names, and whole house numbers", () => {
+    expect(pointSearchPattern("омск")).toBe("(^|[^[:alnum:]а-я])омск");
+    expect(pointSearchPattern("гагар", true)).toBe("(^|[^[:alnum:]а-я])гагар([^[:alnum:]а-я]|$)");
+    expect(pointSearchPattern("20")).toBe("(^|[^[:alnum:]а-я])20([^0-9]|$)");
   });
 });

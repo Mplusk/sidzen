@@ -77,6 +77,7 @@ jobs:
           pnpm exec tsx scripts/smoke-product-card-http.ts
           pnpm exec tsx scripts/smoke-product-groups-http.ts
           pnpm exec tsx scripts/smoke-product-bulk-http.ts
+          pnpm exec tsx scripts/smoke-clients-http.ts
           pnpm exec tsx scripts/smoke-ozon-delivery-http.ts
           pnpm exec tsx scripts/smoke-integrations.mjs
           pnpm exec tsx scripts/smoke-cloudkassir-http.ts

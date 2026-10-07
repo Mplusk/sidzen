@@ -31,7 +31,7 @@ const operatorKeys = ["legal.seller", "legal.address", "contacts.email"];
 const oldOperator = await prisma.siteSetting.findMany({ where: { key: { in: operatorKeys } } });
 const oldDeliveryAuditIds = (await prisma.auditLog.findMany({ where: { entityType: "DeliveryMethod" }, select: { id: true } })).map(row => row.id);
 const pointId = "9100000001";
-const extraPointIds = ["9100000002", "9100000003"];
+const extraPointIds = ["9100000002", "9100000003", "9100000004", "9100000005", "9100000006"];
 let productId: string | undefined, cartId: string | undefined;
 let fixtureOrderId: string | undefined;
 let deletedCarrier: { id: string; active: boolean; deletedAt: Date | null } | undefined;
@@ -107,6 +107,9 @@ try {
   await prisma.ozonDeliveryPoint.createMany({ data: [
     { id: extraPointIds[0], name: "QA ПВЗ", address: "Россия, Орёл, улица Берёзовая, 20/2", type: "pvz", active: true, clientId: config.clientId, methodId: 7n, generation: "qa-only" },
     { id: extraPointIds[1], name: "QA другой магазин", address: "Москва, QA улица, 1", type: "pvz", active: true, clientId: "different-fixture-client", methodId: 7n, generation: "qa-only" },
+    { id: extraPointIds[2], name: "QA ПВЗ", address: "Россия, Томск, улица Гагарина, 2", type: "pvz", active: true, clientId: config.clientId, methodId: 7n, generation: "qa-only" },
+    { id: extraPointIds[3], name: "QA ПВЗ", address: "Россия, Омск, улица Бульварная, 20", type: "pvz", active: true, clientId: config.clientId, methodId: 7n, generation: "qa-only" },
+    { id: extraPointIds[4], name: "QA ПВЗ", address: "Россия, Адыгея Республика, Тахтамукайский Район, Яблоновский, улица Гагарина, 190/2", type: "pvz", active: true, clientId: config.clientId, methodId: 7n, generation: "qa-only" },
   ] });
   const points = await request("/api/delivery/ozon/points/?q=Москва", undefined, false);
   assert.match(points.headers.get("cache-control") || "", /no-store/);
@@ -118,6 +121,14 @@ try {
   const suggestions = await (await request(`/api/delivery/ozon/points/?q=${encodeURIComponent("берез орел 20/2")}&view=suggest`, undefined, false)).json();
   assert.deepEqual(suggestions.points.map((point: { id: string }) => point.id), [extraPointIds[0]], "ё must match е in actual PostgreSQL searches");
   assert.equal(suggestions.points[0].latitude, null, "Suggestions must not call provider for coordinate hydration");
+  for (const query of ["Яблоновский Гагарина", "гагар яблон", "ЯБЛОНОВСКИЙ, гагарина 190/2"]) {
+    const result = await (await request(`/api/delivery/ozon/points/?q=${encodeURIComponent(query)}&view=suggest`, undefined, false)).json();
+    assert.deepEqual(result.points.map((point: { id: string }) => point.id), [extraPointIds[4]], "Real address structure must match separate city and street words");
+  }
+  const omsk = await (await request(`/api/delivery/ozon/points/?q=${encodeURIComponent("Омск")}&view=suggest`, undefined, false)).json();
+  assert.deepEqual(omsk.points.map((point: { id: string }) => point.id), [extraPointIds[3]], "Омск must not match Томск");
+  const wrongHouse = await (await request(`/api/delivery/ozon/points/?q=${encodeURIComponent("Яблоновский 19")}&view=suggest`, undefined, false)).json();
+  assert.deepEqual(wrongHouse.points, [], "House 19 must not match 190");
   const prefix = `qa-delivery-${randomUUID().slice(0, 8)}`;
   const product = await prisma.product.create({ data: { name: "QA Delivery Product", slug: prefix, sku: prefix, type: "READY", status: "PUBLISHED", stock: 10, madeToOrder: false, basePrice: 240, shippingWeightG: 100, shippingLengthMm: 200, shippingWidthMm: 100, shippingHeightMm: 50 } }); productId = product.id;
   const edit = await (await request(`/admin/products/${product.id}/`)).text();
