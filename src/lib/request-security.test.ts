@@ -23,4 +23,10 @@ describe("hasTrustedOrigin", () => {
     expect(hasTrustedOrigin(foreign)).toBe(false);
     expect(hasTrustedOrigin(insecure)).toBe(false);
   });
+
+  it("accepts same-host SIDZEN requests without trusting cross-domain posts", () => {
+    Object.assign(process.env, { NODE_ENV: "production" });
+    expect(hasTrustedOrigin(new Request("http://app/api/delivery/ozon/points", { headers: { origin: "https://sidzen.shop", "x-forwarded-host": "sidzen.shop", host: "app:3000" } }))).toBe(true);
+    expect(hasTrustedOrigin(new Request("http://app/api/delivery/ozon/points", { headers: { origin: "https://3dprinta.shop", "x-forwarded-host": "sidzen.shop", host: "app:3000" } }))).toBe(false);
+  });
 });

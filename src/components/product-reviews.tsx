@@ -2,11 +2,13 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { operatorReady } from "@/lib/privacy";
-import { publicReviewWhere, purchasedProductWhere, reviewPage, reviewStatusLabel } from "@/lib/reviews";
+import { purchasedProductWhere, reviewPage, reviewStatusLabel } from "@/lib/reviews";
+import { requestPublicReviewWhere } from "@/lib/review-visibility";
 import { ReviewCard } from "@/components/review-card";
 import { ReviewForm } from "@/components/review-form";
 
 export async function ProductReviews({ productId, path, total, rating, requestedPage }: { productId: string; path: string; total: number; rating: number; requestedPage?: string }) {
+  const publicReviewWhere = await requestPublicReviewWhere();
   const user = await getCurrentUser(), { page, pages } = reviewPage(requestedPage, total);
   const [reviews, own, purchase, ready] = await Promise.all([
     prisma.review.findMany({ where: { productId, ...publicReviewWhere }, select: { id: true, author: true, text: true, rating: true, createdAt: true, verifiedPurchase: true, images: { select: { id: true, width: true, height: true }, orderBy: { sortOrder: "asc" } } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: (page - 1) * 10, take: 10 }),

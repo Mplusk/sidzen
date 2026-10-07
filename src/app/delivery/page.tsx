@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { prisma } from "@/lib/prisma";
 import { getOzonDeliveryConfig } from "@/lib/delivery/ozon-config";
-export const metadata: Metadata = { title: "Доставка и заказ", description: "Доставка и оформление заявки в 3DPRINTA: продавец свяжется с вами для согласования.", alternates: { canonical: "/delivery/" } };
+export const metadata: Metadata = { title: "Доставка и заказ", description: "Доставка и оформление заявки в SIDZEN: продавец свяжется с вами для согласования.", alternates: { canonical: "/delivery/" } };
 export default async function DeliveryPage() {
   const methods = await prisma.deliveryMethod.findMany({ where: { active: true, deletedAt: null }, orderBy: { sortOrder: "asc" } });
   const ozon = await getOzonDeliveryConfig();

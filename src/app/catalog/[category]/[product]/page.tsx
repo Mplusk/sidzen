@@ -14,7 +14,7 @@ import { pluralRu } from "@/lib/format";
 import { productSpecificationRows } from "@/lib/product-specifications";
 import { TruckIcon } from "@/components/icons";
 import { ProductReviews } from "@/components/product-reviews";
-import { publicReviewWhere } from "@/lib/reviews";
+import { requestPublicReviewWhere } from "@/lib/review-visibility";
 import { ProductGroupOptions, type GroupOption } from "@/components/product-group-options";
 
 type Params = Promise<{ category: string; product: string }>;
@@ -59,6 +59,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
   const groupOptions: GroupOption[] = members.map(member => ({ id: member.id, name: member.name, label: member.groupLabel || member.sku, image: member.images[0]?.path ?? null, href: `/catalog/${member.categories[0].category.slug}/${member.slug}/` }));
   const options = productOptions(product);
   const defaultPrice = priceProduct(options, defaultSelection(options)).unitPrice;
+  const publicReviewWhere = await requestPublicReviewWhere();
   const aggregate = await prisma.review.aggregate({ where: { productId: product.id, ...publicReviewWhere }, _avg: { rating: true }, _count: { _all: true } });
   const reviewCount = aggregate._count._all, rating = aggregate._avg.rating ?? 0;
   const query = await searchParams;
@@ -69,7 +70,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
     image: product.images.map((item) => `https://3dprinta.shop${item.path}`),
     description: product.shortDescription,
     sku: product.sku,
-    brand: { "@type": "Brand", name: "3DPRINTA" },
+    brand: { "@type": "Brand", name: "SIDZEN" },
     offers: { "@type": "Offer", url: `https://3dprinta.shop/catalog/${category.slug}/${product.slug}/`, priceCurrency: "RUB", price: defaultPrice, availability: product.stock > 0 ? "https://schema.org/InStock" : product.madeToOrder ? "https://schema.org/PreOrder" : "https://schema.org/OutOfStock" },
     ...(reviewCount ? { aggregateRating: { "@type": "AggregateRating", ratingValue: rating.toFixed(1), reviewCount } } : {}),
   };

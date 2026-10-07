@@ -1,4 +1,4 @@
-3dprinta.shop {
+3dprinta.shop, sidzen.shop {
     encode zstd gzip
     request_body {
         max_size 105MB
@@ -9,4 +9,8 @@
 
 www.3dprinta.shop {
     redir https://3dprinta.shop{uri} permanent
+}
+
+www.sidzen.shop {
+    redir https://sidzen.shop{uri} permanent
 }

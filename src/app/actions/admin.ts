@@ -316,7 +316,7 @@ export async function createArticleAction(formData: FormData) {
   if (title.length < 5 || !rubricId) redirect("/admin/content/?error=article");
   const slug = slugify(String(formData.get("slug") ?? title));
   const excerpt = String(formData.get("excerpt") ?? "").trim();
-  const article = await prisma.article.create({ data: { title, slug, rubricId, excerpt, content: String(formData.get("content") ?? "").trim(), status: String(formData.get("status") ?? "DRAFT") as "DRAFT" | "REVIEW" | "PUBLISHED", h1: title, metaTitle: title, metaDescription: excerpt, authorName: user.name ?? "Команда 3DPRINTA", publishedAt: formData.get("status") === "PUBLISHED" ? new Date() : undefined } });
+  const article = await prisma.article.create({ data: { title, slug, rubricId, excerpt, content: String(formData.get("content") ?? "").trim(), status: String(formData.get("status") ?? "DRAFT") as "DRAFT" | "REVIEW" | "PUBLISHED", h1: title, metaTitle: title, metaDescription: excerpt, authorName: user.name ?? "Команда SIDZEN", publishedAt: formData.get("status") === "PUBLISHED" ? new Date() : undefined } });
   await writeAudit({ actorId: user.id, action: "article.create", entityType: "Article", entityId: article.id, after: { title, slug, status: article.status } });
   revalidatePath("/blog/");
   redirect("/admin/content/?saved=1");

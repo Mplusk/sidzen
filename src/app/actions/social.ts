@@ -11,11 +11,15 @@ import { rateLimit } from "@/lib/rate-limit";
 import { operatorReady, consentDocument, privacySubject } from "@/lib/privacy";
 import { encryptSecret } from "@/lib/integration-secrets";
 import { authorizationUrl } from "@/lib/social/client";
-import { configSchema, getSocialConfig, providerSchema, safeSocialReturn, settingKey, socialReady } from "@/lib/social/config";
+import { configSchema, getSocialConfig, providerSchema, safeSocialReturn, settingKey, socialReady, siteOrigin } from "@/lib/social/config";
+import { socialLoginHandoff } from "@/lib/storefront-domains";
 import { hash, pendingProfile, randomToken, registerSocial, SOCIAL_COOKIE, socialConsentText, SOCIAL_CONSENT_VERSION, socialCookieOptions } from "@/lib/social/flow";
 
 function fail(code: string): never { redirect(`/login/?error=${code}`); }
 export async function startSocialLogin(form: FormData) {
+  const requestHeaders = await headers();
+  const handoff = socialLoginHandoff(requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"), siteOrigin(), safeSocialReturn(form.get("returnTo")), form.get("intent") === "link");
+  if (handoff) redirect(handoff);
   const provider = providerSchema.safeParse(form.get("provider"));
   if (!provider.success) fail("social-unavailable");
   const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";

@@ -5,6 +5,7 @@ import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import sharp from "sharp";
 import { prisma } from "../src/lib/prisma";
+import { REVIEW_CONSENT_VERSION } from "../src/lib/reviews";
 
 const base = new URL(process.env.SMOKE_BASE_URL || "http://localhost:3101"), db = new URL(process.env.DATABASE_URL || "");
 assert(["localhost", "127.0.0.1"].includes(base.hostname) && ["localhost", "127.0.0.1"].includes(db.hostname) && db.pathname === "/shop_qa", "Disposable local shop_qa only");
@@ -62,6 +63,7 @@ try {
   assert(results.some(response => response.headers.get("location")?.includes("sent=1"))); assert(results.some(response => response.headers.get("location")?.includes("error=duplicate")));
   assert.equal(await prisma.review.count({ where: { productId, userId: owner.id } }), 1);
   const review = await prisma.review.findFirstOrThrow({ where: { productId, userId: owner.id }, include: { images: true, consent: true } }); reviewIds.push(review.id); photoFiles.push(...review.images.map(image => image.fileName));
+  assert.equal(review.consent?.version, REVIEW_CONSENT_VERSION);
   assert.equal(review.status, "PENDING"); assert.equal(review.approved, false); assert.equal(review.verifiedPurchase, true); assert.equal(review.images.length, 2); assert.equal(review.consent?.purpose, "review");
   assert(!((await (await request(productPath)).text()).includes("QA_PUBLIC_REVIEW_TEXT")));
   const photoPath = `/api/review-images/${review.images[0].id}/`;
@@ -74,6 +76,16 @@ try {
   const published = (await (await request(productPath)).text()).replace(/<!--[\s\S]*?-->/g, ""); assert(published.includes("QA_PUBLIC_REVIEW_TEXT") && published.includes("Товар куплен") && published.includes('"reviewCount":1'));
   for (const privateValue of [owner.email, "DO NOT PUBLISH FULL ACCOUNT NAME", "Private QA recipient", "private-name.jpg", review.images[0].fileName]) assert(!published.includes(privateValue));
   assert.equal((await request(photoPath)).status, 200);
+  // Alias requests hit the same disposable application/DB, not the real domain.
+  const aliasRequest = (target: string) => fetch(new URL(target, base), { headers: { Host: "sidzen.shop", "X-Forwarded-Host": "sidzen.shop" }, redirect: "manual" });
+  assert((await (await aliasRequest(productPath)).text()).includes("QA_PUBLIC_REVIEW_TEXT"));
+  assert.equal((await aliasRequest(photoPath)).status, 200);
+  assert(review.consentId);
+  await prisma.privacyConsent.update({ where: { id: review.consentId }, data: { version: "2026-10-06-reviews-v1" } });
+  assert(!((await (await aliasRequest(productPath)).text()).includes("QA_PUBLIC_REVIEW_TEXT")), "Single-domain consent must not publish on SIDZEN");
+  assert.equal((await aliasRequest(photoPath)).status, 404);
+  assert((await (await request(productPath)).text()).includes("QA_PUBLIC_REVIEW_TEXT"), "Old consent remains valid on its original domain");
+  await prisma.privacyConsent.update({ where: { id: review.consentId }, data: { version: REVIEW_CONSENT_VERSION } });
   // More than one page: aggregate must use all rows, not just latest ten.
   await prisma.review.createMany({ data: Array.from({ length: 10 }, (_, i) => ({ id: `${slug}-${i}`, productId, author: "QA historical", text: `QA_PAGE_${i}`, rating: 1, approved: true, status: "PUBLISHED" })) });
   const pageOne = await (await request(productPath)).text(), pageTwo = await (await request(`${productPath}?reviewsPage=2`)).text(); assert(pageOne.includes('"reviewCount":11') && pageOne.includes('"ratingValue":"1.4"')); assert(pageOne.includes("Следующие отзывы") && pageTwo.includes("Предыдущие отзывы"));

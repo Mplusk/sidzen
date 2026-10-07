@@ -13,5 +13,5 @@ it("uses a native momentum gallery, system typography and enlarged touch targets
   expect(css).not.toMatch(/font-size:\s*\d+(?:\.\d+)?px/);
   expect(css).toContain("@media (pointer: coarse)");
   expect(css).toContain(".gallery-dots button { flex-basis: 2.75rem");
-  expect(css).toContain(".button--outline:hover:not(:disabled) { color: var(--blue-dark); background: #edf2ff;");
+  expect(css).toContain(".button--outline:hover:not(:disabled) { color: var(--blue-dark); background: #eeeee5;");
 });

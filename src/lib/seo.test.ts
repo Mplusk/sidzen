@@ -5,6 +5,7 @@ describe("normalizePageTitle", () => {
   it("removes a stored brand suffix before the global title template", () => {
     expect(normalizePageTitle("Органайзер Axis | 3DPRINTA")).toBe("Органайзер Axis");
     expect(normalizePageTitle("Органайзеры — 3DPRINTA")).toBe("Органайзеры");
+    expect(normalizePageTitle("Органайзеры | SIDZEN")).toBe("Органайзеры");
   });
 
   it("keeps ordinary titles intact", () => {

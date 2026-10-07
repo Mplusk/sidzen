@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { getStoreContacts } from "@/lib/settings";
-export const metadata: Metadata = { title: "Контакты и реквизиты", description: "Контакты продавца и информация для покупателей 3DPRINTA.", alternates: { canonical: "/contacts/" } };
+export const metadata: Metadata = { title: "Контакты и реквизиты", description: "Контакты продавца и информация для покупателей SIDZEN.", alternates: { canonical: "/contacts/" } };
 export default async function ContactsPage() {
   const contacts = await getStoreContacts();
   return <div className="container prose-page"><Breadcrumbs items={[{ label: "Контакты", href: "/contacts/" }]} /><h1>Контакты и реквизиты</h1><p>По вопросам покупки укажите номер заказа. Информация о заказах доступна в <Link className="text-link" href="/account/orders/">личном кабинете</Link>.</p>
