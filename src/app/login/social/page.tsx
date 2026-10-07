@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/submit-button";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
@@ -20,7 +21,7 @@ export default async function SocialRegistration({ searchParams }: { searchParam
       <label className="field">Имя<input name="name" required minLength={2} maxLength={120} autoComplete="name" defaultValue={pending.profile.name} /></label>
       <label className="field">Email для связи<input name="email" type="email" required maxLength={254} autoComplete="email" defaultValue={pending.profile.email} /></label>
       <label className="field">Пароль магазина · необязательно<input name="password" type="password" minLength={10} maxLength={200} autoComplete="new-password" /><small>Позволяет войти без соцсети. Если оставить пустым, вход будет только через привязанный сервис.</small></label>
-      <AccountPrivacyConsent /><button type="submit" className="button">Создать кабинет</button>
+      <AccountPrivacyConsent /><SubmitButton className="button" pendingLabel="Создаём кабинет…">Создать кабинет</SubmitButton>
     </form><p><Link className="text-link" href="/login/?returnTo=%2Faccount%2Fprofile%2F">Уже есть кабинет? Войти и привязать аккаунт</Link></p><p className="muted">Данные этой попытки автоматически удаляются через 10 минут. Не завершайте регистрацию на общем устройстве за другого человека.</p>
   </div></div>;
 }

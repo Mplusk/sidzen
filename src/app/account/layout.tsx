@@ -1,4 +1,6 @@
-import Link from "next/link";
+import { NavLink as Link } from "@/components/nav-link";
+import { SubmitButton } from "@/components/submit-button";
+import { CollapsibleNavigation } from "@/components/collapsible-navigation";
 import { requireUser } from "@/lib/auth";
 import { logoutAction } from "@/app/actions/auth";
 
@@ -9,5 +11,5 @@ export default async function AccountLayout({ children }: { children: React.Reac
   const logsLink = (user.permissions.has("settings.write") || user.roles.includes("superadmin")) ? <Link href="/account/logs/">Логи</Link> : null;
   const reviewsLink = (user.permissions.has("content.write") || user.roles.includes("superadmin")) ? <Link href="/account/review-moderation/">Проверка отзывов</Link> : null;
   const applicationsLink = (user.permissions.has("orders.read") || user.roles.includes("superadmin")) ? <Link href="/admin/orders/">Заявки покупателей</Link> : null;
-  return <div className="container account-shell"><aside className="account-nav"><div style={{ padding: 18, borderBottom: "1px solid var(--line)" }}><strong>{user.name ?? "Покупатель"}</strong><br /><small className="muted">{user.email}</small></div>{links.map(([label, href]) => <Link href={href} key={href}>{label}</Link>)}{applicationsLink}{(user.permissions.has("settings.write") || user.roles.includes("superadmin")) && <><Link href="/account/integrations/">Подключения магазина</Link><Link href="/account/marketplaces/">Маркетплейсы</Link></>}{reviewsLink}{logsLink}{user.permissions.has("dashboard.view") && <Link href="/admin/">Кабинет управления</Link>}<form action={logoutAction}><button type="submit">Выйти</button></form></aside><section className="account-content">{children}</section></div>;
+  return <div className="container account-shell"><aside className="account-nav"><div className="account-nav__identity"><strong>{user.name ?? "Покупатель"}</strong><br /><small className="muted">{user.email}</small></div><CollapsibleNavigation label="Разделы личного кабинета">{links.map(([label, href]) => <Link href={href} key={href}>{label}</Link>)}{applicationsLink}{(user.permissions.has("settings.write") || user.roles.includes("superadmin")) && <><Link href="/account/integrations/">Подключения магазина</Link><Link href="/account/marketplaces/">Маркетплейсы</Link></>}{reviewsLink}{logsLink}{user.permissions.has("dashboard.view") && <Link href="/admin/">Кабинет управления</Link>}</CollapsibleNavigation><form action={logoutAction}><SubmitButton className="account-nav__logout" pendingLabel="Выходим…">Выйти</SubmitButton></form></aside><section className="account-content">{children}</section></div>;
 }

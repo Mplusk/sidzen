@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/submit-button";
 import Link from "next/link";
 import { AdminProductImages } from "@/components/admin-product-images";
 import { createProductAction, updateProductAction } from "@/app/actions/admin";
@@ -161,7 +162,7 @@ export function AdminProductForm({ options, product, error, canPublish = true }:
         <label className="field"><span>Дата публикации</span><input name="publishedAt" type="datetime-local" defaultValue={dateTimeValue(product?.publishedAt)} /></label>
       </div></section>
 
-      <div className="admin-form-actions admin-card--wide"><button className="button" type="submit">{isEdit ? "Сохранить товар" : "Создать товар"}</button><Link className="button button--outline" href="/admin/products/">Отмена</Link></div>
+      <div className="admin-form-actions admin-card--wide"><SubmitButton className="button" pendingLabel="Сохраняем…">{isEdit ? "Сохранить товар" : "Создать товар"}</SubmitButton><Link className="button button--outline" href="/admin/products/">Отмена</Link></div>
     </form>
   </>;
 }

@@ -26,7 +26,7 @@ export function CatalogFilters({ base, params, categories, groups, count }: { ba
         <fieldset className="filter-group"><legend>Базовая цена, ₽</legend><div className="price-inputs"><input key={"min" + params.min} name="min" type="number" min="0" aria-label="Цена от" placeholder="От" defaultValue={params.min} onBlur={apply} /><input key={"max" + params.max} name="max" type="number" min="0" aria-label="Цена до" placeholder="До" defaultValue={params.max} onBlur={apply} /></div></fieldset>
         <label className="filter-option"><input key={params.availability ?? ""} type="checkbox" name="availability" value="stock" defaultChecked={params.availability === "stock"} onChange={apply} />В наличии</label>
         {active && <Link className="text-link" href={base} onClick={() => dialog.current?.close()}>Сбросить фильтры</Link>}
-        <button type="button" className="button filter-done" onClick={() => dialog.current?.close()}>Показать {count} · Готово</button>
+        <button type="button" className="button filter-done" aria-busy={pending} onClick={() => dialog.current?.close()}>{pending ? "Обновляем товары…" : `Готово · найдено ${count}`}</button>
       </div>
     </dialog>
     <span className="visually-hidden" role="status">{pending ? "Обновляем товары" : "Найдено: " + count}</span>

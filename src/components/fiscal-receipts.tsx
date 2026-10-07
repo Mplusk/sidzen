@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/submit-button";
 import { checkFiscalOrder, reconcileFiscalReceipt } from "@/app/actions/cloudkassir";
 import { safeReceiptUrl } from "@/lib/cloudkassir/client";
 import { formatDate } from "@/lib/format";
@@ -13,9 +14,9 @@ export function FiscalReceipts({ receipts, orderId, admin = false, partialRefund
     {receipts.map(row => <div key={row.id} className="content-card"><strong>{kinds[row.kind] ?? "Чек"}</strong><p>{admin ? statuses[row.status] ?? "Проверяется" : row.status === "PROCESSED" ? "Чек сформирован" : row.status === "CANCELED" ? "Оплата отменена" : "Чек готовится"}{row.processedAt && ` · ${formatDate(row.processedAt)}`}</p>
       {row.status === "PROCESSED" && safeReceiptUrl(row.receiptUrl) && <a className="text-link" href={safeReceiptUrl(row.receiptUrl)!} target="_blank" rel="noreferrer">Открыть чек →</a>}
       {admin && <><p><small>InvoiceId: <code>{row.id}</code>{row.externalId && <> · ID CloudKassir: <code>{row.externalId}</code></>}</small></p>{row.errorCode && <p className="notice">{errors[row.errorCode] ?? "Нужна проверка кассы."}</p>}
-        {row.status === "MANUAL_REVIEW" && row.firstAttemptAt && <form action={reconcileFiscalReceipt} className="form-grid"><input type="hidden" name="receiptId" value={row.id} /><label className="field">ID уже сформированного чека CloudKassir<input name="externalId" required maxLength={100} defaultValue={row.externalId ?? ""} /></label><label><input type="checkbox" name="confirmation" value={row.id} required /> Подтверждаю сверку этого чека</label><button className="button button--outline">Сверить без создания нового чека</button></form>}
+        {row.status === "MANUAL_REVIEW" && row.firstAttemptAt && <form action={reconcileFiscalReceipt} className="form-grid"><input type="hidden" name="receiptId" value={row.id} /><label className="field">ID уже сформированного чека CloudKassir<input name="externalId" required maxLength={100} defaultValue={row.externalId ?? ""} /></label><label><input type="checkbox" name="confirmation" value={row.id} required /> Подтверждаю сверку этого чека</label><SubmitButton className="button button--outline" pendingLabel="Проверяем…">Сверить без создания нового чека</SubmitButton></form>}
       </>}
     </div>)}
-    {admin && <><form action={checkFiscalOrder}><input type="hidden" name="orderId" value={orderId} /><button className="button button--outline">Проверить оплату и чеки</button></form><p className="muted">Неизвестные / отклонённые чеки не отправляются заново вслепую. Если чек ещё не пробит и нужна коррекция, согласуйте её с CloudKassir и оформите в кассе вручную. Для старых заказов до подключения автоматические чеки не создаются.</p></>}
+    {admin && <><form action={checkFiscalOrder}><input type="hidden" name="orderId" value={orderId} /><SubmitButton className="button button--outline" pendingLabel="Проверяем…">Проверить оплату и чеки</SubmitButton></form><p className="muted">Неизвестные / отклонённые чеки не отправляются заново вслепую. Если чек ещё не пробит и нужна коррекция, согласуйте её с CloudKassir и оформите в кассе вручную. Для старых заказов до подключения автоматические чеки не создаются.</p></>}
   </section>;
 }

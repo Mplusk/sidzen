@@ -1,3 +1,5 @@
+import { SubmitButton } from "@/components/submit-button";
+import { ValidatedInput } from "@/components/validated-input";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { loginAction } from "@/app/actions/auth";
@@ -9,5 +11,5 @@ const errors: Record<string, string> = { invalid: "Проверьте email и �
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string; returnTo?: string }> }) {
   const params = await searchParams;
-  return <div className="auth-shell"><div className="auth-card"><span className="eyebrow">Личный кабинет</span><h1>Вход</h1><p className="muted">Заказы, документы и статусы доставки.</p>{params.error && <p role="alert" className="notice notice--danger">{errors[params.error] ?? errors.invalid}</p>}<form action={loginAction}><input type="hidden" name="returnTo" value={params.returnTo ?? "/account/"} /><label className="field"><span>Email</span><input name="email" type="email" autoComplete="email" required /></label><label className="field"><span>Пароль</span><input name="password" type="password" autoComplete="current-password" minLength={10} required /></label><button className="button" type="submit">Войти</button></form><div className="auth-links"><Link href="/register/">Создать аккаунт</Link><Link href="/forgot-password/">Забыли пароль?</Link></div><SocialLogin returnTo={params.returnTo} /></div></div>;
+  return <div className="auth-shell"><div className="auth-card"><span className="eyebrow">Личный кабинет</span><h1>Вход</h1><p className="muted">Заказы, документы и статусы доставки.</p>{params.error && <p role="alert" className="notice notice--danger">{errors[params.error] ?? errors.invalid}</p>}<form action={loginAction}><input type="hidden" name="returnTo" value={params.returnTo ?? "/account/"} /><label className="field"><span>Email</span><ValidatedInput aria-label="Email" name="email" type="email" autoComplete="email" required /></label><label className="field"><span>Пароль</span><ValidatedInput aria-label="Пароль" name="password" type="password" autoComplete="current-password" minLength={10} required /></label><SubmitButton className="button" pendingLabel="Входим…">Войти</SubmitButton></form><div className="auth-links"><Link href="/register/">Создать аккаунт</Link><Link href="/forgot-password/">Забыли пароль?</Link></div><SocialLogin returnTo={params.returnTo} /></div></div>;
 }

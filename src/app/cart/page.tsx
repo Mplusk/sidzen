@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/submit-button";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -23,7 +24,7 @@ export default async function CartPage({ searchParams }: { searchParams: Promise
         <div className="cart-item__body"><h2>{item.product && category ? <Link href={`/catalog/${category.slug}/${item.product.slug}/`}>{item.product.name}</Link> : "Товар недоступен"}</h2><p>{configurationText(item.config)}</p><small>{item.product?.sku} · {item.quantity} шт.</small>
           {!item.available && <p className="notice notice--danger">Эта конфигурация недоступна. Измените выбор или удалите позицию.</p>}
           {item.options && <details className="cart-item__edit"><summary>Изменить параметры и количество</summary><ProductPurchaseForm product={item.options} initial={item.selection} cartItemId={item.id} /></details>}
-        </div><div className="cart-item__total"><strong>{formatPrice(item.unitPrice * item.quantity)}</strong><form action={removeCartItem}><input type="hidden" name="id" value={item.id} /><button className="admin-delete-link" type="submit">Удалить</button></form></div>
+        </div><div className="cart-item__total"><strong>{formatPrice(item.unitPrice * item.quantity)}</strong><form action={removeCartItem}><input type="hidden" name="id" value={item.id} /><SubmitButton className="admin-delete-link" pendingLabel="Удаляем…">Удалить</SubmitButton></form></div>
       </article>;
     })}</div><aside className="order-summary"><h2>Ваш заказ</h2><div className="summary-line"><span>Товары</span><strong>{formatPrice(subtotal)}</strong></div><p>Способ доставки и окончательную сумму выберете на следующем шаге.</p>{items.every((item) => item.available) && <Link className="button" href="/checkout/">Перейти к оформлению</Link>}<Link className="text-link" href="/catalog/">Продолжить покупки</Link></aside></div> : <div className="empty-state"><h2>Корзина пока пуста</h2><p>Выберите товар, материал и цвет в каталоге.</p><Link className="button" href="/catalog/">Открыть каталог</Link></div>}
   </section></>;

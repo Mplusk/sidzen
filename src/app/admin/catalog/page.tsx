@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/submit-button";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { createCatalogOptionAction } from "@/app/actions/admin-catalog";
@@ -38,7 +39,7 @@ function CatalogCreateForm({ kind, categories }: { kind: CatalogKind; categories
       <label className="field"><span>Дополнительные дни *</span><input name="leadDays" type="number" min="0" max="3650" step="1" defaultValue="0" required /></label>
     </>}
     {kind !== "color" && <label className="field field--full"><span>Описание</span><textarea name="description" maxLength={5_000} /></label>}
-    <button className="button" type="submit">Создать</button>
+    <SubmitButton className="button" pendingLabel="Сохраняем…">Создать</SubmitButton>
   </form>;
 }
 

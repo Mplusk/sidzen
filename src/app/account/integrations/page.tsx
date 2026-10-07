@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/submit-button";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
@@ -47,7 +48,7 @@ function DeliveryForm({ method }: { method?: { id: string; name: string; descrip
     <label className="field">Описание и сроки<textarea name="description" maxLength={500} defaultValue={method?.description ?? ""} /></label>
     <label className="field">Порядок отображения<input name="sortOrder" type="number" min="0" max="999" defaultValue={method?.sortOrder ?? 0} required /></label>
     <label><input type="checkbox" name="active" defaultChecked={method?.active ?? true} /> Доступен при оформлении заказа</label>
-    <button className="button button--small" type="submit">{method ? "Сохранить доставку" : "Добавить доставку"}</button>
+    <SubmitButton className="button button--small" pendingLabel="Сохраняем…">{method ? "Сохранить доставку" : "Добавить доставку"}</SubmitButton>
   </form>;
 }
 
@@ -73,7 +74,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
         <label><input type="checkbox" name="sbp" defaultChecked={config.sbp} /> СБП</label>
         <label><input type="checkbox" name="externalReceiptsConfirmed" defaultChecked={config.externalReceiptsConfirmed} /> При выборе собственной кассы подтверждаю выдачу всех необходимых чеков самостоятельно</label>
         <label><input type="checkbox" name="enabled" defaultChecked={config.enabled} /> Принимать онлайн-платежи</label>
-        <button className="button" type="submit">Сохранить</button><button className="button button--outline" type="submit" name="intent" value="check">Проверить и сохранить</button>
+        <SubmitButton className="button" pendingLabel="Сохраняем…">Сохранить</SubmitButton><SubmitButton className="button button--outline" name="intent" value="check" pendingLabel="Проверяем…">Проверить и сохранить</SubmitButton>
       </form>
       <p className="muted">При включении проверяем доступ и торговую точку без списания денег. Пустое поле сохраняет прежний ключ. «Сохранить» с выключенной оплатой позволяет сохранить незавершённые настройки. Отключение запрещает создание новых платёжных ссылок, но сохраняет проверку уже созданных.</p>
       <p>Для быстрых уведомлений подпишите своё приложение на событие <code>acquiringInternetPayment</code> методом Create Webhook (право ManageWebhookData), URL: <code>https://3dprinta.shop/api/payments/tochka/</code>. Подпись уведомлений проверяется. Без вебхука сайт сверяет платежи в фоне примерно раз в минуту и при возвращении покупателя.</p>

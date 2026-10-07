@@ -8,7 +8,7 @@ import { MAX_REVIEW_PHOTO_BYTES, MAX_REVIEW_PHOTOS } from "@/lib/reviews";
 
 function SubmitReview() {
   const { pending } = useFormStatus();
-  return <button className="button button--small" type="submit" disabled={pending}>{pending ? "Загружаем отзыв и фото…" : "Отправить отзыв"}</button>;
+  return <button className="button button--small" type="submit" disabled={pending} aria-busy={pending}>{pending ? "Загружаем отзыв и фото…" : "Отправить отзыв"}</button>;
 }
 export function ReviewForm({ productId }: { productId: string }) {
   const [rating, setRating] = useState(0), [previews, setPreviews] = useState<string[]>([]), [error, setError] = useState("");

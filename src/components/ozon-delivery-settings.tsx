@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/submit-button";
 import { saveOzonDelivery } from "@/app/actions/ozon-delivery";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
@@ -21,10 +22,10 @@ export async function OzonDeliverySettings() {
       <datalist id="ozon-shipment-methods">{config.methods?.filter(method => method.status === "active").map(method => <option key={method.shipment_method_id} value={method.shipment_method_id}>{method.name}</option>)}</datalist>
       <label className="field">Подготовка к отгрузке, дней<input name="dispatchDays" type="number" min="1" max="30" step="1" defaultValue={config.dispatchDays} /><small>Для изделий под заказ учитывается также срок изготовления товара.</small></label>
       <label><input name="enabled" type="checkbox" defaultChecked={config.enabled} /> Предлагать Ozon Доставку покупателям</label>
-      <button className="button" type="submit">Сохранить Delivery API</button>
-      <button className="button button--outline" type="submit" name="intent" value="check">Проверить подключение</button>
-      <button className="button button--outline" type="submit" name="intent" value="methods">Загрузить методы отгрузки</button>
-      <button className="button button--outline" type="submit" name="intent" value="points">Обновить список ПВЗ</button>
+      <SubmitButton className="button" pendingLabel="Сохраняем…">Сохранить Delivery API</SubmitButton>
+      <SubmitButton className="button button--outline" name="intent" value="check" pendingLabel="Проверяем…">Проверить подключение</SubmitButton>
+      <SubmitButton className="button button--outline" name="intent" value="methods" pendingLabel="Загружаем…">Загрузить методы отгрузки</SubmitButton>
+      <SubmitButton className="button button--outline" name="intent" value="points" pendingLabel="Загружаем…">Обновить список ПВЗ</SubmitButton>
     </form>
     {!!config.methods?.length && <p className="muted">Методы Ozon: {config.methods.map(method => `${method.name} · ID ${method.shipment_method_id} · ${method.status === "active" ? "активен" : method.status}`).join("; ")}.</p>}
     <p>ПВЗ в справочнике: {count}. {sync ? `Обновление: ${{ PENDING: "в очереди", RUNNING: "загружается", SUCCEEDED: "завершено", FAILED: "ошибка — проверьте доступ и повторите обновление" }[sync.status] || sync.status}. Обработано страниц: ${sync.pages}.` : "После подключения список загрузится в фоне."}</p>

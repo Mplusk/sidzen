@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/submit-button";
 import { saveSocialIntegration } from "@/app/actions/social";
 import { callbackUrl, getSocialConfig, providers, providerNames, socialReady } from "@/lib/social/config";
 
@@ -18,7 +19,7 @@ export async function SocialSettings() {
         <label className="field--full"><input type="checkbox" name="operatorReviewed" defaultChecked={config.operatorReviewed} /> Оператор проверил правила сервиса, основания обработки и необходимые организационные меры</label>
         {provider !== "vk" && <label><input type="checkbox" name="clearSecret" /> Удалить сохранённый секрет</label>}
         <label><input type="checkbox" name="enabled" defaultChecked={config.enabled} /> Показывать кнопку и разрешить вход</label>
-        <button className="button button--small" type="submit">Сохранить {providerNames[provider]}</button>
+        <SubmitButton className="button button--small" pendingLabel="Сохраняем…">Сохранить {providerNames[provider]}</SubmitButton>
       </form><p className="muted">Сохранение не подтверждает правильность ключей. Проверка выполняется при настоящем входе в сервис. При смене Client ID прежние привязки не переносятся автоматически; сохранение отменяет незавершённые попытки входа.</p>
     </section>)}
   </section>;

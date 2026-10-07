@@ -8,7 +8,7 @@ import { formatPrice } from "@/lib/format";
 
 function Submit({ editing }: { editing: boolean }) {
   const { pending } = useFormStatus();
-  return <button className="button" type="submit" disabled={pending}>{pending ? "Сохраняем…" : editing ? "Сохранить выбор" : "Добавить в корзину"}</button>;
+  return <button className="button" type="submit" disabled={pending} aria-busy={pending}>{pending ? "Сохраняем…" : editing ? "Сохранить выбор" : "Добавить в корзину"}</button>;
 }
 
 export function ProductPurchaseForm({ product, initial, cartItemId }: { product: ProductOptions; initial?: ProductSelection; cartItemId?: string }) {

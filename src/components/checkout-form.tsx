@@ -8,6 +8,7 @@ import { formatPrice } from "@/lib/format";
 import { phoneMask } from "@/lib/phone-input";
 import { OzonDeliveryPicker, type DeliveryQuoteView } from "@/components/ozon-delivery-picker";
 import { customerDeliveryPrice } from "@/lib/delivery/pricing";
+import { ValidatedInput } from "@/components/validated-input";
 
 type Delivery = { code: string; name: string; description: string | null; basePrice: number };
 const deliveryErrors: Record<string, string> = {
@@ -29,7 +30,7 @@ const deliveryErrors: Record<string, string> = {
 };
 function Submit({ needsQuote, noDelivery }: { needsQuote: boolean; noDelivery: boolean }) {
   const { pending } = useFormStatus();
-  return <button className="button" type="submit" disabled={pending || needsQuote || noDelivery}>{pending ? "Отправляем заявку…" : noDelivery ? "Доставка временно недоступна" : needsQuote ? "Сначала подтвердите ПВЗ" : "Отправить заявку"}</button>;
+  return <button className="button" type="submit" disabled={pending || needsQuote || noDelivery} aria-busy={pending}>{pending ? "Отправляем заявку…" : noDelivery ? "Доставка временно недоступна" : needsQuote ? "Сначала подтвердите ПВЗ" : "Отправить заявку"}</button>;
 }
 
 export function CheckoutForm({ items, methods, user, error, reference, ozonDelivery = false, ozonUnavailable, packingReady = true }: {
@@ -53,9 +54,9 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
       {error && <p className="notice notice--danger" role="alert">{deliveryErrors[error] ?? (error === "price" ? "Цена или условия доставки изменились. Проверьте обновлённую сумму и отправьте заявку заново." : "Проверьте контактные данные, адрес и согласие с условиями.")}{reference && /^[a-f0-9-]{36}$/i.test(reference) && <><br /><small>Код обращения: {reference}</small></>}</p>}
       <p className="notice">Это заявка без оплаты на сайте. Продавец свяжется с вами, подтвердит наличие и согласует дальнейшие действия.</p>
       <h2>Контактные данные</h2><div className="form-grid">
-        <label className="field"><span>ФИО получателя *</span><input name="name" autoComplete="name" defaultValue={user.name} required minLength={2} maxLength={120} /></label>
-        <label className="field"><span>Телефон *</span><input name="phone" type="tel" autoComplete="tel" inputMode="tel" value={phone} onChange={event => changePhone(event.target.value)} placeholder="+7 (999) 123-45-67" pattern="\+7 \([0-9]{3}\) [0-9]{3}-[0-9]{2}-[0-9]{2}" required /><small>Для связи по заказу и доставке</small></label>
-        <label className="field field--full"><span>Email *</span><input name="email" type="email" autoComplete="email" defaultValue={user.email} required /></label>
+        <label className="field"><span>ФИО получателя *</span><ValidatedInput aria-label="ФИО получателя" name="name" autoComplete="name" defaultValue={user.name} required minLength={2} maxLength={120} /></label>
+        <label className="field"><span>Телефон *</span><ValidatedInput aria-label="Телефон" name="phone" type="tel" autoComplete="tel" inputMode="tel" value={phone} onChange={event => changePhone(event.target.value)} placeholder="+7 (999) 123-45-67" pattern="\+7 \([0-9]{3}\) [0-9]{3}-[0-9]{2}-[0-9]{2}" required /><small>Для связи по заказу и доставке</small></label>
+        <label className="field field--full"><span>Email *</span><ValidatedInput aria-label="Email" name="email" type="email" autoComplete="email" defaultValue={user.email} required /></label>
       </div>
       <fieldset className="checkout-delivery"><legend>Доставка · бесплатно</legend>{methods.map((method) => <label className="delivery-option" key={method.code}><input type="radio" name="delivery" value={method.code} checked={delivery === method.code} onChange={() => changeDelivery(method.code)} required /><span><strong>{method.name}</strong><small>{method.description}</small></span><strong>Бесплатно</strong></label>)}{ozonDelivery && <label className="delivery-option"><input type="radio" name="delivery" value="ozon-delivery" checked={isOzon} onChange={() => changeDelivery("ozon-delivery")} /><span><strong>Ozon Доставка</strong><small>В пункт выдачи или постамат · выбор ПВЗ на карте</small></span><strong>Бесплатно</strong></label>}</fieldset>
       {!ozonDelivery && <div className="delivery-option delivery-option--unavailable" aria-disabled="true"><span><strong>Ozon Доставка</strong><small>{ozonUnavailable ?? "Временно недоступна. Выберите другой способ доставки."}</small></span></div>}

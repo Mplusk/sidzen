@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/submit-button";
 import Link from "next/link";
 import Image from "next/image";
 import { startSocialLogin } from "@/app/actions/social";
@@ -13,9 +14,9 @@ export async function SocialLogin({ returnTo = "/account/", linking = false, pas
       <input type="hidden" name="returnTo" value={returnTo} /><input type="hidden" name="intent" value={linking ? "link" : "login"} />
       {passwordRequired && <label className="field">Подтвердите пароль магазина<input type="password" name="password" autoComplete="current-password" maxLength={200} required /></label>}
       <label className="checkout-consent"><input name="socialConsent" type="checkbox" required /><span>Даю отдельное <Link className="text-link" href="/legal/social-login/" target="_blank">согласие на вход через выбранный сервис</Link> и получение моего идентификатора, имени и email. Обычный вход доступен без этого согласия.</span></label>
-      <div className="social-login__buttons">{enabled.map(({ provider }) => <button key={provider} type="submit" name="provider" value={provider} aria-label={`Войти через ${providerNames[provider]}`} className={`button button--outline social-login__button social-login__button--${provider}`}>
+      <div className="social-login__buttons">{enabled.map(({ provider }) => <SubmitButton key={provider} name="provider" value={provider} aria-label={`Войти через ${providerNames[provider]}`} className={`button button--outline social-login__button social-login__button--${provider}`} pendingLabel="Открываем сервис…">
         {provider === "google" ? <Image src="/brand/google-sign-in.svg" width={180} height={40} alt="" unoptimized /> : <><span aria-hidden="true">{provider === "vk" ? "VK" : "Я"}</span>{providerNames[provider]}</>}
-      </button>)}</div>
+      </SubmitButton>)}</div>
     </form>
   </section>;
 }

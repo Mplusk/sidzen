@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getStoreContacts } from "@/lib/settings";
 import { Logo } from "@/components/logo";
 import { CartIcon, UserIcon, SearchIcon, CatalogIcon } from "@/components/icons";
+import { NavLink } from "@/components/nav-link";
 
 export async function Header() {
   const contacts = await getStoreContacts();
@@ -15,16 +16,16 @@ export async function Header() {
       </div>
       <div className="container header-main">
         <Logo />
-        <Link className="header-catalog" href="/catalog/"><CatalogIcon aria-hidden="true" /><span>Каталог</span></Link>
+        <NavLink className="header-catalog" href="/catalog/"><CatalogIcon aria-hidden="true" /><span>Каталог</span></NavLink>
         <form className="header-search" action="/catalog/" method="get" role="search">
           <label className="visually-hidden" htmlFor="shop-search">Поиск товаров</label>
           <input id="shop-search" name="q" type="search" placeholder="Искать в 3DPRINTA" maxLength={160} />
           <button type="submit" aria-label="Найти товары"><SearchIcon aria-hidden="true" /></button>
         </form>
-        <div className="header-actions">
-          <Link href="/account/" aria-label="Личный кабинет"><UserIcon aria-hidden="true" /><span>Кабинет</span></Link>
-          <Link href="/cart/" aria-label="Корзина"><CartIcon aria-hidden="true" /><span>Корзина</span></Link>
-        </div>
+        <nav className="header-actions" aria-label="Основная навигация">
+          <NavLink href="/account/" aria-label="Личный кабинет" exact={false}><UserIcon aria-hidden="true" /><span>Кабинет</span></NavLink>
+          <NavLink href="/cart/" aria-label="Корзина"><CartIcon aria-hidden="true" /><span>Корзина</span></NavLink>
+        </nav>
       </div>
     </header>
   );
