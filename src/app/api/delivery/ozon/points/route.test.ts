@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ config: vi.fn(), find: vi.fn(), update: vi.fn(), info: vi.fn(), limit: vi.fn() }));
-vi.mock("@/lib/prisma", () => ({ prisma: { ozonDeliveryPoint: { findMany: m.find, updateMany: m.update } } }));
+vi.mock("@/lib/prisma", () => ({ prisma: { $queryRaw: m.find, ozonDeliveryPoint: { updateMany: m.update } } }));
 vi.mock("@/lib/delivery/ozon-config", () => ({ getOzonDeliveryConfig: m.config }));
 vi.mock("@/lib/delivery/ozon-client", () => ({ OzonDeliveryClient: class { pointInfo = m.info; } }));
 vi.mock("@/lib/rate-limit", () => ({ rateLimit: m.limit }));
@@ -19,7 +19,8 @@ describe("public Ozon PVZ map directory", () => {
     const response = await GET(request());
     expect(await response.json()).toEqual({ points: [{ ...point, latitude: 44.99, longitude: 38.95 }], truncated: false });
     expect(response.headers.get("cache-control")).toBe("private, no-store");
-    expect(m.find.mock.calls[0][0]).toMatchObject({ where: { clientId: "test-client", methodId: 7n, active: true }, take: 201 });
+    expect(m.find.mock.calls[0][0].values).toEqual(["test-client", 7n, "%яблоновский%", 201]);
+    expect(m.find.mock.calls[0][0].text).toContain('"active" = true');
     expect(m.info).toHaveBeenCalledWith([42]);
     expect(m.update).toHaveBeenCalledWith({ where: { id: "42", clientId: "test-client", methodId: 7n, active: true }, data: { latitude: 44.99, longitude: 38.95 } });
   });
@@ -49,5 +50,23 @@ describe("public Ozon PVZ map directory", () => {
     m.config.mockResolvedValue({ enabled: false });
     expect(await (await GET(request())).json()).toEqual({ points: [] }); expect(m.find).not.toHaveBeenCalled();
     m.limit.mockReturnValue({ allowed: false }); expect((await GET(request())).status).toBe(429);
+  });
+  it("searches each word with bound parameters rather than demanding a contiguous phrase", async () => {
+    await GET(new Request("https://sidzen.shop/api/delivery/ozon/points/?q=Омск,%20Бульварная%20_20%25"));
+    const sql = m.find.mock.calls[0][0];
+    expect(sql.values).toEqual(["test-client", 7n, "%омск%", "%бульварная%", "%20%", 201]);
+    expect(sql.text).not.toContain("бульварная"); expect(sql.text).toContain("translate(lower");
+  });
+  it("limits live suggestions to eight and never contacts the provider while typing", async () => {
+    m.find.mockResolvedValue(Array.from({ length: 9 }, (_, index) => ({ ...point, id: String(index) })));
+    const response = await GET(new Request("https://sidzen.shop/api/delivery/ozon/points/?q=Яблоновский&view=suggest"));
+    const result = await response.json();
+    expect(result.points).toHaveLength(8); expect(result.truncated).toBe(true);
+    expect(m.find.mock.calls[0][0].values.at(-1)).toBe(9);
+    expect(m.info).not.toHaveBeenCalled(); expect(m.update).not.toHaveBeenCalled();
+  });
+  it("ignores punctuation-only searches without accessing the database", async () => {
+    expect(await (await GET(new Request("https://sidzen.shop/api/delivery/ozon/points/?q=%25__"))).json()).toEqual({ points: [] });
+    expect(m.find).not.toHaveBeenCalled();
   });
 });

@@ -3,21 +3,35 @@ import { rateLimit } from "@/lib/rate-limit";
 import { getOzonDeliveryConfig } from "@/lib/delivery/ozon-config";
 import { OzonDeliveryClient } from "@/lib/delivery/ozon-client";
 import { hasPointCoordinates } from "@/lib/delivery/points";
+import type { PickupPoint } from "@/lib/delivery/points";
+import { pointSearchTerms } from "@/lib/delivery/point-search";
+import { Prisma } from "@prisma/client";
 
 export async function GET(request: Request) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
   if (!rateLimit(`ozon-points:${ip}`, 60, 60000).allowed) return Response.json({ error: "Слишком много запросов." }, { status: 429 });
   const url = new URL(request.url); const search = (url.searchParams.get("q") || "").trim();
   if (search.length < 2 || search.length > 120) return Response.json({ points: [] });
+  const terms = pointSearchTerms(search);
+  if (!terms.length) return Response.json({ points: [] });
+  const suggest = url.searchParams.get("view") === "suggest";
+  const limit = suggest ? 8 : 200;
   const config = await getOzonDeliveryConfig();
   if (!config.enabled || !config.shipmentMethodId || !config.checkedAt) return Response.json({ points: [] });
-  const rows = await prisma.ozonDeliveryPoint.findMany({ where: { clientId: config.clientId, methodId: BigInt(config.shipmentMethodId), active: true, address: { contains: search, mode: "insensitive" } }, select: { id: true, name: true, address: true, type: true, latitude: true, longitude: true }, orderBy: { address: "asc" }, take: 201 });
-  const points = rows.slice(0, 200);
+  // All values are bound parameters. Do not interpolate user input as SQL.
+  // Explicit Cyrillic folding also works in databases created with a C locale.
+  const rows = await prisma.$queryRaw<PickupPoint[]>(Prisma.sql`
+    SELECT "id", "name", "address", "type", "latitude", "longitude" FROM "OzonDeliveryPoint"
+    WHERE "clientId" = ${config.clientId} AND "methodId" = ${BigInt(config.shipmentMethodId)} AND "active" = true
+      AND ${Prisma.join(terms.map(term => Prisma.sql`translate(lower("address"), 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯё', 'абвгдеежзийклмнопрстуфхцчшщъыьэюяе') LIKE ${`%${term}%`}`), " AND ")}
+    ORDER BY "address" ASC LIMIT ${limit + 1}
+  `);
+  const points = rows.slice(0, limit);
   const inactive = new Set<string>();
   // Existing directories predate coordinate storage. Fill only the searched
   // public points, without sending recipient data or restarting the full sync.
   const missing = points.filter(point => !hasPointCoordinates(point));
-  if (missing.length && config.clientSecret) {
+  if (!suggest && missing.length && config.clientSecret) {
     try {
       const api = new OzonDeliveryClient(config);
       for (let offset = 0; offset < missing.length; offset += 100) {
@@ -33,5 +47,5 @@ export async function GET(request: Request) {
       }
     } catch { /* Directory selection still works if the map refresh is unavailable. */ }
   }
-  return Response.json({ points: points.filter(point => !inactive.has(point.id)), truncated: rows.length > 200 }, { headers: { "Cache-Control": "private, no-store" } });
+  return Response.json({ points: points.filter(point => !inactive.has(point.id)), truncated: rows.length > limit }, { headers: { "Cache-Control": "private, no-store" } });
 }

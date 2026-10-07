@@ -45,7 +45,19 @@ describe("delivery verification interaction", () => {
     m.quote.mockResolvedValue(result);
     await render();
   });
-  afterEach(async () => { await act(async () => root.unmount()); container.remove(); Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView"); vi.unstubAllGlobals(); });
+  afterEach(async () => { await act(async () => root.unmount()); container.remove(); Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView"); vi.unstubAllGlobals(); vi.useRealTimers(); });
+  it("selects a typed address suggestion, opens its map and confirms the next step without a delivery quote", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await inputValue(container.querySelector<HTMLInputElement>('.ozon-point-search input')!, "Туристская");
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    await act(async () => container.querySelector<HTMLButtonElement>('[role="option"]')!.click());
+    await flushFrames();
+    expect(container.querySelector("select")!.value).toBe("42");
+    expect(button("ПВЗ выбран").getAttribute("aria-pressed")).toBe("true");
+    expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain(point.address);
+    expect(scroll).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+    expect(m.quote).not.toHaveBeenCalled(); expect(m.order).not.toHaveBeenCalled();
+  });
   it("confirms a map selection and scrolls/focuses the next step without submitting or opening a keyboard", async () => {
     await inputValue(container.querySelector<HTMLInputElement>(".ozon-point-search input")!, "Туристская"); await click("Найти ПВЗ на карте");
     await click("Выбрать этот ПВЗ"); await flushFrames();

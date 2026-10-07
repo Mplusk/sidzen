@@ -6,16 +6,16 @@ import Link from "next/link";
 import { quoteOzonDelivery } from "@/app/actions/ozon-delivery";
 import { hasPointCoordinates, type PickupPoint } from "@/lib/delivery/points";
 import { deliveryCheckIssue, withDeliveryDeadline } from "@/lib/delivery/picker-state";
+import { OzonPointSearch } from "@/components/ozon-point-search";
 
-const PickupMap = dynamic(() => import("@/components/ozon-pickup-map"), { ssr: false, loading: () => <p className="notice" role="status">Загружаем карту ПВЗ…</p> });
+const PickupMap = dynamic(() => import("@/components/ozon-pickup-map"), { ssr: false, loading: () => <div className="ozon-map-wrapper"><div className="ozon-pickup-map ozon-pickup-map--loading" role="status">Загружаем карту ПВЗ…</div></div> });
 export type DeliveryQuoteView = { token: string; cost: number; days: number; address: string };
 
 export function OzonDeliveryPicker({ phone, onPhoneChange, onQuote, packingReady = true }: { phone: string; onPhoneChange: (value: string) => void; onQuote: (value: DeliveryQuoteView | null) => void; packingReady?: boolean }) {
   const [consent, setConsent] = useState(false);
-  const [query, setQuery] = useState("");
   const [points, setPoints] = useState<PickupPoint[]>([]);
   const [point, setPoint] = useState("");
-  const [pending, setPending] = useState<"search" | "quote" | null>(null);
+  const [pending, setPending] = useState<"quote" | null>(null);
   const [mapOpen, setMapOpen] = useState(true);
   const [truncated, setTruncated] = useState(false);
   const [message, setMessage] = useState("");
@@ -25,10 +25,9 @@ export function OzonDeliveryPicker({ phone, onPhoneChange, onQuote, packingReady
   const phoneRef = useRef(phone);
   useEffect(() => { phoneRef.current = phone; }, [phone]);
   const revision = useRef(0);
-  const searchRequest = useRef<AbortController | null>(null);
   const nextStep = useRef<HTMLDivElement>(null);
   const scrollFrame = useRef<number | null>(null);
-  useEffect(() => () => { revision.current++; searchRequest.current?.abort(); if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current); }, []);
+  useEffect(() => () => { revision.current++; if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current); }, []);
   function clearQuote() { revision.current++; setQuote(null); onQuote(null); setMessage(""); setPending(null); if (scrollFrame.current !== null) { cancelAnimationFrame(scrollFrame.current); scrollFrame.current = null; } }
   function selectPoint(id: string) {
     setPoint(id); clearQuote();
@@ -40,21 +39,6 @@ export function OzonDeliveryPicker({ phone, onPhoneChange, onQuote, packingReady
       nextStep.current?.focus({ preventScroll: true });
       nextStep.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
     });
-  }
-  async function search() {
-    searchRequest.current?.abort();
-    const controller = new AbortController(); searchRequest.current = controller;
-    clearQuote(); setPoint(""); setPoints([]); setTruncated(false); setMapOpen(true); setPending("search");
-    const version = revision.current;
-    try {
-      const response = await fetch(`/api/delivery/ozon/points/?q=${encodeURIComponent(query.trim())}`, { cache: "no-store", signal: controller.signal });
-      if (!response.ok) throw new Error("points");
-      const result = await response.json() as { points: PickupPoint[]; truncated?: boolean };
-      if (version !== revision.current) return;
-      setPoints(result.points); setTruncated(!!result.truncated);
-      if (!result.points.length) setMessage("Пункты не найдены. Уточните город или улицу; если подключение новое, список ПВЗ ещё может обновляться.");
-    } catch { if (version === revision.current && !controller.signal.aborted) setMessage("Не удалось загрузить пункты выдачи. Повторите поиск."); }
-    finally { if (version === revision.current) setPending(null); }
   }
   async function calculate() {
     const issue = deliveryCheckIssue(phone, point, consent, packingReady);
@@ -74,12 +58,12 @@ export function OzonDeliveryPicker({ phone, onPhoneChange, onQuote, packingReady
     <p className="ozon-free-delivery"><strong>Бесплатная доставка Ozon</strong><span>Расходы на перевозку и страховку оплачивает магазин.</span></p>
     {!packingReady && <p className="notice notice--danger">Для одного из товаров магазин ещё не указал вес и размеры упакованной посылки. Проверка Ozon недоступна — выберите другую доставку или обратитесь в магазин.</p>}
     <p className="muted">Выберите ПВЗ или постамат на карте. Номер получателя должен быть зарегистрирован на Ozon. С вашего согласия передадим его Ozon для проверки доставки и срока получения.</p>
-    <div className="ozon-point-search"><label className="field"><span>Город или улица ПВЗ</span><input value={query} maxLength={120} onChange={event => { searchRequest.current?.abort(); setQuery(event.target.value); setPoint(""); setPoints([]); clearQuote(); }} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); if (!pending && query.trim().length >= 2) void search(); } }} placeholder="Например, Яблоновский" /></label><button type="button" className="button button--outline" onClick={search} disabled={!!pending || query.trim().length < 2}>{pending === "search" ? "Ищем ПВЗ…" : "Найти ПВЗ на карте"}</button></div>
+    <OzonPointSearch onReset={() => { setPoint(""); setPoints([]); setTruncated(false); clearQuote(); }} onResults={(values, more) => { clearQuote(); setPoints(values); setPoint(""); setTruncated(more); setMapOpen(true); }} onSelect={selectPoint} />
     {!!points.length && <>
       <div className="ozon-map-toolbar"><span>Найдено ПВЗ: {points.length}{truncated ? "+" : ""}</span>{mapped > 0 && <button type="button" className="text-link" aria-expanded={mapOpen} onClick={() => setMapOpen(!mapOpen)}>{mapOpen ? "Скрыть карту" : "Открыть карту"}</button>}</div>
       {mapOpen && mapped > 0 && <PickupMap points={points} selected={point} onSelect={selectPoint} />}
       {mapped < points.length && <p className="muted">{mapped === 0 ? "Координаты пока недоступны. Выберите ПВЗ из списка." : "Пункты без координат доступны в списке адресов."}</p>}
-      {truncated && <p className="muted">Показаны первые 200 пунктов. Уточните улицу, чтобы найти нужный ПВЗ.</p>}
+      {truncated && <p className="muted">Показана часть найденных пунктов. Уточните улицу или нажмите «Найти ПВЗ на карте», чтобы расширить список.</p>}
       <label className="field"><span>Пункт выдачи — можно выбрать на карте или в списке</span><select value={point} onChange={event => selectPoint(event.target.value)}><option value="">Выберите пункт выдачи</option>{points.map(value => <option key={value.id} value={value.id}>{value.address}{value.type === "postamat" ? " · постамат" : ""}</option>)}</select></label>
     </>}
     <div ref={nextStep} className="ozon-recipient-step" tabIndex={-1} aria-label="Телефон получателя и проверка доставки">
