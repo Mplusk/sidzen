@@ -13,6 +13,7 @@ const permissionDefinitions = [
   ["orders.read", "Просмотр заказов"],
   ["orders.write", "Управление заказами"],
   ["customers.read", "Просмотр клиентов"],
+  ["customers.write", "Удаление и восстановление клиентов"],
   ["files.read", "Доступ к моделям клиентов"],
   ["pricing.write", "Управление ценами"],
   ["settings.write", "Настройки магазина"],
