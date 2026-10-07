@@ -17,6 +17,14 @@ function validForm() {
 }
 
 describe("product admin form", () => {
+  it("allows an AI draft without a category but requires a real selection before publication/manual mode", () => {
+    const form = validForm(); form.set("categoryMode", "AI"); form.set("primaryCategoryId", "");
+    expect(parseProductForm(form)).toMatchObject({ success: true, data: { categoryMode: "AI", categoryIds: [] } });
+    form.set("status", "PUBLISHED"); expect(parseProductForm(form).success).toBe(false);
+    form.set("status", "DRAFT"); form.set("categoryMode", "MANUAL"); expect(parseProductForm(form).success).toBe(false);
+    form.set("primaryCategoryId", "category-1"); expect(parseProductForm(form).success).toBe(true);
+    form.delete("categoryMode"); expect(parseProductForm(form)).toMatchObject({ success: true, data: { categoryMode: "MANUAL" } });
+  });
   it("does not allow recreating a retired custom-print service", () => {
     const form = validForm();
     form.set("type", "PRINT_TEMPLATE");

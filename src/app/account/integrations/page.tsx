@@ -9,9 +9,16 @@ import { OzonDeliverySettings } from "@/components/ozon-delivery-settings";
 import { AdminDeleteDelivery } from "@/components/admin-delete-delivery";
 import { SocialSettings } from "@/components/social-settings";
 import { CloudKassirSettings } from "@/components/cloudkassir-settings";
+import { CategoryAiSettings } from "@/components/category-ai-settings";
 
 export const metadata: Metadata = { title: "Подключения магазина", robots: { index: false, follow: false } };
 const messages: Record<string, string> = {
+  "ai-saved": "Настройки DeepSeek сохранены. Категории существующих товаров не изменены.",
+  "ai-invalid": "Проверьте формат ключа и выбранную модель DeepSeek.",
+  "ai-incomplete": "Для включения или проверки DeepSeek нужен API key.",
+  "ai-connection": "DeepSeek не подтвердил доступ к выбранной модели. Проверьте ключ и доступность модели. Настройки не изменены.",
+  "ai-rate": "Слишком много проверок. Повторите через минуту.",
+  "ai-changed": "Настройки изменились параллельно. Обновите страницу и повторите.",
   "cloud-saved": "Настройки CloudKassir сохранены. Автоматическая выдача чеков пока выключена.",
   "cloud-verified": "Доступ к CloudKassir и состояние кассы проверены. Проверка не создаёт чеков и не списывает деньги.",
   "cloud-invalid": "Проверьте формат Public ID, ИНН и номеров кассы и фискального накопителя.",
@@ -84,6 +91,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
     </details>
     <OzonDeliverySettings />
     <SocialSettings />
+    <CategoryAiSettings />
     <h2>Другие способы доставки</h2><p className="muted">Управляйте способами с фиксированными тарифами. Эти способы не используют API перевозчика. Ozon Delivery API подключается отдельно выше. Способ можно отключить или удалить с подтверждением — старые заказы не меняются.</p>
     {!methods.length && <p className="notice">Другие способы доставки не добавлены. При включённом Ozon покупателю доступна только Ozon Доставка.</p>}
     {methods.map((method) => <section className="content-card" key={method.id}><h3>{method.name} · {method.active ? "включён" : "выключен"}</h3><DeliveryForm method={{ ...method, basePrice: Number(method.basePrice) }} /><AdminDeleteDelivery id={method.id} name={method.name} /></section>)}

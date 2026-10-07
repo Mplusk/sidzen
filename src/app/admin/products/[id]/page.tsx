@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/auth";
 import { PERMISSIONS } from "@/lib/permissions";
 import { saveProductGroup } from "@/app/actions/product-groups";
+import { getCategoryAiConfig, categoryAiReady } from "@/lib/category-ai/config";
+import { categoryAiJobMessages, categoryAiErrorMessages } from "@/lib/category-ai/worker";
 
 export const metadata: Metadata = { title: "Редактирование товара", robots: { index: false, follow: false } };
 
@@ -44,7 +46,7 @@ export default async function AdminProductPage({ params, searchParams }: { param
     depthMm: product.depthMm == null ? null : Number(product.depthMm),
     heightMm: product.heightMm == null ? null : Number(product.heightMm),
     robots: product.robots as ProductFormValue["robots"],
-    primaryCategoryId: primaryCategory?.categoryId ?? categories[0]?.id ?? "",
+    primaryCategoryId: primaryCategory?.categoryId ?? "",
     categoryIds: product.categories.map((item) => item.categoryId),
     materialIds: product.materials.map((item) => item.id),
     colorIds: product.colors.map((item) => item.id),
@@ -56,8 +58,11 @@ export default async function AdminProductPage({ params, searchParams }: { param
   const canGroup = user.permissions.has(PERMISSIONS.productsPublish) || user.roles.includes("superadmin");
   const groups = canGroup ? await prisma.productGroup.findMany({ orderBy: { name: "asc" }, include: { _count: { select: { products: true } } } }) : [];
   const members = product.groupId && canGroup ? await prisma.product.findMany({ where: { groupId: product.groupId }, select: { id: true, sku: true, groupLabel: true, status: true }, orderBy: { sku: "asc" } }) : [];
+  const aiReady = categoryAiReady(await getCategoryAiConfig());
+  const aiJob = await prisma.productCategoryAiJob.findUnique({ where: { productId: product.id } });
+  const aiMessage = aiJob ? aiJob.status === "FAILED" ? categoryAiErrorMessages[aiJob.errorCode ?? ""] ?? "Не удалось определить категорию. Выберите вручную или повторите." : categoryAiJobMessages[aiJob.status] : undefined;
 
-  return <><div className="admin-header"><div><span className="eyebrow">{product.sku}</span><h1>{product.name}</h1></div><div className="admin-header__actions"><Link className="button button--outline" href="/admin/products/">К списку</Link>{publicHref && <Link className="button button--outline" href={publicHref} target="_blank">Открыть на сайте</Link>}</div></div>{(query.saved || query.created) && <p className="notice notice--success">Изменения сохранены.</p>}<AdminProductForm options={options} product={value} error={query.error} canPublish={canGroup} />
+  return <><div className="admin-header"><div><span className="eyebrow">{product.sku}</span><h1>{product.name}</h1></div><div className="admin-header__actions"><Link className="button button--outline" href="/admin/products/">К списку</Link>{publicHref && <Link className="button button--outline" href={publicHref} target="_blank">Открыть на сайте</Link>}</div></div>{(query.saved || query.created) && <p className="notice notice--success">Изменения сохранены.</p>}<AdminProductForm options={options} product={value} error={query.error} canPublish={canGroup} aiReady={aiReady} aiMessage={product.categoryMode === "AI" && !aiReady ? "Категоризация приостановлена: DeepSeek выключен в подключениях магазина." : aiMessage} />
     {canGroup && <section className="content-card" id="product-group"><h2>Группа карточек — цвета и варианты</h2>
       <p>Варианты показываются фотографиями в карточке товара. У каждого остаются свои артикул, цена, остаток, отзывы и фотографии. Покупатель видит только опубликованные варианты с доступной категорией.</p>
       <p className="muted">{product.groupingMode === "AUTO" ? "Группировка из WB обновляется при синхронизации." : "Ручная группировка защищена от синхронизации."}</p>

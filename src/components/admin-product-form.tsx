@@ -1,6 +1,7 @@
 import { SubmitButton } from "@/components/submit-button";
 import Link from "next/link";
 import { AdminProductImages } from "@/components/admin-product-images";
+import { ProductCategoryControl } from "@/components/product-category-control";
 import { createProductAction, updateProductAction } from "@/app/actions/admin";
 import { PRODUCT_STATUSES, PRODUCT_TYPES, ROBOTS_VALUES } from "@/lib/product-admin";
 
@@ -52,6 +53,7 @@ export type ProductFormValue = {
   publishedAt: Date | null;
   categoryIds: string[];
   primaryCategoryId: string;
+  categoryMode?: string;
   materialIds: string[];
   colorIds: string[];
   technologyIds: string[];
@@ -85,14 +87,15 @@ function CheckboxGroup({ name, options, selected, renderDetail }: { name: string
   return <div className="admin-options-grid">{options.map((option) => <label className="admin-check" key={option.id}><input type="checkbox" name={name} value={option.id} defaultChecked={checked(selected, option.id)} /><span><strong>{option.name}</strong>{renderDetail?.(option)}</span></label>)}</div>;
 }
 
-export function AdminProductForm({ options, product, error, canPublish = true }: { options: ProductFormOptions; product?: ProductFormValue; error?: string; canPublish?: boolean }) {
+export function AdminProductForm({ options, product, error, canPublish = true, aiReady = false, aiMessage }: { options: ProductFormOptions; product?: ProductFormValue; error?: string; canPublish?: boolean; aiReady?: boolean; aiMessage?: string }) {
   const isEdit = Boolean(product);
-  const firstCategory = product?.primaryCategoryId || options.categories[0]?.id || "";
+  const firstCategory = product ? product.primaryCategoryId : (aiReady ? "" : options.categories[0]?.id) || "";
   const specificationsText = product?.specifications ? JSON.stringify(product.specifications, null, 2) : "";
   const errorMessage = error === "marketplace-busy" ? "Сейчас идёт синхронизация маркетплейсов. Дождитесь завершения или остановите её в ЛК → Маркетплейсы, затем сохраните товар." : error === "duplicate" ? "Slug или артикул уже используются другим товаром, в том числе в привязках маркетплейсов." : error === "images" ? "Проверьте список изображений и формат загружаемых файлов." : error === "specifications" ? "Характеристики должны быть корректным JSON-объектом." : error ? "Проверьте заполнение полей товара." : null;
 
   return <>
-    {errorMessage && <p className="notice notice--danger">{errorMessage}</p>}
+    {error === "ai-disabled" && <p className="notice notice--danger">DeepSeek выключен или не подключён. Подключите его в ЛК → Подключения магазина или выберите категорию вручную.</p>}
+    {errorMessage && error !== "ai-disabled" && <p className="notice notice--danger">{errorMessage}</p>}
     {product?.status === "PUBLISHED" && product.stock <= 0 && !product.madeToOrder && <p className="notice" role="status">Товар виден в каталоге, но недоступен для покупки: остаток равен нулю, изготовление под заказ выключено. Укажите реальный остаток или включите «Изготавливается под заказ», если вы принимаете такие заказы.</p>}
     {product && <p className="muted">Если товар привязан к маркетплейсу, изменение названия, описания, цены, характеристик или фотографий защищает данные сайта от перезаписи. Возобновить импорт этих полей можно в <Link className="text-link" href="/account/marketplaces/">ЛК → Маркетплейсы</Link>.</p>}
     <form action={isEdit ? updateProductAction : createProductAction} className="admin-grid">
@@ -117,7 +120,8 @@ export function AdminProductForm({ options, product, error, canPublish = true }:
       </div></section>
 
       <section className="admin-card admin-card--wide"><div className="catalog-section-heading"><h2>Категории</h2><Link className="text-link" href="/admin/catalog/#category">Создать или удалить категорию</Link></div><div className="form-grid">
-        <label className="field"><span>Основная категория *</span><select name="primaryCategoryId" defaultValue={firstCategory} required>{options.categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select></label>
+        <ProductCategoryControl categories={options.categories} initialCategoryId={firstCategory} initialMode={product?.categoryMode ?? (aiReady ? "AI" : "MANUAL")} aiReady={aiReady} />
+        {aiMessage && <p className="field--full notice" role="status">{aiMessage}</p>}
         <div className="field field--full"><span>Дополнительные категории</span><CheckboxGroup name="categoryIds" options={options.categories} selected={product?.categoryIds} /></div>
       </div></section>
 

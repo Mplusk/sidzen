@@ -43,7 +43,8 @@ const productSchema = z.object({
   canonical: z.string().trim().max(500),
   robots: z.enum(ROBOTS_VALUES),
   publishedAt: z.string().trim().max(40),
-  primaryCategoryId: z.string().trim().min(1),
+  categoryMode: z.enum(["MANUAL", "AI"]),
+  primaryCategoryId: z.string().trim().max(100),
   categoryIds: z.array(z.string().trim().min(1)).max(100),
   materialIds: z.array(z.string().trim().min(1)).max(100),
   colorIds: z.array(z.string().trim().min(1)).max(100),
@@ -53,7 +54,7 @@ const productSchema = z.object({
   specificationsText: z.string().trim().max(30_000),
   imagesText: z.string().trim().max(30_000),
   imageLayout: z.string().max(30_000),
-});
+}).refine(data => Boolean(data.primaryCategoryId) || (data.categoryMode === "AI" && data.status !== "PUBLISHED"));
 
 export type ProductGalleryEntry = {
   path: string;
@@ -155,6 +156,7 @@ export function parseProductForm(formData: FormData) {
     robots: stringValue(formData, "robots") || "index,follow",
     publishedAt: stringValue(formData, "publishedAt"),
     primaryCategoryId: stringValue(formData, "primaryCategoryId"),
+    categoryMode: stringValue(formData, "categoryMode") || "MANUAL",
     categoryIds: selectedValues(formData, "categoryIds"),
     materialIds: selectedValues(formData, "materialIds"),
     colorIds: selectedValues(formData, "colorIds"),
@@ -173,7 +175,7 @@ export function parseProductForm(formData: FormData) {
       success: true as const,
       data: {
         ...data,
-        categoryIds: [...new Set([data.primaryCategoryId, ...data.categoryIds])],
+        categoryIds: [...new Set([data.primaryCategoryId, ...data.categoryIds].filter(Boolean))],
         specifications: parseSpecifications(data.specificationsText),
         images: parseGallery(data.imagesText, `${data.name}, изделие 3D-печати`),
       },

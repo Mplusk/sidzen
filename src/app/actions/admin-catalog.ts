@@ -8,9 +8,10 @@ import { writeAudit } from "@/lib/audit";
 import { catalogOptionInUse, parseCatalogCreate, parseCatalogDelete, type CatalogKind } from "@/lib/catalog-admin";
 import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { categoryNameKey } from "@/lib/category-ai/client";
 
 class CatalogActionError extends Error {
-  constructor(readonly code: "missing" | "inuse") {
+  constructor(readonly code: "missing" | "inuse" | "duplicate") {
     super(code);
   }
 }
@@ -46,11 +47,15 @@ export async function createCatalogOptionAction(formData: FormData) {
   try {
     switch (data.kind) {
       case "category":
-        created = await prisma.category.create({ data: {
-          name: data.name, slug: data.slug, description: data.description || null,
-          title: data.name, h1: data.name, metaDescription: data.description || null,
-          parentId: data.parentId || null,
-        } });
+        created = await prisma.$transaction(async tx => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412027)`;
+          if ((await tx.category.findMany({ select: { name: true, parentId: true } })).some(item => item.parentId === (data.parentId || null) && categoryNameKey(item.name) === categoryNameKey(data.name))) throw new CatalogActionError("duplicate");
+          return tx.category.create({ data: {
+            name: data.name, slug: data.slug, description: data.description || null,
+            title: data.name, h1: data.name, metaDescription: data.description || null,
+            parentId: data.parentId || null,
+          } });
+        });
         entityType = "Category";
         break;
       case "material":
@@ -102,6 +107,7 @@ export async function createCatalogOptionAction(formData: FormData) {
 
 async function deleteUnusedOption(kind: CatalogKind, id: string) {
   return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412027)`;
     switch (kind) {
       case "category": {
         const item = await tx.category.findUnique({ where: { id }, select: { id: true, name: true, slug: true, _count: { select: { products: true, children: true, seoFilters: true } } } });

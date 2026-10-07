@@ -254,6 +254,8 @@ model Product {
   usage            String?
   instructions     String?
   specifications   Json?
+  categoryMode     String              @default("MANUAL")
+  categoryAiJob    ProductCategoryAiJob?
   basePrice        Decimal             @db.Decimal(12, 2)
   oldPrice         Decimal?            @db.Decimal(12, 2)
   costPrice        Decimal?            @db.Decimal(12, 2)
@@ -875,6 +877,24 @@ model SiteSetting {
   group     String   @default("general")
   label     String?
   updatedAt DateTime @updatedAt
+}
+
+// Durable, bounded AI queue. Product content is read at execution, not copied
+// into logs or job payloads. Existing products retain manual categories.
+model ProductCategoryAiJob {
+  productId   String   @id
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  status      String   @default("PENDING")
+  generation  Int      @default(1)
+  attempts    Int      @default(0)
+  leaseToken  String?
+  leaseUntil  DateTime?
+  availableAt DateTime @default(now())
+  errorCode   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status, availableAt])
 }
 
 // Operational diagnostics only. No request/response bodies, credentials or buyer data.

@@ -9,6 +9,7 @@ import { fetchPage, fetchWbPrices, MarketplaceError } from "./api";
 import type { WbAttributeCache } from "./wb-measurements";
 import { importImages } from "./images";
 import type { OzonAttributeCache } from "./ozon-attributes";
+import { getCategoryAiConfig, categoryAiReady, queueCategoryAi } from "@/lib/category-ai/config";
 
 export const LOCK = 73412027;
 const leaseDuration = 120_000;
@@ -85,6 +86,7 @@ export async function applySnapshot(tx: Tx, provider: Provider, accountId: strin
       const categoryExists = policy.categoryId && await tx.category.findUnique({ where: { id: policy.categoryId } });
       // A draft without a category is allowed; publication requires assigning one.
       const product = await tx.product.create({ data: {
+        categoryMode: categoryAiReady(await getCategoryAiConfig(tx)) ? "AI" : "MANUAL",
         name: snapshot.name, sku: normalizeSku(snapshot.sku), slug: `${slugify(snapshot.sku).slice(0, 100) || "marketplace"}-${randomUUID().slice(0, 8)}`,
         type: "READY", status: "DRAFT", basePrice: snapshot.price, oldPrice: snapshot.oldPrice, madeToOrder: false,
         ...(categoryExists ? { categories: { create: { categoryId: policy.categoryId, isPrimary: true } } } : {}),
@@ -100,6 +102,10 @@ export async function applySnapshot(tx: Tx, provider: Provider, accountId: strin
   if (!conflict && productId) {
     for (const key of keys) await tx.marketplaceIdentity.upsert({ where: { key }, create: { key, productId }, update: {} });
     await reconcileProduct(tx, productId, policy.primary);
+    if (created) {
+      const product = await tx.product.findUniqueOrThrow({ where: { id: productId } });
+      await queueCategoryAi(tx, productId, product.categoryMode);
+    }
     if (provider === "wb" && snapshot.group) {
       const product = await tx.product.findUniqueOrThrow({ where: { id: productId } });
       if (product.groupingMode === "AUTO") {

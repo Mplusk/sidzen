@@ -2,6 +2,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { PRODUCT_STATUSES } from "@/lib/product-admin";
 import { marketplaceLock } from "@/lib/marketplaces/sync";
+import { queueCategoryAi } from "@/lib/category-ai/config";
 
 export const bulkProductSchema = z.object({
   productIds: z.array(z.string().min(1).max(100)).min(1).max(500),
@@ -34,9 +35,10 @@ export async function setProductsStatus(input: BulkProductInput, actor: { id: st
           categoryId = visible?.categoryId ?? fallback!.id;
           await tx.productCategory.updateMany({ where: { productId: product.id }, data: { isPrimary: false } });
           await tx.productCategory.upsert({ where: { productId_categoryId: { productId: product.id, categoryId } }, create: { productId: product.id, categoryId, isPrimary: true }, update: { isPrimary: true } });
+          await queueCategoryAi(tx, product.id, "MANUAL");
         }
       }
-      await tx.product.update({ where: { id: product.id }, data: { status: data.status, publishedAt: data.status === "PUBLISHED" ? product.publishedAt ?? now : null } });
+      await tx.product.update({ where: { id: product.id }, data: { status: data.status, ...(categoryId ? { categoryMode: "MANUAL" } : {}), publishedAt: data.status === "PUBLISHED" ? product.publishedAt ?? now : null } });
       await tx.auditLog.create({ data: { actorId: actor.id, action: "product.status.bulk", entityType: "Product", entityId: product.id,
         before: { status: product.status, publishedAt: product.publishedAt?.toISOString() ?? null },
         after: { status: data.status, ...(categoryId ? { primaryCategoryId: categoryId } : {}) },

@@ -1,7 +1,9 @@
 // Closed vocabulary: never render raw errors, provider responses or request inputs.
-export const logAreas = { delivery: "Ozon Доставка", checkout: "Оформление заказа", payment: "Точка · оплата", fiscal: "CloudKassir · чеки", social: "Вход через соцсети", marketplace: "Импорт товаров", worker: "Фоновые задачи", server: "Сайт · серверные ошибки" } as const;
+export const logAreas = { ai: "DeepSeek · категории", delivery: "Ozon Доставка", checkout: "Оформление заказа", payment: "Точка · оплата", fiscal: "CloudKassir · чеки", social: "Вход через соцсети", marketplace: "Импорт товаров", worker: "Фоновые задачи", server: "Сайт · серверные ошибки" } as const;
 export const logLevels = { INFO: "Событие", WARN: "Предупреждение", ERROR: "Ошибка" } as const;
 export const diagnosticEvents = {
+  "category-ai.ok": ["ai", "INFO", "DeepSeek определил категорию товара"],
+  "category-ai.failed": ["ai", "WARN", "Не удалось определить категорию DeepSeek; товар сохранён"],
   "delivery.quote.ok": ["delivery", "INFO", "Доставка в ПВЗ проверена"],
   "delivery.quote.expired": ["delivery", "WARN", "Истёк срок расчёта доставки (15 минут)"],
   "delivery.quote.signature": ["delivery", "WARN", "Расчёт отсутствует, повреждён или имеет неверную подпись"],
@@ -50,6 +52,12 @@ export const diagnosticEvents = {
   "server.failed": ["server", "ERROR", "Необработанная серверная ошибка сайта"],
 } as const;
 export type DiagnosticCode = keyof typeof diagnosticEvents;
+export const categoryAiFailureLabels = {
+  credentials: "DeepSeek отклонил ключ API", rate: "DeepSeek ограничил запросы",
+  transport: "Сетевая ошибка или таймаут DeepSeek", provider: "DeepSeek отклонил запрос",
+  response: "Некорректный ответ DeepSeek", catalog: "Каталог содержит более 500 категорий",
+  "no-category": "Подходящая доступная категория не найдена",
+} as const;
 export const checkoutFailureLabels = {
   "empty-results": "Ozon вернул пустой результат расчёта",
   "partial-results": "Ozon вернул расчёт только части посылок",
@@ -59,7 +67,7 @@ export const checkoutFailureLabels = {
   "point-restrictions": "Ozon сообщил об ограничениях выбранного ПВЗ для посылки",
   "provider-rejection": "Ozon явно отклонил расчёт; причина не распознана интеграцией",
 } as const;
-export type DiagnosticDetails = { durationMs?: number; carrierCostKopecks?: number; expectedCarrierCostKopecks?: number; attempts?: number; pointId?: number; expectedParcels?: number; receivedParcels?: number; checkoutFailure?: string; provider?: "vk" | "google" | "yandex" | "ozon" | "wb"; stage?: "quote" | "verify" | "consent" | "recheck" | "shipment" | "status" | "points" | "cancel"; reason?: string };
+export type DiagnosticDetails = { durationMs?: number; carrierCostKopecks?: number; expectedCarrierCostKopecks?: number; attempts?: number; pointId?: number; expectedParcels?: number; receivedParcels?: number; checkoutFailure?: string; aiFailure?: string; provider?: "vk" | "google" | "yandex" | "ozon" | "wb"; stage?: "quote" | "verify" | "consent" | "recheck" | "shipment" | "status" | "points" | "cancel"; reason?: string };
 const safeReasons = ["expired", "signature", "cart", "config", "phone", "credentials", "transport", "rate", "recipient", "packaging", "point", "parcels", "unavailable", "response", "provider", "disabled", "method", "pagination", "unpaid", "cancel-review", "partial", "redirect", "social-expired", "social-canceled", "social-operator", "social-conflict", "social-link-session", "social-disabled", "social-failed", "provider-rejected", "temporary", "uncertain-submission", "provider-status", "already-delivered", "cancel-pending"];
 export function safeDiagnosticDetails(input: DiagnosticDetails = {}): Record<string, string | number> {
   const result: Record<string, string | number> = {};
@@ -71,6 +79,7 @@ export function safeDiagnosticDetails(input: DiagnosticDetails = {}): Record<str
   if (["quote", "verify", "consent", "recheck", "shipment", "status", "points", "cancel"].includes(input.stage ?? "")) result.stage = input.stage!;
   if (safeReasons.includes(input.reason ?? "")) result.reason = input.reason!;
   if (input.checkoutFailure && Object.hasOwn(checkoutFailureLabels, input.checkoutFailure)) result.checkoutFailure = input.checkoutFailure;
+  if (input.aiFailure && Object.hasOwn(categoryAiFailureLabels, input.aiFailure)) result.aiFailure = input.aiFailure;
   return result;
 }
 export function ozonDiagnosticCode(reason: string): DiagnosticCode {

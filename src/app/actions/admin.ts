@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma";
 import { arrangeProductImages, assertImageCapacity, parseProductForm, storedProductImageName, type ProductGalleryEntry } from "@/lib/product-admin";
 import { guardProductWrite } from "@/lib/marketplaces/sync";
 import { queueDerivedReceipt } from "@/lib/cloudkassir/lifecycle";
+import { categoryAiReady, getCategoryAiConfig, queueCategoryAi } from "@/lib/category-ai/config";
 
 import { applicationStatuses, orderStatuses } from "@/lib/order-status";
 
@@ -134,6 +135,7 @@ function productMutationData(input: Extract<ReturnType<typeof parseProductForm>,
   const images = arrangeProductImages([...input.images, ...uploadedImages].map((image, sortOrder) => ({ ...image, sortOrder, ...existingDimensions.get(image.path) })), input.imageLayout);
   return {
     name: input.name,
+    categoryMode: input.categoryMode,
     slug: slugify(input.slug || input.name),
     sku: input.sku,
     type: input.type,
@@ -176,7 +178,7 @@ function productMutationData(input: Extract<ReturnType<typeof parseProductForm>,
 }
 
 function productErrorCode(error: unknown) {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" ? "duplicate" : error instanceof Error && error.message === "duplicate-sku" ? "duplicate" : error instanceof Error && ["images", "specifications", "marketplace-busy"].includes(error.message) ? error.message : "invalid";
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" ? "duplicate" : error instanceof Error && error.message === "duplicate-sku" ? "duplicate" : error instanceof Error && ["images", "specifications", "marketplace-busy", "ai-disabled"].includes(error.message) ? error.message : "invalid";
 }
 
 export async function createProductAction(formData: FormData) {
@@ -197,11 +199,15 @@ export async function createProductAction(formData: FormData) {
     if (!data.slug) throw new Error("invalid");
     product = await prisma.$transaction(async (tx) => {
       await guardProductWrite(tx, data.sku);
-      return tx.product.create({ data: {
+      if (data.categoryMode === "AI" && !categoryAiReady(await getCategoryAiConfig(tx))) throw new Error("ai-disabled");
+      const created = await tx.product.create({ data: {
+      categoryMode: data.categoryMode,
       name: data.name, slug: data.slug, sku: data.sku, type: data.type, status: data.status, badge: data.badge, shortDescription: data.shortDescription, description: data.description, usage: data.usage, instructions: data.instructions, specifications: data.specifications, basePrice: data.basePrice, oldPrice: data.oldPrice, costPrice: data.costPrice, stock: data.stock, madeToOrder: data.madeToOrder, leadDays: data.leadDays, weightGrams: data.weightGrams, widthMm: data.widthMm, depthMm: data.depthMm, heightMm: data.heightMm, modelAsset: data.modelAsset, title: data.title, h1: data.h1, metaDescription: data.metaDescription, canonical: data.canonical, robots: data.robots, publishedAt: data.publishedAt,
       categories: { create: data.categoryRows }, images: { create: data.images }, materials: { connect: data.materialLinks }, colors: { connect: data.colorLinks }, technologies: { connect: data.technologyLinks }, qualityProfiles: { connect: data.qualityLinks }, postProcesses: { connect: data.postProcessLinks },
       shippingWeightG: data.shippingWeightG, shippingLengthMm: data.shippingLengthMm, shippingWidthMm: data.shippingWidthMm, shippingHeightMm: data.shippingHeightMm,
       } });
+      await queueCategoryAi(tx, created.id, data.categoryMode);
+      return created;
     });
   } catch (error) {
     await removeStoredImages(upload.storedPaths);
@@ -239,12 +245,16 @@ export async function updateProductAction(formData: FormData) {
     product = await prisma.$transaction(async (tx) => {
       await guardProductWrite(tx, data.sku, id);
       const linked = importedFieldsChanged && await tx.marketplaceListing.count({ where: { productId: id } });
-      return tx.product.update({ where: { id }, data: {
+      if (data.categoryMode === "AI" && !categoryAiReady(await getCategoryAiConfig(tx))) throw new Error("ai-disabled");
+      const updated = await tx.product.update({ where: { id }, data: {
+      categoryMode: data.categoryMode,
       ...(linked ? { marketplaceMode: "SITE" } : {}),
       name: data.name, slug: data.slug, sku: data.sku, type: data.type, status: data.status, badge: data.badge, shortDescription: data.shortDescription, description: data.description, usage: data.usage, instructions: data.instructions, specifications: data.specifications, basePrice: data.basePrice, oldPrice: data.oldPrice, costPrice: data.costPrice, stock: data.stock, madeToOrder: data.madeToOrder, leadDays: data.leadDays, weightGrams: data.weightGrams, widthMm: data.widthMm, depthMm: data.depthMm, heightMm: data.heightMm, modelAsset: data.modelAsset, title: data.title, h1: data.h1, metaDescription: data.metaDescription, canonical: data.canonical, robots: data.robots, publishedAt: data.publishedAt,
       categories: { deleteMany: {}, create: data.categoryRows }, images: { deleteMany: {}, create: data.images }, materials: { set: data.materialLinks }, colors: { set: data.colorLinks }, technologies: { set: data.technologyLinks }, qualityProfiles: { set: data.qualityLinks }, postProcesses: { set: data.postProcessLinks },
       shippingWeightG: data.shippingWeightG, shippingLengthMm: data.shippingLengthMm, shippingWidthMm: data.shippingWidthMm, shippingHeightMm: data.shippingHeightMm,
       } });
+      await queueCategoryAi(tx, id, data.categoryMode);
+      return updated;
     });
   } catch (error) {
     await removeStoredImages(upload.storedPaths);
