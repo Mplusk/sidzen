@@ -74,6 +74,7 @@ export async function quoteOzonDelivery(phoneInput: string, pointInput: string, 
   const ip = (await headers()).get("x-forwarded-for")?.split(",")[0] || "unknown";
   if (!rateLimit(`ozon-quote:${ip}`, 15, 60000).allowed) return { error: "Слишком много расчётов. Повторите через минуту." };
   const started = Date.now();
+  let selectedPointId: number | undefined;
   try {
     const phone = normalizePhone(phoneInput); const id = positiveId.parse(Number(pointInput));
     if (!/^\+7\d{10}$/.test(phone)) throw new OzonDeliveryError("recipient");
@@ -86,14 +87,18 @@ export async function quoteOzonDelivery(phoneInput: string, pointInput: string, 
     const { value: { point, calculation }, attempts } = await retryOzonQuote(config, async api => {
       const point = (await api.pointInfo([id])).find(point => point.delivery_point_id === id && point.is_active);
       if (!point) throw new OzonDeliveryError("point");
+      selectedPointId = id;
       return { point, calculation: await api.checkout(request) };
     });
-    await writeDiagnostic("delivery.quote.ok", { stage: "quote", durationMs: Date.now() - started, attempts });
+    await writeDiagnostic("delivery.quote.ok", { stage: "quote", durationMs: Date.now() - started, attempts, pointId: selectedPointId, expectedParcels: request.postings.length });
     return { ...calculation, cost: customerDeliveryPrice(), address: point.full_address, token: signOzonQuote({ ...calculation, consentId: consent.id, address: point.full_address, request, cart: cartDeliveryFingerprint(cart), config: deliveryConfigFingerprint(config), expires: consent.expiresAt!.getTime() }) };
   } catch (error) {
     const code = error instanceof OzonDeliveryError ? error.code : "provider";
-    const reference = await writeDiagnostic(ozonDiagnosticCode(code), { stage: "quote", durationMs: Date.now() - started, reason: code, attempts: error instanceof OzonDeliveryError ? error.attempts : undefined });
+    const reference = await writeDiagnostic(ozonDiagnosticCode(code), { stage: "quote", durationMs: Date.now() - started, reason: code, attempts: error instanceof OzonDeliveryError ? error.attempts : undefined,
+      pointId: selectedPointId, checkoutFailure: error instanceof OzonDeliveryError ? error.checkoutFailure : undefined,
+      expectedParcels: error instanceof OzonDeliveryError ? error.expectedParcels : undefined, receivedParcels: error instanceof OzonDeliveryError ? error.receivedParcels : undefined });
     const message = code === "packaging" ? "Для товаров не заполнены параметры упаковки. Выберите другую доставку или свяжитесь с магазином." : code === "recipient" ? "Ozon Доставка доступна для номера телефона, зарегистрированного на Ozon. Проверьте номер или выберите другую доставку." : code === "parcels" ? "Для Ozon Доставки можно оформить не более 100 отдельных посылок." : code === "transport" ? "Ozon не ответил на проверку доставки. Повторите попытку чуть позже." : "Не удалось рассчитать доставку. Проверьте выбранный ПВЗ или выберите другой способ.";
-    return { error: `${message}${reference ? ` Код обращения: ${reference}` : ""}` };
+    const precise = error instanceof OzonDeliveryError && error.checkoutFailure === "point-restrictions" ? "Ozon сообщил об ограничениях выбранного ПВЗ для этой посылки. Выберите другой ПВЗ или свяжитесь с магазином." : error instanceof OzonDeliveryError && ["empty-results", "partial-results", "missing-posting"].includes(error.checkoutFailure ?? "") ? "Ozon не вернул полный расчёт доставки после автоматических повторов. Выбранный ПВЗ сохранён — попробуйте позже или выберите другой пункт." : message;
+    return { error: `${precise}${reference ? ` Код обращения: ${reference}` : ""}` };
   }
 }

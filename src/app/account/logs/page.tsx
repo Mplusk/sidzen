@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { diagnosticEvents, logAreas, logLevels, safeDiagnosticDetails, type DiagnosticCode, type DiagnosticDetails } from "@/lib/diagnostic-events";
+import { checkoutFailureLabels, diagnosticEvents, logAreas, logLevels, safeDiagnosticDetails, type DiagnosticCode, type DiagnosticDetails } from "@/lib/diagnostic-events";
 import { ClearDiagnosticLogs } from "@/components/clear-diagnostic-logs";
 
 export const metadata: Metadata = { title: "Логи — журнал событий", robots: { index: false, follow: false } };
@@ -37,7 +37,8 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
     {!rows.length ? <p className="notice">Записей пока нет или они не подходят под выбранные фильтры. События записываются с момента подключения журнала; прошлые ошибки восстановить нельзя.</p> : <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Дата · МСК</th><th>Раздел</th><th>Уровень</th><th>Событие</th></tr></thead><tbody>{rows.map(row => {
       const event = diagnosticEvents[row.code as DiagnosticCode];
       const details = safeDiagnosticDetails((row.details && typeof row.details === "object" && !Array.isArray(row.details) ? row.details : {}) as DiagnosticDetails);
-      return <tr key={row.id}><td style={{ whiteSpace: "nowrap" }}>{dateFormat.format(row.createdAt)}</td><td>{logAreas[row.area as keyof typeof logAreas] ?? "Система"}</td><td>{logLevels[row.level as keyof typeof logLevels] ?? "Событие"}</td><td><strong>{event?.[2] ?? "Системное событие"}</strong><br /><small>Код обращения: {row.reference}</small>{Object.keys(details).length > 0 && <details><summary>Технические сведения</summary><pre>{JSON.stringify(details, null, 2)}</pre></details>}</td></tr>;
+      const failure = typeof details.checkoutFailure === "string" ? checkoutFailureLabels[details.checkoutFailure as keyof typeof checkoutFailureLabels] : undefined;
+      return <tr key={row.id}><td style={{ whiteSpace: "nowrap" }}>{dateFormat.format(row.createdAt)}</td><td>{logAreas[row.area as keyof typeof logAreas] ?? "Система"}</td><td>{logLevels[row.level as keyof typeof logLevels] ?? "Событие"}</td><td><strong>{event?.[2] ?? "Системное событие"}</strong>{failure && <p>{failure}</p>}<br /><small>Код обращения: {row.reference}</small>{Object.keys(details).length > 0 && <details><summary>Технические сведения</summary><pre>{JSON.stringify(details, null, 2)}</pre></details>}</td></tr>;
     })}</tbody></table></div>}
     <nav className="pagination" aria-label="Страницы журнала">{page > 1 && <Link href={pageLink(page - 1)} aria-label="Предыдущая страница">←</Link>}<span className="active">{page}</span>{page < pages && <Link href={pageLink(page + 1)} aria-label="Следующая страница">→</Link>}</nav>
     <p className="muted">В журнал не записываются имена, телефоны, адреса, email, пароли, ключи API, токены и содержимое ответов сервисов. Удаление относится только к этому журналу, не к журналу аудита и финансовым документам.</p>

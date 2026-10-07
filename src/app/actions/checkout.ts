@@ -48,7 +48,10 @@ export async function createOrderAction(formData: FormData) {
       let publicCode = stage === "consent" ? "ozon-consent" : "ozon-provider";
       if (error instanceof OzonQuoteError) { code = `delivery.quote.${error.reason}`; publicCode = `ozon-${error.reason}`; }
       else if (error instanceof OzonDeliveryError) { code = ozonDiagnosticCode(error.code); publicCode = ["transport", "recipient", "disabled", "credentials", "rate", "unavailable"].includes(error.code) ? `ozon-${error.code}` : "ozon-provider"; }
-      const reference = await writeDiagnostic(code, { stage, durationMs: Date.now() - started, attempts: error instanceof OzonDeliveryError ? error.attempts : undefined });
+      const reference = await writeDiagnostic(code, { stage, durationMs: Date.now() - started, attempts: error instanceof OzonDeliveryError ? error.attempts : undefined,
+        pointId: ozonQuote?.request.delivery?.delivery_point?.delivery_point_id,
+        checkoutFailure: error instanceof OzonDeliveryError ? error.checkoutFailure : undefined,
+        expectedParcels: error instanceof OzonDeliveryError ? error.expectedParcels : undefined, receivedParcels: error instanceof OzonDeliveryError ? error.receivedParcels : undefined });
       redirect(`/checkout/?error=${publicCode}${reference ? `&reference=${reference}` : ""}`);
     }
     if (Math.abs(freshCost - ozonQuote!.cost) > 0.005) {

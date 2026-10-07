@@ -50,17 +50,27 @@ export const diagnosticEvents = {
   "server.failed": ["server", "ERROR", "Необработанная серверная ошибка сайта"],
 } as const;
 export type DiagnosticCode = keyof typeof diagnosticEvents;
-export type DiagnosticDetails = { durationMs?: number; carrierCostKopecks?: number; expectedCarrierCostKopecks?: number; attempts?: number; provider?: "vk" | "google" | "yandex" | "ozon" | "wb"; stage?: "quote" | "verify" | "consent" | "recheck" | "shipment" | "status" | "points" | "cancel"; reason?: string };
+export const checkoutFailureLabels = {
+  "empty-results": "Ozon вернул пустой результат расчёта",
+  "partial-results": "Ozon вернул расчёт только части посылок",
+  "duplicate-results": "В ответе Ozon повторяются номера посылок",
+  "unexpected-request-id": "Ozon вернул результат для другой посылки",
+  "missing-posting": "Ozon не вернул тариф для посылки",
+  "point-restrictions": "Ozon сообщил об ограничениях выбранного ПВЗ для посылки",
+  "provider-rejection": "Ozon явно отклонил расчёт; причина не распознана интеграцией",
+} as const;
+export type DiagnosticDetails = { durationMs?: number; carrierCostKopecks?: number; expectedCarrierCostKopecks?: number; attempts?: number; pointId?: number; expectedParcels?: number; receivedParcels?: number; checkoutFailure?: string; provider?: "vk" | "google" | "yandex" | "ozon" | "wb"; stage?: "quote" | "verify" | "consent" | "recheck" | "shipment" | "status" | "points" | "cancel"; reason?: string };
 const safeReasons = ["expired", "signature", "cart", "config", "phone", "credentials", "transport", "rate", "recipient", "packaging", "point", "parcels", "unavailable", "response", "provider", "disabled", "method", "pagination", "unpaid", "cancel-review", "partial", "redirect", "social-expired", "social-canceled", "social-operator", "social-conflict", "social-link-session", "social-disabled", "social-failed", "provider-rejected", "temporary", "uncertain-submission", "provider-status", "already-delivered", "cancel-pending"];
 export function safeDiagnosticDetails(input: DiagnosticDetails = {}): Record<string, string | number> {
   const result: Record<string, string | number> = {};
-  for (const key of ["durationMs", "carrierCostKopecks", "expectedCarrierCostKopecks", "attempts"] as const) {
+  for (const key of ["durationMs", "carrierCostKopecks", "expectedCarrierCostKopecks", "attempts", "pointId", "expectedParcels", "receivedParcels"] as const) {
     const value = input[key];
     if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= 1_000_000_000) result[key] = value;
   }
   if (["vk", "google", "yandex", "ozon", "wb"].includes(input.provider ?? "")) result.provider = input.provider!;
   if (["quote", "verify", "consent", "recheck", "shipment", "status", "points", "cancel"].includes(input.stage ?? "")) result.stage = input.stage!;
   if (safeReasons.includes(input.reason ?? "")) result.reason = input.reason!;
+  if (input.checkoutFailure && Object.hasOwn(checkoutFailureLabels, input.checkoutFailure)) result.checkoutFailure = input.checkoutFailure;
   return result;
 }
 export function ozonDiagnosticCode(reason: string): DiagnosticCode {

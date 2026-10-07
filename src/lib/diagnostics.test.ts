@@ -23,6 +23,11 @@ describe("private bounded diagnostic journal", () => {
     expect(m.boundary).toHaveBeenCalledWith(expect.objectContaining({ skip: LOG_MAX_ROWS - 1 }));
     expect(m.remove).not.toHaveBeenCalled();
   });
+  it("retains only public pickup identifiers, parcel counts and a closed failure vocabulary", () => {
+    expect(safeDiagnosticDetails({ pointId: 42, expectedParcels: 2, receivedParcels: 1, checkoutFailure: "partial-results" })).toEqual({ pointId: 42, expectedParcels: 2, receivedParcels: 1, checkoutFailure: "partial-results" });
+    expect(safeDiagnosticDetails({ pointId: 79001234567, checkoutFailure: "secret token +79991234567", expectedParcels: NaN })).toEqual({});
+    expect(safeDiagnosticDetails({ checkoutFailure: "__proto__" })).toEqual({});
+  });
   it("caps oldest rows under a shared transaction lock and prunes at 30 days", async () => {
     const createdAt = new Date("2030-01-01Z"); m.boundary.mockResolvedValue({ id: "boundary", createdAt });
     await writeDiagnostic("checkout.created");

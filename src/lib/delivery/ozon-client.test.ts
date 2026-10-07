@@ -65,6 +65,31 @@ describe("official Ozon Delivery API client", () => {
       await expect(new OzonDeliveryClient({ clientId: "app", clientSecret: "secret" }, transport).checkout(request)).rejects.toThrow();
     }
   });
+  it("distinguishes a retryable incomplete quote from a permanent PVZ rejection without raw data", async () => {
+    for (const [results, failure, retryable, code] of [
+      [[], "empty-results", true, "unavailable"],
+      [[{ request_id: 1 }], "missing-posting", true, "unavailable"],
+      [[{ request_id: 1, error: { code: "DeliveryPointRestrictionsError", message: "private +79991234567", details: "secret" } }], "point-restrictions", false, "unavailable"],
+      [[{ request_id: 1, error: { code: "UnknownError", message: "private email" } }], "provider-rejection", false, "unavailable"],
+      [[{ request_id: 1 }, { request_id: 1 }], "duplicate-results", false, "response"],
+      [[{ request_id: 2 }], "unexpected-request-id", false, "response"],
+    ] as const) {
+      const transport = vi.fn<typeof fetch>().mockResolvedValueOnce(json({ access_token: "token" })).mockResolvedValueOnce(json({ can_be_delivered: true })).mockResolvedValueOnce(json({ results }));
+      const error = await new OzonDeliveryClient({ clientId: "app", clientSecret: "secret" }, transport).checkout(request).catch(e => e);
+      expect(error).toMatchObject({ code, checkoutFailure: failure, retryable, expectedParcels: 1, receivedParcels: results.length });
+      expect(JSON.stringify(error)).not.toMatch(/secret|79991234567|private email/);
+      expect(error.message).toBe(code);
+    }
+  });
+  it("retries a missing result but not a known restriction in a partial multi-parcel response", async () => {
+    const multi = {...request, postings: [...request.postings, {...request.postings[0], request_id: 2}]};
+    const posting = {estimated_delivery_cost: {amount: "100.00", currency_code: "RUB"}, estimated_insurance_cost: {amount: "2.00", currency_code: "RUB"}, estimated_delivery_days: 3, cutoff_at: request.postings[0].cutoff_at};
+    for (const restricted of [false, true]) {
+      const row = restricted ? {request_id: 1, error: {code: "DeliveryPointRestrictionsError"}} : {request_id: 1, posting};
+      const transport = vi.fn<typeof fetch>().mockResolvedValueOnce(json({access_token: "token"})).mockResolvedValueOnce(json({can_be_delivered: true})).mockResolvedValueOnce(json({results: [row]}));
+      await expect(new OzonDeliveryClient({clientId: "app", clientSecret: "synthetic"}, transport).checkout(multi)).rejects.toMatchObject({checkoutFailure: restricted ? "point-restrictions" : "partial-results", retryable: !restricted, expectedParcels: 2, receivedParcels: 1});
+    }
+  });
   it("starts pagination with null, not an empty cursor, and accepts only active methods", async () => {
     const transport = vi.fn<typeof fetch>().mockResolvedValueOnce(json({ access_token: "token" })).mockResolvedValueOnce(json({ delivery_points: [], next_cursor: null })).mockResolvedValueOnce(json({ shipment_methods: [{ shipment_method_id: 7, name: "Test", status: "blocked" }] }));
     const api = new OzonDeliveryClient({ clientId: "app", clientSecret: "secret" }, transport);

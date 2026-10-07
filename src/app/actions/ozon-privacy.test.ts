@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ ready: vi.fn(), config: vi.fn(), cart: vi.fn(), user: vi.fn(), point: vi.fn(), checkout: vi.fn(), record: vi.fn(), document: vi.fn(), postings: vi.fn() }));
-vi.mock("@/lib/diagnostics", () => ({ writeDiagnostic: vi.fn() }));
+const m = vi.hoisted(() => ({ log: vi.fn(), ready: vi.fn(), config: vi.fn(), cart: vi.fn(), user: vi.fn(), point: vi.fn(), checkout: vi.fn(), record: vi.fn(), document: vi.fn(), postings: vi.fn() }));
+vi.mock("@/lib/diagnostics", () => ({ writeDiagnostic: m.log }));
 vi.mock("@/lib/prisma", () => ({ prisma: { privacyConsent: { create: m.record } } }));
 vi.mock("@/lib/auth", () => ({ getCurrentUser: m.user, requirePermission: vi.fn() }));
 vi.mock("@/lib/privacy", () => ({ operatorReady: m.ready, privacySubject: () => "hmac-not-raw-phone", consentDocument: m.document }));
@@ -47,5 +47,13 @@ describe("Ozon phone transfer consent boundary", () => {
     expect(result).toMatchObject({ cost: 0, address: "QA point" });
     expect(m.record).toHaveBeenCalledTimes(1); expect(m.checkout).toHaveBeenCalledTimes(2);
     expect(m.checkout.mock.calls[0][0]).toEqual(m.checkout.mock.calls[1][0]);
+  });
+  it("explains restrictions and records only the verified public PVZ and sanitized failure", async () => {
+    const error = new OzonDeliveryError("unavailable"); error.checkoutFailure = "point-restrictions"; error.expectedParcels = 1; error.receivedParcels = 1;
+    m.checkout.mockRejectedValue(error);
+    const result = await quoteOzonDelivery("+79991234567", "8", true);
+    expect(result).toEqual({error: expect.stringContaining("ограничениях выбранного ПВЗ")});
+    expect(m.log).toHaveBeenCalledWith("delivery.unavailable", expect.objectContaining({pointId: 8, checkoutFailure: "point-restrictions", expectedParcels: 1, receivedParcels: 1, attempts: 1}));
+    expect(m.checkout).toHaveBeenCalledTimes(1); expect(JSON.stringify(m.log.mock.calls)).not.toMatch(/79991234567|test-key/);
   });
 });

@@ -37,6 +37,27 @@ describe("bounded quote-only Ozon retries", () => {
     const assertion = expect(pending).rejects.toMatchObject({ code: "transport", message: "transport", attempts: 3 });
     await vi.advanceTimersByTimeAsync(1500); await assertion; expect(fetcher).toHaveBeenCalledTimes(3);
   });
+  it("recovers an empty HTTP-200 quote without another click and never creates a shipment", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(json({ access_token: "token" }))
+      .mockResolvedValueOnce(json({ can_be_delivered: true })).mockResolvedValueOnce(json({ results: [] }))
+      .mockResolvedValueOnce(json({ can_be_delivered: true })).mockResolvedValueOnce(quote());
+    vi.stubGlobal("fetch", fetcher);
+    const pending = retryOzonQuote(credentials, api => api.checkout(request)); await vi.advanceTimersByTimeAsync(500);
+    expect(await pending).toEqual({ value: { cost: 102, days: 3 }, attempts: 2 });
+    expect(fetcher.mock.calls[2][1]!.body).toBe(fetcher.mock.calls[4][1]!.body);
+    expect(fetcher.mock.calls.every(([url]) => !String(url).includes("/create"))).toBe(true);
+  });
+  it("stops incomplete quotes after three attempts and does not retry explicit restrictions", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async url => json(String(url).endsWith("/oauth/token") ? {access_token: "token"} : String(url).endsWith("/check-client") ? {can_be_delivered: true} : {results: []}));
+    vi.stubGlobal("fetch", fetcher);
+    const pending = retryOzonQuote(credentials, api => api.checkout(request));
+    const assertion = expect(pending).rejects.toMatchObject({ attempts: 3, checkoutFailure: "empty-results", receivedParcels: 0, expectedParcels: 1 });
+    await vi.advanceTimersByTimeAsync(1500); await assertion;
+    expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith("/checkout"))).toHaveLength(3);
+    fetcher.mockReset().mockResolvedValueOnce(json({ access_token: "token" })).mockResolvedValueOnce(json({ can_be_delivered: true })).mockResolvedValueOnce(json({ results: [{request_id: 1, error: {code: "DeliveryPointRestrictionsError"}}] }));
+    await expect(retryOzonQuote(credentials, api => api.checkout(request))).rejects.toMatchObject({attempts: 1, checkoutFailure: "point-restrictions"});
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
   for (const status of [400, 401, 403, 429, 500]) it(`does not retry HTTP ${status}`, async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json({}, status)); vi.stubGlobal("fetch", fetcher);
     await expect(retryOzonQuote(credentials, api => api.checkout(request))).rejects.toMatchObject({ attempts: 1 });

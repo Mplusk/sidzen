@@ -10,8 +10,12 @@ export const parcelSchema = z.object({ weight_g: z.number().int().positive().max
 export const postingSchema = z.object({ request_id: positiveId, shipment_method_id: positiveId, cutoff_at: z.iso.datetime(), declared_value: money, dimensions: parcelSchema });
 export const checkoutRequestSchema = z.object({ recipient: z.object({ phone_number: z.string().regex(/^\+7\d{10}$/) }), delivery: z.object({ delivery_point: z.object({ delivery_point_id: positiveId }) }), postings: z.array(postingSchema).min(1).max(100) });
 export type OzonCheckoutRequest = z.infer<typeof checkoutRequestSchema>;
+export type OzonCheckoutFailure = "empty-results" | "partial-results" | "duplicate-results" | "unexpected-request-id" | "missing-posting" | "point-restrictions" | "provider-rejection";
 export class OzonDeliveryError extends Error {
   attempts = 1;
+  checkoutFailure?: OzonCheckoutFailure;
+  expectedParcels?: number;
+  receivedParcels?: number;
   constructor(public readonly code: string, public readonly retryable = false) { super(code); }
 }
 
@@ -104,11 +108,26 @@ export class OzonDeliveryClient {
     const allowed = z.object({ can_be_delivered: z.boolean() }).parse(await this.json("/v1/delivery/check-client", { phone_number: request.recipient.phone_number }));
     if (!allowed.can_be_delivered) throw new OzonDeliveryError("recipient");
     const response = z.object({ results: z.array(z.object({ request_id: positiveId, posting: z.object({ estimated_delivery_cost: money, estimated_insurance_cost: money, estimated_delivery_days: z.number().int().nonnegative(), cutoff_at: z.iso.datetime() }).nullish(), error: z.unknown().optional() })) }).parse(await this.json("/v1/order/checkout", checkoutRequestSchema.parse(request)));
-    if (response.results.length !== request.postings.length || new Set(response.results.map(row => row.request_id)).size !== request.postings.length) throw new OzonDeliveryError("unavailable");
+    const fail = (reason: OzonCheckoutFailure, retryable = false, code = "unavailable"): never => {
+      const error = new OzonDeliveryError(code, retryable);
+      error.checkoutFailure = reason;
+      error.expectedParcels = request.postings.length; error.receivedParcels = response.results.length;
+      throw error; // Never keep the provider body, message or recipient on the exception.
+    };
+    if (!response.results.length) fail("empty-results", true);
+    if (new Set(response.results.map(row => row.request_id)).size !== response.results.length) fail("duplicate-results", false, "response");
+    if (response.results.some(row => !request.postings.some(posting => posting.request_id === row.request_id))) fail("unexpected-request-id", false, "response");
+    // An explicit rejection is not a transient empty/partial response. In particular,
+    // do not retry point restrictions or silently replace the buyer's selected PVZ.
+    for (const row of response.results) if (row.error != null) {
+      const reason = z.object({ code: z.literal("DeliveryPointRestrictionsError") }).safeParse(row.error).success ? "point-restrictions" : "provider-rejection";
+      fail(reason);
+    }
+    if (response.results.length !== request.postings.length) fail("partial-results", true);
     let cost = 0; let days = 0;
     for (const posting of request.postings) {
       const row = response.results.find(result => result.request_id === posting.request_id);
-      if (!row?.posting || row.error != null) throw new OzonDeliveryError("unavailable");
+      if (!row?.posting) return fail("missing-posting", true);
       cost += Math.round(Number(row.posting.estimated_delivery_cost.amount) * 100) + Math.round(Number(row.posting.estimated_insurance_cost.amount) * 100);
       days = Math.max(days, row.posting.estimated_delivery_days);
     }
