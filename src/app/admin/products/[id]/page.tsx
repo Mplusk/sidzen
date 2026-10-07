@@ -8,6 +8,8 @@ import { PERMISSIONS } from "@/lib/permissions";
 import { saveProductGroup } from "@/app/actions/product-groups";
 import { getCategoryAiConfig, categoryAiReady } from "@/lib/category-ai/config";
 import { categoryAiJobMessages, categoryAiErrorMessages } from "@/lib/category-ai/worker";
+import { ConfirmAction } from "@/components/confirm-action";
+import { deleteProductAction } from "@/app/actions/product-delete";
 
 export const metadata: Metadata = { title: "Редактирование товара", robots: { index: false, follow: false } };
 
@@ -77,5 +79,11 @@ export default async function AdminProductPage({ params, searchParams }: { param
       </form>
       {members.length > 0 && <p>Карточки группы: {members.map(member => <Link key={member.id} className="text-link" style={{ marginRight: 12 }} href={`/admin/products/${member.id}/#product-group`}>{member.sku} · {member.groupLabel || member.sku} · {member.status}</Link>)}</p>}
     </section>}
+    <section className="content-card" id="delete-product"><h2>Удаление товара</h2>
+      <p>Карточка, варианты, отзывы с фото, избранное и позиции в корзинах будут удалены. Старые заказы сохранят название, артикул и стоимость. На WB и Ozon товар останется: при следующей синхронизации он добавится на сайт заново как новый товар, без прежних отзывов.</p>
+      <ConfirmAction title={`Удалить «${product.name}» полностью?`} description={`Артикул: ${product.sku}. Карточка и отзывы будут удалены. История заказов и другие товары группы останутся. Следующая синхронизация может добавить товар заново, но не восстановит отзывы.`} trigger="Удалить товар полностью" confirmLabel="Да, удалить товар" action={deleteProductAction}>
+        <input type="hidden" name="id" value={product.id} /><input type="hidden" name="confirmation" value={product.id} />
+      </ConfirmAction>
+    </section>
   </>;
 }

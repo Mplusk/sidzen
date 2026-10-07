@@ -35,7 +35,7 @@ export function AdminProductsTable({ products, categories, canWrite, canPublish 
       {canWrite && <td><label><input type="checkbox" name="productIds" value={product.id} aria-label={`Выбрать товар ${product.sku}`} checked={selected.has(product.id)} disabled={pending || !product.canEdit} onChange={event => setSelected(current => { const next = new Set(current); if (event.target.checked) next.add(product.id); else next.delete(product.id); return next; })} /></label></td>}
       <td>{product.canEdit ? <Link href={`/admin/products/${product.id}/`}><strong>{product.name}</strong></Link> : <strong>{product.name}</strong>}</td>
       <td>{product.sku}</td><td>{product.category}</td><td>{product.price}</td><td>{product.stock}</td><td><span className="status" data-status={product.status}>{labels[product.status] ?? product.status}</span></td>
-      <td>{product.canEdit && <Link className="text-link" href={`/admin/products/${product.id}/`}>Редактировать</Link>}</td>
+      <td>{product.canEdit && <><Link className="text-link" href={`/admin/products/${product.id}/`}>Редактировать</Link><br /><Link className="admin-delete-link" href={`/admin/products/${product.id}/#delete-product`}>Удалить</Link></>}</td>
     </tr>)}</tbody></table></div>
   </form>;
 }
