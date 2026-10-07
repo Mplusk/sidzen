@@ -4,8 +4,8 @@ import { getOzonDeliveryConfig } from "@/lib/delivery/ozon-config";
 import { OzonDeliveryClient } from "@/lib/delivery/ozon-client";
 import { hasPointCoordinates } from "@/lib/delivery/points";
 import type { PickupPoint } from "@/lib/delivery/points";
-import { pointSearchTerms, pointSearchPattern } from "@/lib/delivery/point-search";
-import { Prisma } from "@prisma/client";
+import { pointSearchTerms } from "@/lib/delivery/point-search";
+import { pointSearchSql } from "@/lib/delivery/point-search-sql";
 
 export async function GET(request: Request) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
@@ -19,19 +19,7 @@ export async function GET(request: Request) {
   const config = await getOzonDeliveryConfig();
   if (!config.enabled || !config.shipmentMethodId || !config.checkedAt) return Response.json({ points: [] });
   // All values are bound parameters. Do not interpolate user input as SQL.
-  // Explicit Cyrillic folding also works in databases created with a C locale.
-  const rows = await prisma.$queryRaw<PickupPoint[]>(Prisma.sql`
-    WITH directory AS (
-      SELECT *, translate(lower("address"), 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯё', 'абвгдеежзийклмнопрстуфхцчшщъыьэюяе') AS normalized
-      FROM "OzonDeliveryPoint"
-      WHERE "clientId" = ${config.clientId} AND "methodId" = ${BigInt(config.shipmentMethodId)} AND "active" = true
-    )
-    SELECT "id", "name", "address", "type", "latitude", "longitude" FROM directory
-    WHERE ${Prisma.join(terms.map(term => Prisma.sql`normalized ~ ${pointSearchPattern(term)}`), " AND ")}
-    ORDER BY (${Prisma.join(terms.map(term => Prisma.sql`CASE WHEN normalized ~ ${pointSearchPattern(term, true)} THEN 0 ELSE 1 END`), " + ")}) ASC,
-      (${Prisma.join(terms.map(term => Prisma.sql`strpos(normalized, ${term})`), " + ")}) ASC, "address" ASC, "id" ASC
-    LIMIT ${limit + 1}
-  `);
+  const rows = await prisma.$queryRaw<PickupPoint[]>(pointSearchSql(config.clientId, BigInt(config.shipmentMethodId), terms, limit + 1));
   const points = rows.slice(0, limit);
   const inactive = new Set<string>();
   // Existing directories predate coordinate storage. Fill only the searched

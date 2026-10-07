@@ -19,7 +19,7 @@ describe("public Ozon PVZ map directory", () => {
     const response = await GET(request());
     expect(await response.json()).toEqual({ points: [{ ...point, latitude: 44.99, longitude: 38.95 }], truncated: false });
     expect(response.headers.get("cache-control")).toBe("private, no-store");
-    expect(m.find.mock.calls[0][0].values).toEqual(["test-client", 7n, "(^|[^[:alnum:]а-я])яблоновский", "(^|[^[:alnum:]а-я])яблоновский([^[:alnum:]а-я]|$)", "яблоновский", 201]);
+    expect(m.find.mock.calls[0][0].values).toEqual(["test-client", 7n, "'яблоновский':*", "(^|[^[:alnum:]а-я])яблоновский", "(^|[^[:alnum:]а-я])яблоновский([^[:alnum:]а-я]|$)", "яблоновский", 201]);
     expect(m.find.mock.calls[0][0].text).toContain('"active" = true');
     expect(m.info).toHaveBeenCalledWith([42]);
     expect(m.update).toHaveBeenCalledWith({ where: { id: "42", clientId: "test-client", methodId: 7n, active: true }, data: { latitude: 44.99, longitude: 38.95 } });
@@ -60,6 +60,9 @@ describe("public Ozon PVZ map directory", () => {
     expect(sql.values.slice(0, 2)).toEqual(["test-client", 7n]);
     expect(sql.values.at(-1)).toBe(201);
     expect(sql.text).not.toContain("бульварная"); expect(sql.text).toContain("translate(lower");
+    expect(sql.text).toContain("to_tsvector('simple'::regconfig");
+    expect(sql.text).toContain("@@ to_tsquery('simple'::regconfig");
+    expect(sql.values).toContain("'омск':* & 'бульварная':* & '20':*");
   });
   it("limits live suggestions to eight and never contacts the provider while typing", async () => {
     m.find.mockResolvedValue(Array.from({ length: 9 }, (_, index) => ({ ...point, id: String(index) })));
