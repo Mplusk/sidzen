@@ -6,6 +6,15 @@ const config = categoryAiConfigSchema.parse({ enabled: true, apiKey: "fixture-ap
 const categories = [{ id: "cat1", name: "Салфетницы", parentId: null }];
 const answer = (value: unknown, finish_reason = "stop") => Response.json({ choices: [{ finish_reason, message: { content: JSON.stringify(value) } }] });
 describe("DeepSeek categorization", () => {
+  it("instructs classification by purpose with a specific category instead of decor/3D-print prototypes", async () => {
+    const catalog = [{ id: "decor", name: "Декор", parentId: null }, { id: "prototype", name: "Прототипы", parentId: null }, { id: "lamps", name: "Настольные светильники", parentId: null }];
+    const transport = vi.fn(async (_url: Parameters<typeof fetch>[0], options?: RequestInit) => {
+      const prompt = JSON.parse(String(options?.body)).messages[0].content;
+      for (const instruction of ["основному назначению и типу товара из названия", "самую конкретную", "настольный светильник относится", "не к «Декор» или «Прототипы»", "только общие разделы", "создай категорию этого типа"]) expect(prompt).toContain(instruction);
+      return answer({ kind: "existing", categoryId: "lamps" });
+    });
+    expect(await classifyProduct(config, { name: "Светильник настольный Лаванда, E27", description: "Декоративное изделие 3D-печати PLA" }, catalog, transport)).toEqual({ kind: "existing", categoryId: "lamps" });
+  });
   it("selects only a catalog ID, with JSON mode and bounded output on the fixed server endpoint", async () => {
     const transport = vi.fn(async (_url: Parameters<typeof fetch>[0], options?: RequestInit) => {
       expect(options?.redirect).toBe("error"); expect(options?.cache).toBe("no-store");
