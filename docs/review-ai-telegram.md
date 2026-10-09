@@ -49,6 +49,9 @@ guaranteed across ambiguous failures. `SENT` jobs cannot be manually requeued.
 Notifications contain only an opaque authenticated admin link; no buyer data,
 product data or order number. Link previews are disabled. Secrets use existing
 AES-GCM purpose-bound storage. No public Telegram endpoint is added.
+If sign-in is needed, the return path is preserved so successful login opens
+that order rather than the general dashboard; order-reading permission remains
+mandatory before any order lookup.
 
 ## Verification
 

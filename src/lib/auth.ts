@@ -70,8 +70,8 @@ export async function requireUser(returnTo = "/account") {
   return user;
 }
 
-export async function requirePermission(permission: string) {
-  const user = await requireUser("/admin");
+export async function requirePermission(permission: string, returnTo = "/admin") {
+  const user = await requireUser(returnTo);
   if (!user.permissions.has(permission) && !user.roles.includes("superadmin")) redirect("/account?error=forbidden");
   return user;
 }

@@ -48,7 +48,9 @@ try {
   review.body.set("enabled", "on"); review.body.delete("operatorReviewed");
   assert.match((await request(path, review.body)).headers.get("location") ?? "", /review-ai-incomplete/);
   review.body.delete("enabled"); assert.match((await request(path, review.body)).headers.get("location") ?? "", /review-ai-saved/);
-  assert.match((await request("/admin/order-alert/nonexistent/", undefined, false)).headers.get("location") ?? "", /login/);
+  const alertLogin = (await request("/admin/order-alert/nonexistent/", undefined, false)).headers.get("location");
+  assert(alertLogin && new URL(alertLogin, base).pathname.startsWith('/login'));
+  assert.equal(new URL(alertLogin, base).searchParams.get('returnTo'), '/admin/order-alert/nonexistent/');
   assert.equal((await request("/admin/order-alert/nonexistent/")).status, 404);
   const consent = await (await request("/legal/consent/?purpose=review-ai", undefined, false)).text(); assert(consent.includes("Добровольное согласие") && consent.includes("Китай"));
   const catalog = await (await request("/catalog/", undefined, false)).text();
