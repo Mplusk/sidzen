@@ -12,7 +12,9 @@ const actor = await prisma.user.findUniqueOrThrow({ where: { email: "qa@example.
 const jar = new Map<string, string>(), path = "/account/integrations/", token = "123456789:fixture-token-must-not-appear";
 const decode = (value: string) => value.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#x27;/g, "'");
 async function request(target: string, body?: FormData, auth = true, origin = base.origin) {
-  const response = await fetch(new URL(target, base), { method: body ? "POST" : "GET", body, redirect: "manual", headers: { ...(auth ? { Cookie: [...jar].map(([key, value]) => `${key}=${value}`).join("; ") } : {}), ...(body ? { Origin: origin } : {}) } });
+  // Dedicated documentation-range QA IP isolates this suite's login bucket.
+  // The local-only assertion above prevents bypassing production controls.
+  const response = await fetch(new URL(target, base), { method: body ? "POST" : "GET", body, redirect: "manual", headers: { "X-Forwarded-For": "192.0.2.109", ...(auth ? { Cookie: [...jar].map(([key, value]) => `${key}=${value}`).join("; ") } : {}), ...(body ? { Origin: origin } : {}) } });
   if (auth) for (const cookie of response.headers.getSetCookie()) { const pair = cookie.split(";")[0], index = pair.indexOf("="); jar.set(pair.slice(0, index), pair.slice(index + 1)); }
   return response;
 }
