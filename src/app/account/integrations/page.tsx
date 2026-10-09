@@ -10,9 +10,17 @@ import { AdminDeleteDelivery } from "@/components/admin-delete-delivery";
 import { SocialSettings } from "@/components/social-settings";
 import { CloudKassirSettings } from "@/components/cloudkassir-settings";
 import { CategoryAiSettings } from "@/components/category-ai-settings";
+import { CommunicationsSettings } from "@/components/communications-settings";
 
 export const metadata: Metadata = { title: "Подключения магазина", robots: { index: false, follow: false } };
 const messages: Record<string, string> = {
+  "telegram-saved": "Настройки Telegram сохранены.", "telegram-tested": "Тестовое уведомление отправлено в Telegram.",
+  "telegram-invalid": "Проверьте токен и числовой Chat ID. Для включения нужны оба поля.",
+  "telegram-connection": "Telegram не подтвердил отправку или доступ к боту / чату. Проверьте токен, Chat ID, /start и права бота.",
+  "telegram-retried": "Неотправленные уведомления поставлены в очередь повторно.", "telegram-confirmation": "Подтвердите повторную отправку.",
+  "review-ai-saved": "Настройки модерации сохранены. Старые отзывы не изменены.",
+  "review-ai-incomplete": "Проверьте ключ DeepSeek выше и подтвердите условия обработки текста оператором магазина.",
+  "communications-rate": "Слишком много запросов. Повторите через минуту.", "communications-changed": "Настройки изменились параллельно. Обновите страницу и повторите.",
   "ai-saved": "Настройки DeepSeek сохранены. Категории существующих товаров не изменены.",
   "ai-invalid": "Проверьте формат ключа и выбранную модель DeepSeek.",
   "ai-incomplete": "Для включения или проверки DeepSeek нужен API key.",
@@ -92,6 +100,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
     <OzonDeliverySettings />
     <SocialSettings />
     <CategoryAiSettings />
+    <CommunicationsSettings />
     <h2>Другие способы доставки</h2><p className="muted">Управляйте способами с фиксированными тарифами. Эти способы не используют API перевозчика. Ozon Delivery API подключается отдельно выше. Способ можно отключить или удалить с подтверждением — старые заказы не меняются.</p>
     {!methods.length && <p className="notice">Другие способы доставки не добавлены. При включённом Ozon покупателю доступна только Ozon Доставка.</p>}
     {methods.map((method) => <section className="content-card" key={method.id}><h3>{method.name} · {method.active ? "включён" : "выключен"}</h3><DeliveryForm method={{ ...method, basePrice: Number(method.basePrice) }} /><AdminDeleteDelivery id={method.id} name={method.name} /></section>)}

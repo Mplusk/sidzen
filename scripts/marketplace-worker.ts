@@ -9,6 +9,8 @@ import { processFiscalReceipt } from "../src/lib/cloudkassir/worker";
 import { pruneDiagnosticLogs, writeDiagnostic } from "../src/lib/diagnostics";
 import { pruneOrphanReviewPhotos } from "../src/lib/review-image-maintenance";
 import { processCategoryAiJob } from "../src/lib/category-ai/worker";
+import { processReviewAiJob } from "../src/lib/review-ai/worker";
+import { processTelegramOrder } from "../src/lib/telegram/worker";
 
 let stopping = false;
 let nextPrivacyCleanup = 0;
@@ -51,6 +53,22 @@ async function categoryAiLoop() {
   }
 }
 const categories = categoryAiLoop();
+async function communicationLoop(task: () => Promise<unknown>) {
+  while (!stopping) {
+    try { await task(); } catch { await writeDiagnostic("communications.failed"); }
+    if (!stopping) await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+}
+let reviewCatalogDirty = false;
+const reviews = communicationLoop(async () => {
+  reviewCatalogDirty = await processReviewAiJob() || reviewCatalogDirty;
+  if (reviewCatalogDirty) {
+    const base = process.env.MARKETPLACE_APP_URL || "http://app:3000";
+    const response = await fetch(`${base}/api/internal/catalog-invalidate/`, { method: "POST", headers: { Authorization: `Bearer ${catalogInvalidationToken()}` }, redirect: "error", signal: AbortSignal.timeout(5000) });
+    if (response.ok) reviewCatalogDirty = false;
+  }
+});
+const telegram = communicationLoop(processTelegramOrder);
 console.log("Marketplace, delivery and independent financial queues ready.");
 try {
   while (!stopping) {
@@ -86,4 +104,4 @@ try {
       await new Promise((resolve) => setTimeout(resolve, 5000));
     }
   }
-} finally { stopping = true; clearInterval(pulse); await Promise.all([finances, categories]); await prisma.$disconnect(); }
+} finally { stopping = true; clearInterval(pulse); await Promise.all([finances, categories, reviews, telegram]); await prisma.$disconnect(); }

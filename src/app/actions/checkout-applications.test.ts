@@ -8,6 +8,7 @@ vi.mock("@/lib/payments", () => ({ createOnlinePayment: m.bank }));
 vi.mock("@/lib/privacy", () => ({ operatorReady: async () => true, verifyDeliveryConsent: m.consent }));
 vi.mock("@/lib/diagnostics", () => ({ writeDiagnostic: vi.fn() }));
 vi.mock("@/lib/order-notifications", () => ({ sendOrderConfirmation: m.notify }));
+vi.mock("@/lib/telegram/config", () => ({ queueTelegramOrder: vi.fn() }));
 vi.mock("@/lib/delivery/ozon-config", () => ({ OZON_DELIVERY_CODE: "ozon-delivery", getOzonDeliveryConfig: async () => ({ clientId: "qa" }), requireOzonDelivery: vi.fn(), deliveryConfigFingerprint: () => "qa-config" }));
 vi.mock("@/lib/delivery/ozon-quote", async original => ({ ...await original<typeof import("@/lib/delivery/ozon-quote")>(), verifyOzonQuote: m.verify }));
 vi.mock("@/lib/delivery/ozon-retry", () => ({ retryOzonQuote: m.checkout }));

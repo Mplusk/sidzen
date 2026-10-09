@@ -3,9 +3,11 @@ import Link from "next/link";
 import { getStoreContacts } from "@/lib/settings";
 import { CONSENT_TEXT, CONSENT_VERSION } from "@/lib/privacy-documents";
 import { REVIEW_CONSENT_TEXT, REVIEW_CONSENT_VERSION } from "@/lib/reviews";
+import { REVIEW_AI_CONSENT_TEXT, REVIEW_AI_CONSENT_VERSION } from "@/lib/review-ai/policy";
 export const metadata: Metadata = { title: "Отдельное согласие на обработку данных" };
 export default async function ConsentPage({ searchParams }: { searchParams: Promise<{ purpose?: string }> }) {
   const [contacts, params] = await Promise.all([getStoreContacts(), searchParams]);
+  if (params.purpose === "review-ai") return <article className="container prose-page"><h1>Отдельное согласие на проверку отзыва DeepSeek</h1><p>Версия {REVIEW_AI_CONSENT_VERSION}. Добровольное согласие, отдельно от публикации отзыва.</p><h2>Оператор</h2><p>{contacts.legalName} {contacts.legalAddress} {contacts.email}</p><p>{REVIEW_AI_CONSENT_TEXT}</p><p>Отметка изначально не установлена. Проверка применяется только к отправленному отзыву. <Link className="text-link" href="/account/privacy/">Отозвать согласие</Link> или <Link className="text-link" href="/account/reviews/">удалить отзыв</Link>.</p></article>;
   if (params.purpose === "review") return <article className="container prose-page">
     <h1>Отдельное согласие на публикацию отзыва и фото</h1>
     <p>Самостоятельный документ, версия {REVIEW_CONSENT_VERSION}. Не является офертой, политикой или согласием на рекламу.</p>

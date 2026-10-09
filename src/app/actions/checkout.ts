@@ -18,6 +18,7 @@ import { revalidatePath } from "next/cache";
 import { writeDiagnostic } from "@/lib/diagnostics";
 import { ozonDiagnosticCode, type DiagnosticCode } from "@/lib/diagnostic-events";
 import { ozonCreateBody } from "@/lib/delivery/ozon-worker";
+import { queueTelegramOrder } from "@/lib/telegram/config";
 
 export async function createOrderAction(formData: FormData) {
   if (!await operatorReady()) redirect("/checkout/?error=operator");
@@ -95,6 +96,7 @@ export async function createOrderAction(formData: FormData) {
         shipment: { create: { provider: deliveryMethod.code, method: deliveryMethod.name, cost: carrierCost, ...(ozonQuote ? { payload: { pointId: ozonQuote.request.delivery.delivery_point.delivery_point_id, address: ozonQuote.address, estimatedDays: ozonQuote.days }, ozonJob: { create: { clientId: (await getOzonDeliveryConfig(tx)).clientId, request: ozonCreateBody(ozonQuote.request, number, parsed.data.name, cart.items.flatMap(item => Array.from({ length: item.quantity }, () => item.product!.name))) } } } : {}) } },
         notifications: { create: { channel: "email", recipient: parsed.data.email, template: "order-confirmation", status: "PENDING" } },
       } });
+      await queueTelegramOrder(tx, created.id);
       await tx.auditLog.create({ data: { actorId: user?.id, action: "order.application.create", entityType: "Order", entityId: created.id, after: { version: CONSENT_VERSION, privacyNoticeVersion: CONSENT_VERSION, delivery: deliveryMethod.code, flow: "contact-request" } } });
       if (ozonQuote?.consentId) await tx.privacyConsent.update({ where: { id: ozonQuote.consentId }, data: { orderId: created.id } });
       return created;

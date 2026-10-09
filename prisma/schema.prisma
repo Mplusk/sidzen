@@ -136,6 +136,7 @@ model PrivacyConsent {
   revokedAt   DateTime?
   user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   review      Review?
+  reviewAiJob ReviewAiJob?
 
   @@index([userId, createdAt])
   @@index([purpose, expiresAt])
@@ -571,6 +572,7 @@ model Order {
   payment         Payment?
   shipment        Shipment?
   notifications   OrderNotification[]
+  telegramJob     TelegramOrderJob?
   fiscalReceipts   FiscalReceipt[]
 
   @@index([status, createdAt])
@@ -833,8 +835,42 @@ model Review {
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   images    ReviewImage[]
+  aiJob     ReviewAiJob?
 
   @@index([productId, approved, createdAt])
+}
+
+model ReviewAiJob {
+  reviewId    String   @id
+  review      Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  consentId   String?  @unique
+  // Separate optional consent; checked again before any transfer/publication.
+  consent     PrivacyConsent? @relation(fields: [consentId], references: [id], onDelete: SetNull)
+  status      String   @default("PENDING")
+  reason      String?
+  attempts    Int      @default(0)
+  leaseToken  String?
+  leaseUntil  DateTime?
+  availableAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([status, availableAt])
+}
+
+model TelegramOrderJob {
+  orderId     String   @id
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  revision    String
+  status      String   @default("PENDING")
+  attempts    Int      @default(0)
+  errorCode   String?
+  leaseToken  String?
+  leaseUntil  DateTime?
+  availableAt DateTime @default(now())
+  sentAt      DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([status, availableAt])
 }
 
 model ReviewImage {

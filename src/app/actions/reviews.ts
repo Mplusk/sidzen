@@ -9,6 +9,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { consentDocument, operatorReady, privacySubject } from "@/lib/privacy";
 import { purchasedProductWhere, parseReview, REVIEW_CONSENT_TEXT, REVIEW_CONSENT_VERSION } from "@/lib/reviews";
 import { reviewPhotoFiles, storeReviewPhotos, removeReviewPhotos } from "@/lib/review-images";
+import { REVIEW_AI_CONSENT_TEXT, REVIEW_AI_CONSENT_VERSION } from "@/lib/review-ai/policy";
 
 function refreshReviews() {
   revalidatePath("/catalog", "layout"); revalidatePath("/about/");
@@ -35,7 +36,8 @@ export async function createReviewAction(form: FormData) {
       if (!await tx.order.findFirst({ where: purchasedProductWhere(user.id, input.productId), select: { id: true } })) throw new Error("purchase");
       if (await tx.review.findFirst({ where: { userId: user.id, productId: input.productId }, select: { id: true } })) throw new Error("duplicate");
       const consent = await tx.privacyConsent.create({ data: { userId: user.id, purpose: "review", subjectHash: privacySubject(user.id), version: REVIEW_CONSENT_VERSION, document } });
-      await tx.review.create({ data: { productId: input.productId, userId: user.id, buyerKey: `${user.id}:${input.productId}`, author: input.author, text: input.text, rating: input.rating, verifiedPurchase: true, consentId: consent.id, images: { create: images } } });
+      const aiConsent = form.get("aiConsent") === "on" ? await tx.privacyConsent.create({ data: { userId: user.id, purpose: "review-ai", subjectHash: privacySubject(user.id), version: REVIEW_AI_CONSENT_VERSION, document: { ...document, purpose: "review-ai", version: REVIEW_AI_CONSENT_VERSION, text: REVIEW_AI_CONSENT_TEXT, url: "/legal/consent/?purpose=review-ai" } } }) : null;
+      await tx.review.create({ data: { productId: input.productId, userId: user.id, buyerKey: `${user.id}:${input.productId}`, author: input.author, text: input.text, rating: input.rating, status: "PENDING", verifiedPurchase: true, consentId: consent.id, images: { create: images }, aiJob: { create: { ...(aiConsent ? { status: "PENDING", reason: "queued", consentId: aiConsent.id } : { status: "MANUAL", reason: "consent" }) } } } });
     });
   } catch (error) {
     await removeReviewPhotos(images.map(image => image.fileName));
@@ -54,6 +56,8 @@ export async function deleteOwnReviewAction(form: FormData) {
     const review = await tx.review.findFirst({ where: { id, userId: user.id }, include: { images: true } });
     if (!review) return null;
     if (review.consentId) await tx.privacyConsent.update({ where: { id: review.consentId }, data: { revokedAt: new Date() } });
+    const ai = await tx.reviewAiJob.findUnique({ where: { reviewId: review.id } });
+    if (ai?.consentId) await tx.privacyConsent.update({ where: { id: ai.consentId }, data: { revokedAt: new Date() } });
     await tx.review.delete({ where: { id: review.id } });
     return review.images;
   });
@@ -71,6 +75,7 @@ export async function moderateReviewAction(form: FormData) {
     const row = await tx.review.findUnique({ where: { id }, include: { consent: true } });
     if (!row || (decision === "PUBLISHED" && row.verifiedPurchase && (!row.consent || row.consent.revokedAt))) return false;
     await tx.review.update({ where: { id }, data: { status: String(decision), approved: decision === "PUBLISHED" } });
+    await tx.reviewAiJob.updateMany({ where: { reviewId: id }, data: { status: "CANCELED", reason: "manual", leaseToken: null, leaseUntil: null } });
     await tx.auditLog.create({ data: { actorId: user.id, action: "review.moderate", entityType: "Review", entityId: id, before: { status: row.status }, after: { status: String(decision) } } });
     return true;
   });

@@ -26,7 +26,8 @@ export function ReviewForm({ productId }: { productId: string }) {
     {error && <p className="notice notice--danger" role="alert">{error}</p>}
     {!!previews.length && <div className="review-photos">{previews.map((url, index) => <Image src={url} unoptimized key={url} width={88} height={88} alt={`Выбранное фото ${index + 1}`} />)}</div>}
     <label className="checkbox-row"><input type="checkbox" name="consent" required /> <span>Даю отдельное <Link className="text-link" href="/legal/consent/?purpose=review" target="_blank" rel="noopener">согласие на публикацию имени, отзыва и фото</Link>. Не публикую чужие персональные данные.</span></label>
-    <small className="muted">После проверки отзыв появится в карточке. Оценка не влияет на решение о публикации. Статус и удаление доступны в «Мои отзывы».</small>
+    <label className="checkbox-row"><input type="checkbox" name="aiConsent" /> <span>Разрешаю <Link className="text-link" href="/legal/consent/?purpose=review-ai" target="_blank" rel="noopener">проверить текст отзыва через DeepSeek</Link> (внешний сервис, Китай). Необязательно: без согласия проверит администратор.</span></label>
+    <small className="muted">После проверки отзыв появится в карточке. ИИ проверяет только текст; фотографии и спорные отзывы проверяет администратор. Оценка не влияет на решение о публикации. Статус и удаление доступны в «Мои отзывы».</small>
     <SubmitReview />
   </form>;
 }

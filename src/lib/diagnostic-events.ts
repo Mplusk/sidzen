@@ -2,6 +2,11 @@
 export const logAreas = { ai: "DeepSeek · категории", delivery: "Ozon Доставка", checkout: "Оформление заказа", payment: "Точка · оплата", fiscal: "CloudKassir · чеки", social: "Вход через соцсети", marketplace: "Импорт товаров", worker: "Фоновые задачи", server: "Сайт · серверные ошибки" } as const;
 export const logLevels = { INFO: "Событие", WARN: "Предупреждение", ERROR: "Ошибка" } as const;
 export const diagnosticEvents = {
+  "review-ai.approved": ["ai", "INFO", "DeepSeek подтвердил публикацию отзыва"],
+  "review-ai.manual": ["ai", "WARN", "Отзыв направлен на ручную проверку"],
+  "telegram.sent": ["worker", "INFO", "Уведомление о новом заказе отправлено в Telegram"],
+  "telegram.failed": ["worker", "WARN", "Не удалось подтвердить отправку уведомления Telegram; проверьте подключение"],
+  "communications.failed": ["worker", "WARN", "Ошибка фоновой проверки отзывов или уведомлений; задачи сохранены"],
   "category-ai.ok": ["ai", "INFO", "DeepSeek определил категорию товара"],
   "category-ai.failed": ["ai", "WARN", "Не удалось определить категорию DeepSeek; товар сохранён"],
   "delivery.quote.ok": ["delivery", "INFO", "Доставка в ПВЗ проверена"],

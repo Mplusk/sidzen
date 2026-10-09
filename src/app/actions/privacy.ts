@@ -26,6 +26,7 @@ export async function requestPersonalData(form: FormData) {
     if (parsed.data.type === "WITHDRAW") {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412032)`;
       await tx.privacyConsent.updateMany({ where: { userId: user.id, purpose: "review", revokedAt: null }, data: { revokedAt: new Date() } });
+      await tx.privacyConsent.updateMany({ where: { userId: user.id, purpose: "review-ai", revokedAt: null }, data: { revokedAt: new Date() } });
       await tx.review.updateMany({ where: { userId: user.id, verifiedPurchase: true }, data: { approved: false, status: "HIDDEN" } });
       await tx.privacyConsent.updateMany({ where: { userId: user.id, purpose: { startsWith: "social:" }, revokedAt: null }, data: { revokedAt: new Date() } });
       await tx.socialAccount.deleteMany({ where: { userId: user.id } });

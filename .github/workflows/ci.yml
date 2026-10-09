@@ -56,6 +56,7 @@ jobs:
           pnpm exec tsx scripts/smoke-pickup-search-index.ts
           pnpm exec tsx scripts/smoke-marketplaces.ts
           pnpm exec tsx scripts/smoke-category-ai.ts
+          pnpm exec tsx scripts/smoke-review-ai-telegram.ts
           pnpm exec tsx scripts/smoke-tochka.ts
           pnpm exec tsx scripts/smoke-cloudkassir.ts
           pnpm exec tsx scripts/smoke-social.ts
@@ -81,6 +82,7 @@ jobs:
           pnpm exec tsx scripts/smoke-product-bulk-http.ts
           pnpm exec tsx scripts/smoke-product-delete-http.ts
           pnpm exec tsx scripts/smoke-category-ai-http.ts
+          pnpm exec tsx scripts/smoke-communications-http.ts
           pnpm exec tsx scripts/smoke-clients-http.ts
           pnpm exec tsx scripts/smoke-ozon-delivery-http.ts
           pnpm exec tsx scripts/smoke-integrations.mjs
