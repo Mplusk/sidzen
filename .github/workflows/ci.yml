@@ -16,7 +16,8 @@ jobs:
     timeout-minutes: 20
     services:
       postgres:
-        image: postgres:16-alpine
+        # Docker Official Images mirror: avoid shared-runner Docker Hub pull limits.
+        image: public.ecr.aws/docker/library/postgres:16-alpine
         env:
           POSTGRES_PASSWORD: ci-qa-only
           POSTGRES_DB: shop_qa
@@ -111,10 +112,12 @@ jobs:
         run: git archive --format=tar.gz --output="${RUNNER_TEMP}/3dprinta-${GITHUB_SHA}.tar.gz" "${GITHUB_SHA}"
 
       - name: Build immutable images on the runner, not the small production VPS
+        env:
+          NODE_BASE_IMAGE: public.ecr.aws/docker/library/node:22-bookworm-slim
         run: |
-          docker build --target runner -t "3dprinta-app:${GITHUB_SHA}" .
-          docker build --target migrator -t "3dprinta-migrate:${GITHUB_SHA}" .
-          docker build --target marketplace-worker -t "3dprinta-marketplace-worker:${GITHUB_SHA}" .
+          docker build --build-arg NODE_BASE_IMAGE="${NODE_BASE_IMAGE}" --target runner -t "3dprinta-app:${GITHUB_SHA}" .
+          docker build --build-arg NODE_BASE_IMAGE="${NODE_BASE_IMAGE}" --target migrator -t "3dprinta-migrate:${GITHUB_SHA}" .
+          docker build --build-arg NODE_BASE_IMAGE="${NODE_BASE_IMAGE}" --target marketplace-worker -t "3dprinta-marketplace-worker:${GITHUB_SHA}" .
           docker image save "3dprinta-app:${GITHUB_SHA}" "3dprinta-migrate:${GITHUB_SHA}" "3dprinta-marketplace-worker:${GITHUB_SHA}" | gzip -1 > "${RUNNER_TEMP}/3dprinta-${GITHUB_SHA}.images.tar.gz"
 
       - name: Configure deploy SSH key

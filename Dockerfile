@@ -1,4 +1,5 @@
-FROM node:22-bookworm-slim AS base
+ARG NODE_BASE_IMAGE=node:22-bookworm-slim
+FROM ${NODE_BASE_IMAGE} AS base
 LABEL com.3dprinta.project="shop"
 
 ENV PNPM_HOME="/pnpm" \
