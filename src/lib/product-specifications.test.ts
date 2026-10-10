@@ -1,9 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { productSpecificationRows, type SpecificationProduct } from "./product-specifications";
 import { translatedSpecifications } from "./format";
+import { isAdminOnlySpecification } from "./product-specification-visibility";
 
 const product: SpecificationProduct = { specifications: { "Материал": "PLA пластик", "Цвет товара": "черный", "Вес с упаковкой, г": "85" }, widthMm: null, depthMm: null, heightMm: null, weightGrams: null, technologies: [], materials: [], colors: [], stock: 0, madeToOrder: false, leadDays: 3 };
 describe("customer-facing product specifications", () => {
+  it.each(["ТНВЭД", "ТН ВЭД коды ЕАЭС", "Код ТН-ВЭД", "tn_ved_code", "TN VED", "ОКПД 2", "Код ОКПД2", "ОКПД-2", "OKPD 2", "okpd2Code", "ОКПД", "ТН\u200bВЭД", "ＯＫＰＤ２"])("hides administrative classification %s without mutating stored values", (label) => {
+    const specifications = { [label]: "3924900009", "Материал": "PLA пластик" };
+    expect(isAdminOnlySpecification(label)).toBe(true);
+    expect(translatedSpecifications(specifications)).toEqual({ "Материал": "PLA пластик" });
+    expect(productSpecificationRows({ ...product, specifications })).toEqual([["Материал", "PLA пластик"]]);
+    expect(specifications[label]).toBe("3924900009");
+  });
+  it("keeps unrelated customer properties visible", () => {
+    const specifications = { "Материал": "PLA", "Цвет": "розовый", "Страна производства": "Россия", "Вес с упаковкой, г": "120" };
+    expect(translatedSpecifications(specifications)).toEqual(specifications);
+    for (const label of Object.keys(specifications)) expect(isAdminOnlySpecification(label)).toBe(false);
+  });
   it("does not invent dimensions, technology or a manufacturing date for an unavailable ready product", () => {
     expect(productSpecificationRows(product)).toEqual([["Материал", "PLA пластик"], ["Цвет", "черный"], ["Вес с упаковкой, г", "85"]]);
     expect(productSpecificationRows({ ...product, specifications: null, widthMm: 0, depthMm: "0", heightMm: null })).toEqual([]);

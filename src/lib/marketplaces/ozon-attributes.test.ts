@@ -24,7 +24,7 @@ describe("real Ozon attribute structure", () => {
     const cache = new Map();
     for (let page = 0; page < 2; page++) {
       const source = (await fetchOzonAttributes(connection, ["11"], transport, cache)).get("11")!;
-      expect(ozonSpecifications(source.item, source.labels)).toEqual({ "Материал": "PLA пластик", "Цвет товара": "черный", "Вес с упаковкой, г": "85" });
+      expect(ozonSpecifications(source.item, source.labels)).toEqual({ "Материал": "PLA пластик", "Цвет товара": "черный", "Вес с упаковкой, г": "85", "ТН ВЭД коды ЕАЭС": "3924900009" });
     }
     expect(calls).toBe(1);
   });
@@ -32,7 +32,7 @@ describe("real Ozon attribute structure", () => {
     await expect(fetchOzonAttributes(connection, ["11"], async () => Response.json({ result: [{ id: 11, attributes: item.attributes }] }))).rejects.toThrow("format");
   });
   it("repairs old keys without replacing manual named values or losing unknown data", () => {
-    expect(repairLegacyOzonSpecifications({ "Ozon · 6383": "PLA пластик", "Ozon · 85": "Нет бренда", "Ozon · 10096": "черный", "Цвет товара": "белый", "Ручное поле": "сохранить", "Ozon · 777777": "неизвестно", "Ozon · 22232": "3924900009" }, labels)).toEqual({ changed: true, value: { "Материал": "PLA пластик", "Цвет товара": "белый", "Ручное поле": "сохранить", "Ozon · 777777": "неизвестно" } });
+    expect(repairLegacyOzonSpecifications({ "Ozon · 6383": "PLA пластик", "Ozon · 85": "Нет бренда", "Ozon · 10096": "черный", "Цвет товара": "белый", "Ручное поле": "сохранить", "Ozon · 777777": "неизвестно", "Ozon · 22232": "3924900009" }, labels)).toEqual({ changed: true, value: { "Материал": "PLA пластик", "Цвет товара": "белый", "Ручное поле": "сохранить", "Ozon · 777777": "неизвестно", "ТН ВЭД коды ЕАЭС": "3924900009" } });
     expect(repairLegacyOzonSpecifications({ "Материал": "Дерево" }, labels)).toEqual({ changed: false, value: { "Материал": "Дерево" } });
   });
 });

@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
 
 const base = new URL(process.env.SMOKE_BASE_URL || "http://localhost:3101");
 const db = new URL(process.env.DATABASE_URL || "");
 assert(["localhost", "127.0.0.1"].includes(base.hostname) && ["localhost", "127.0.0.1"].includes(db.hostname) && db.pathname === "/shop_qa");
 const jar = new Map<string, string>();
-let productId: string | undefined, cartId: string | undefined, categoryId: string | undefined;
+let productId: string | undefined, cartId: string | undefined, categoryId: string | undefined, sessionId: string | undefined;
+const adminCodes = { "ТН ВЭД коды ЕАЭС": "0012345678", "Код ОКПД 2": "22.29.23.199", tn_ved_code: "0098765432", okpd2: "27.40.22.190" };
 async function request(path: string, body?: FormData) {
   const response = await fetch(new URL(path, base), { method: body ? "POST" : "GET", redirect: "manual", headers: { Cookie: [...jar].map(([key, value]) => `${key}=${value}`).join("; "), ...(body ? { Origin: base.origin } : {}) }, body, signal: AbortSignal.timeout(15000) });
   for (const cookie of response.headers.getSetCookie()) { const pair = cookie.split(";")[0], at = pair.indexOf("="); jar.set(pair.slice(0, at), pair.slice(at + 1)); }
@@ -26,7 +27,7 @@ try {
   const prefix = `qa-card-${randomUUID().slice(0, 8)}`;
   const category = await prisma.category.create({ data: { name: "QA Категория", slug: `${prefix}-category`, visible: true } });
   categoryId = category.id;
-  const product = await prisma.product.create({ data: { name: "QA Салфетница Вершина", sku: prefix, slug: prefix, type: "READY", status: "PUBLISHED", publishedAt: new Date(), basePrice: 240, oldPrice: 300, stock: 0, madeToOrder: false, shortDescription: "QA description must not crowd the catalog card", description: "Первый абзац.\n\nВторой абзац.", specifications: { "Материал": "PLA пластик", "Цвет товара": "черный", "Вес с упаковкой, г": "85", "Ozon · 22232": "legacy technical", "Пустая строка": "" }, categories: { create: { categoryId: category.id, isPrimary: true } }, images: { create: [{ path: "/generated/product-organizer.webp", alt: "Фото 1", sortOrder: 0 }, { path: "/generated/product-mount.webp", alt: "Фото 2", sortOrder: 1 }] } } });
+  const product = await prisma.product.create({ data: { name: "QA Салфетница Вершина", sku: prefix, slug: prefix, type: "READY", status: "PUBLISHED", publishedAt: new Date(), basePrice: 240, oldPrice: 300, stock: 0, madeToOrder: false, shortDescription: "QA description must not crowd the catalog card", description: "Первый абзац.\n\nВторой абзац.", specifications: { ...adminCodes, "Материал": "PLA пластик", "Цвет товара": "черный", "Вес с упаковкой, г": "85", "Ozon · 22232": "legacy technical", "Пустая строка": "" }, categories: { create: { categoryId: category.id, isPrimary: true } }, images: { create: [{ path: "/generated/product-organizer.webp", alt: "Фото 1", sortOrder: 0 }, { path: "/generated/product-mount.webp", alt: "Фото 2", sortOrder: 1 }] } } });
   productId = product.id;
   const catalog = await request(`/catalog/${category.slug}/?q=${prefix}`); assert.equal(catalog.status, 200);
   const catalogHtml = await catalog.text();
@@ -40,6 +41,7 @@ try {
   const path = `/catalog/${category.slug}/${product.slug}/`;
   const response = await request(path); assert.equal(response.status, 200);
   let html = await response.text();
+  for (const text of [...Object.keys(adminCodes), ...Object.values(adminCodes)]) assert(!html.includes(text), `Administrative classification leaked into public HTML/RSC: ${text}`);
   const table = html.match(/<table class="spec-table">[\s\S]*?<\/table>/)?.[0];
   assert(table); assert(table.includes("PLA пластик") && table.includes("черный") && table.includes("Вес с упаковкой, г"));
   for (const text of ["Ozon", "0 × 0", "Технология", "Срок изготовления", "Пустая строка"]) assert(!table.includes(text));
@@ -70,8 +72,25 @@ try {
   item = await prisma.cartItem.findFirstOrThrow({ where: { productId } }); assert.equal(item.cartId, cartId);
   html = await (await request("/cart/")).text();
   assert.equal((await request("/cart/", actionForm(html, ">Удалить</button>"))).headers.get("location"), "/cart/");
+  const editorPath = `/admin/products/${productId}/`;
+  assert.match((await request(editorPath)).headers.get("location") ?? "", /^\/login/);
+  const actor = await prisma.user.findUniqueOrThrow({ where: { email: "qa@example.test" } });
+  // Local-only synthetic session avoids spending shared login-rate allowance.
+  const token = randomBytes(32).toString("base64url");
+  sessionId = (await prisma.session.create({ data: { userId: actor.id, tokenHash: createHash("sha256").update(token).digest("hex"), expiresAt: new Date(Date.now() + 60000) } })).id;
+  jar.set("3dp_session", token);
+  const editor = await request(editorPath); assert.equal(editor.status, 200);
+  const editorHtml = await editor.text();
+  const specificationsEditor = editorHtml.match(/<textarea\b[^>]*name="specificationsText"[^>]*>[\s\S]*?<\/textarea>/)?.[0];
+  assert(specificationsEditor);
+  for (const text of [...Object.keys(adminCodes), ...Object.values(adminCodes)]) assert(specificationsEditor.includes(text), `Administrator lost classification: ${text}`);
+  const signedInPublicHtml = await (await request(path)).text();
+  for (const text of [...Object.keys(adminCodes), ...Object.values(adminCodes)]) assert(!signedInPublicHtml.includes(text));
+  assert.deepEqual((await prisma.product.findUniqueOrThrow({ where: { id: productId }, select: { specifications: true } })).specifications, product.specifications);
   console.log("PASS: dense catalog cards, price before title, real discount/availability, photo dots, header search, product HTML, readable specifications, absent empty/legacy rows, description paragraphs, two-photo gallery controls, out-of-stock purchase rejection, in-stock cart addition/removal, quantity limit, made-to-order purchase. Isolated QA data only; no orders or payments.");
+  console.log("PASS: TN VED / OKPD 2 absent from public HTML/RSC for guests and signed-in administrators, retained verbatim in protected administrator editor and database.");
 } finally {
+  if (sessionId) await prisma.session.deleteMany({ where: { id: sessionId } });
   if (cartId) await prisma.cart.deleteMany({ where: { id: cartId } });
   if (productId) await prisma.product.deleteMany({ where: { id: productId } });
   if (categoryId) await prisma.category.deleteMany({ where: { id: categoryId } });

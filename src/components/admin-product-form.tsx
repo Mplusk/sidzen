@@ -145,7 +145,7 @@ export function AdminProductForm({ options, product, error, canPublish = true, a
         <label className="field field--full"><span>Путь к файлу модели</span><input name="modelAsset" defaultValue={product?.modelAsset ?? ""} maxLength={500} placeholder="/private/..." /></label>
       </div></section>
 
-      <section className="admin-card"><h2>Характеристики</h2><label className="field"><span>JSON-объект</span><textarea className="admin-code-field" name="specificationsText" defaultValue={specificationsText} placeholder={'{\n  "Слой": "0,2 мм",\n  "Допуск": "±0,3 мм"\n}'} /><small>Каждая пара «ключ — значение» появится строкой в таблице характеристик.</small></label></section>
+      <section className="admin-card"><h2>Характеристики</h2><label className="field"><span>JSON-объект</span><textarea className="admin-code-field" name="specificationsText" defaultValue={specificationsText} placeholder={'{\n  "Слой": "0,2 мм",\n  "Допуск": "±0,3 мм"\n}'} /><small>Заполненные характеристики появятся в карточке покупателя. ТН ВЭД и ОКПД 2 сохраняются только для администратора и на витрине не показываются.</small></label></section>
 
       <section className="admin-card admin-card--wide"><div className="catalog-section-heading"><h2>Материалы, цвета и производство</h2><Link className="text-link" href="/admin/catalog/#material">Управлять справочниками</Link></div><div className="admin-relations">
         <div><h3>Материалы</h3><CheckboxGroup name="materialIds" options={options.materials} selected={product?.materialIds} /></div>

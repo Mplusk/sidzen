@@ -14,8 +14,9 @@ export type OzonAttributes = z.infer<typeof ozonAttributesSchema>["result"][numb
 export type OzonAttributeLabels = Map<number, string>;
 export type OzonAttributeCache = Map<string, OzonAttributeLabels>;
 
-// Seller/category administration, not customer-facing product properties.
-const technicalIds = new Set([4191, 4180, 9024, 9048, 22232, 23536]);
+// Redundant importer metadata. Classification codes such as TN VED (22232)
+// must be retained for the administrator; storefront visibility is separate.
+const technicalIds = new Set([4191, 4180, 9024, 9048, 23536]);
 export function ozonSpecification(id: number, label: string | undefined, values: string[]) {
   if (technicalIds.has(id) || !label?.trim()) return null;
   const value = [...new Set(values.map(value => value.trim()).filter(Boolean))].join(", ");

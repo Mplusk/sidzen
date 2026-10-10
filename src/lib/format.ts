@@ -1,3 +1,5 @@
+import { isAdminOnlySpecification } from "./product-specification-visibility";
+
 export function formatPrice(value: number | string | { toString(): string }) {
   return new Intl.NumberFormat("ru-RU", {
     style: "currency",
@@ -24,7 +26,7 @@ export function translatedSpecifications(value: unknown) {
   const labels: Record<string, string> = { layer: "Высота слоя", tolerance: "Допуск", weight: "Вес", dimensions: "Габариты", material: "Материал", color: "Цвет", technology: "Технология", infill: "Заполнение", "Цвет товара": "Цвет" };
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return Object.fromEntries(Object.entries(value).flatMap(([key, item]) => {
-    if (/^Ozon\s*[·.]\s*\d+$/i.test(key) || !key.trim() || item == null || typeof item === "object") return [];
+    if (isAdminOnlySpecification(key) || /^Ozon\s*[·.]\s*\d+$/i.test(key) || !key.trim() || item == null || typeof item === "object") return [];
     const text = typeof item === "boolean" ? item ? "Да" : "Нет" : String(item).trim();
     return text ? [[labels[key] ?? key.trim(), text]] : [];
   }));
