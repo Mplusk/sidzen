@@ -15,3 +15,9 @@ it("keeps exactly four information links and no Shop footer block", () => {
   for (const href of ["/about/", "/contacts/", "/faq/", "/delivery/"]) expect(footer).toContain(`href="${href}"`);
   for (const href of ["/cart/", "/materials/", "/account/", "/catalog/"]) expect(footer).not.toContain(`href="${href}"`);
 });
+it("places footer information at the right edge on desktop and the left edge on mobile", () => {
+  expect(read("./footer.tsx")).toContain('className="footer-info"');
+  const css = read("../app/globals.css");
+  expect(css).toContain(".footer-info { justify-self: end; }");
+  expect(css.slice(css.lastIndexOf("@media (max-width: 600px)"))).toContain(".footer-info { justify-self: start; }");
+});
