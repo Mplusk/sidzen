@@ -6,7 +6,7 @@ import { purchasedProductWhere } from "@/lib/reviews";
 import { writeDiagnostic } from "@/lib/diagnostics";
 import { getReviewAiConfig } from "./config";
 import { checkReviewText, ReviewAiError } from "./client";
-import { REVIEW_AI_CONSENT_VERSION, reviewTextGate } from "./policy";
+import { REVIEW_AI_CONSENT_VERSIONS, reviewTextGate } from "./policy";
 const lock = async (tx: Prisma.TransactionClient) => { await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412032)`; };
 const signature = (row: { author: string; text: string; rating: number; product: { name: string; shortDescription: string | null } }) => createHash("sha256").update(JSON.stringify([row.author, row.text, row.rating, row.product.name, row.product.shortDescription])).digest("hex");
 export async function claimReviewAiJob() {
@@ -20,7 +20,7 @@ export async function claimReviewAiJob() {
   });
 }
 function validAiConsent(row: { purpose: string; version: string; revokedAt: Date | null; userId: string | null } | null, userId: string | null) {
-  return Boolean(row && row.purpose === "review-ai" && row.version === REVIEW_AI_CONSENT_VERSION && !row.revokedAt && row.userId === userId);
+  return Boolean(row && row.purpose === "review-ai" && REVIEW_AI_CONSENT_VERSIONS.includes(row.version) && !row.revokedAt && row.userId === userId);
 }
 const reviewInclude = { consent: true, product: { select: { name: true, shortDescription: true } }, images: { select: { id: true } } } as const;
 export async function finishReviewAiJob(job: ReviewAiJob, reason: string, fingerprint: string, revision: string) {

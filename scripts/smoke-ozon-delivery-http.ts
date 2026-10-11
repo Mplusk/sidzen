@@ -46,12 +46,11 @@ try {
   const login = actionForm(await (await request("/login/")).text(), 'name="email"');
   login.set("email", "qa@example.test"); login.set("password", "LocalGalleryQA-2026");
   assert.equal((await request("/login/", login)).headers.get("location"), "/account/");
-  assert.equal((await request("/api/account/personal-data/", undefined, false)).status, 401);
-  const exported = await request("/api/account/personal-data/");
-  assert.equal(exported.status, 200); assert.match(exported.headers.get("cache-control") || "", /no-store/);
-  const personalData = await exported.text();
-  assert(personalData.includes("qa@example.test"));
-  for (const privateField of ["passwordHash", "tokenHash", "subjectHash", "internalNote", "clientSecret"]) assert(!personalData.includes(privateField));
+  for (const authenticated of [false, true]) {
+    const exported = await request("/api/account/personal-data/", undefined, authenticated);
+    assert.equal(exported.status, 410); assert.equal(await exported.text(), "");
+    assert.match(exported.headers.get("cache-control") || "", /no-store/);
+  }
   const registration = actionForm(await (await request("/register/")).text(), 'name="password"');
   registration.set("name", "QA"); registration.set("email", "no-consent@example.test"); registration.set("password", "LocalGalleryQA-2026");
   assert.equal((await request("/register/", registration, false)).headers.get("location"), "/register/?error=consent");
@@ -59,11 +58,11 @@ try {
   const profile = actionForm(await (await request("/account/profile/")).text(), 'name="company"');
   profile.set("name", "Should not save"); profile.set("phone", ""); profile.set("company", ""); profile.set("taxId", "");
   assert.equal((await request("/account/profile/", profile)).headers.get("location"), "/account/profile/?error=consent");
-  const privacyForm = actionForm(await (await request("/account/privacy/")).text(), 'name="message"');
-  privacyForm.set("type", "ACCESS"); privacyForm.set("message", "QA request: give processing information"); privacyForm.set("userId", "forged-owner");
-  assert.equal((await request("/account/privacy/", privacyForm)).headers.get("location"), "/account/privacy/?sent=1");
-  const ownRequest = await prisma.privacyRequest.findFirstOrThrow({ where: { user: { email: "qa@example.test" }, message: "QA request: give processing information" }, orderBy: { createdAt: "desc" } });
-  privacyRequests.push(ownRequest.id); assert.notEqual(ownRequest.userId, "forged-owner");
+  assert.equal((await request("/account/privacy/")).headers.get("location"), "/contacts/");
+  // Synthetic historical record preserves archive access-control coverage.
+  const requestOwner = await prisma.user.findUniqueOrThrow({ where: { email: "qa@example.test" } });
+  const ownRequest = await prisma.privacyRequest.create({ data: { userId: requestOwner.id, type: "ACCESS", message: "QA historical request: give processing information" } });
+  privacyRequests.push(ownRequest.id);
   assert((await (await request("/admin/privacy/")).text()).includes(ownRequest.message));
   const config = { enabled: false, clientId: "fixture-delivery-app", clientSecret: encryptSecret(secret, OZON_DELIVERY_SETTING), shipmentMethodId: 7, dispatchDays: 1, checkedAt: new Date().toISOString(), methodName: "QA active method" };
   const save = async () => prisma.siteSetting.upsert({ where: { key: OZON_DELIVERY_SETTING }, create: { key: OZON_DELIVERY_SETTING, group: "integrations", value: config }, update: { value: config } });
@@ -210,7 +209,7 @@ try {
   await prisma.userRole.deleteMany({ where: { userId: user.id } }); await prisma.userRole.create({ data: { userId: user.id, roleId: fixtureRole } });
   for (const protectedPage of ["/admin/orders/", "/admin/users/", "/admin/audit/", "/admin/settings/", "/admin/privacy/"]) assert.match((await request(protectedPage)).headers.get("location") || "", /forbidden/, protectedPage);
   console.log("PASS: Ozon Delivery settings, secret redaction/preservation, admin and anonymous permissions, CSRF, scoped PVZ search, packaging fields, enabled/disabled checkout and refusal of unquoted delivery. No Ozon API calls or real orders/payments.");
-  console.log("PASS: separate registration/profile consent, missing-operator gate, private export, own data requests, per-section personal-data access controls.");
+  console.log("PASS: separate registration/profile consent, missing-operator gate, retired export/portal, protected historical requests, per-section personal-data access controls.");
   console.log("PASS: isolated QA application without payment / fiscal receipt and with accepted-terms evidence; no guest access grant for signed-in buyer.");
   console.log("PASS: delivery creation/deletion with confirmation, anonymous denial, stale edits/orders rejected, historical shipments unchanged and deployment seed does not revive deleted methods.");
   console.log("PASS: public PVZ word search, partial and reordered terms, ё/е normalization and scoped suggestions without provider calls while typing.");

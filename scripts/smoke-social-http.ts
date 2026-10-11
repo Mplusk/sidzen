@@ -83,12 +83,10 @@ try {
   assert.match((await request("/account/profile/", unlinkWithPassword)).headers.get("location")!, /social=password/);
   unlinkWithPassword.set("password", "LocalSocialQA-2026"); assert.match((await request("/account/profile/", unlinkWithPassword)).headers.get("location")!, /social=removed/);
   assert.equal(await db.socialAccount.count({ where: { userId: buyer.id } }), 0);
-  const exportResponse = await request("/api/account/personal-data/"); assert.equal(exportResponse.status, 200); const exported = await exportResponse.text(); assert(!exported.includes("passwordHash") && !exported.includes("clientSecret"));
-  await db.socialAccount.create({ data: { userId: buyer.id, provider: "yandex", clientId: "b".repeat(32), subject: `qa-revoke-${tag}` } });
-  await db.session.create({ data: { userId: buyer.id, tokenHash: hash(randomToken()), expiresAt: new Date(Date.now() + 600000) } });
-  const withdraw = await form("/account/privacy/", 'name="message"'); withdraw.set("type", "WITHDRAW"); withdraw.set("message", "Synthetic QA withdrawal");
-  assert.match((await request("/account/privacy/", withdraw)).headers.get("location")!, /sent=1/);
-  assert.equal(await db.socialAccount.count({ where: { userId: buyer.id } }), 0);
+  const exportResponse = await request("/api/account/personal-data/");
+  assert.equal(exportResponse.status, 410); assert.equal(await exportResponse.text(), "");
+  assert.equal((await request("/account/privacy/")).headers.get("location"), "/contacts/");
+  // Confirm profile unlink revokes the social consent without the retired portal.
   assert.equal(await db.session.count({ where: { userId: buyer.id } }), 1);
   assert.equal(await db.privacyConsent.count({ where: { userId: buyer.id, purpose: { startsWith: "social:" }, revokedAt: null } }), 0);
   console.log("PASS: social admin-only configuration, encrypted/redacted keys, Google legal gate, explicit consent, PKCE redirect, browser-bound/canceled/replayed callbacks, onboarding UI and session, last-login protection, password setup and confirmed unlink over HTTP. No provider requests.");

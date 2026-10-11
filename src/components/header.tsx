@@ -1,17 +1,13 @@
-import Link from "next/link";
-import { getStoreContacts } from "@/lib/settings";
 import { Logo } from "@/components/logo";
 import { CartIcon, UserIcon, SearchIcon, CatalogIcon } from "@/components/icons";
 import { NavLink } from "@/components/nav-link";
 
-export async function Header() {
-  const contacts = await getStoreContacts();
+export function Header() {
   return (
     <header className="site-header">
       <div className="utility-bar">
         <div className="container utility-bar__inner">
           <span>Формы природы. Предметы для дома. Доставка по России.</span>
-          <div><Link href="/delivery/">Доставка и заказ</Link><Link href="/contacts/">Контакты</Link>{contacts.email && <a href={"mailto:" + contacts.email}>{contacts.email}</a>}</div>
         </div>
       </div>
       <div className="container header-main">

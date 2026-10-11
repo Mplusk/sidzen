@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getStoreContacts } from "@/lib/settings";
-import { CONSENT_VERSION, CONSENT_TEXT } from "@/lib/privacy-documents";
+import { CONSENT_VERSION, CONSENT_TEXT, SIDZEN_CONSENT_VERSIONS } from "@/lib/privacy-documents";
 
 export function privacySubject(...parts: string[]) {
   if (!process.env.AUTH_SECRET) throw new Error("privacy-key-missing");
@@ -22,5 +22,5 @@ export async function operatorReady() {
 export function rfStorageReady() { return process.env.PERSONAL_DATA_RF_STORAGE_CONFIRMED === "true"; }
 export async function verifyDeliveryConsent(id: string, cartId: string, phone: string, db: Pick<typeof prisma, "privacyConsent"> = prisma) {
   const consent = id ? await db.privacyConsent.findUnique({ where: { id } }) : null;
-  if (!consent || consent.purpose !== "ozon" || consent.version !== CONSENT_VERSION || consent.revokedAt || !consent.expiresAt || consent.expiresAt <= new Date() || consent.subjectHash !== privacySubject(cartId, phone)) throw new Error("delivery-consent-missing");
+  if (!consent || consent.purpose !== "ozon" || !SIDZEN_CONSENT_VERSIONS.includes(consent.version) || consent.revokedAt || !consent.expiresAt || consent.expiresAt <= new Date() || consent.subjectHash !== privacySubject(cartId, phone)) throw new Error("delivery-consent-missing");
 }

@@ -26,6 +26,7 @@ describe("personal-data consent", () => {
   it("rejects missing, revoked, expired, wrong-purpose, old or other-cart permissions", async () => {
     const valid = { purpose: "ozon", version: CONSENT_VERSION, revokedAt: null, expiresAt: new Date(Date.now() + 60000), subjectHash: privacySubject("cart", "+79991234567") };
     mocks.find.mockResolvedValue(valid); await expect(verifyDeliveryConsent("id", "cart", "+79991234567")).resolves.toBeUndefined();
+    mocks.find.mockResolvedValue({ ...valid, version: "2026-10-07-sidzen-v2" }); await expect(verifyDeliveryConsent("id", "cart", "+79991234567")).resolves.toBeUndefined();
     for (const invalid of [null, { ...valid, revokedAt: new Date() }, { ...valid, expiresAt: new Date(0) }, { ...valid, purpose: "account" }, { ...valid, version: "old" }, { ...valid, subjectHash: "wrong" }]) {
       mocks.find.mockResolvedValue(invalid); await expect(verifyDeliveryConsent("id", "cart", "+79991234567")).rejects.toThrow("consent");
     }

@@ -1,15 +1,6 @@
-import type { Metadata } from "next";
-import Link from "next/link";
-import { requireUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { requestPersonalData } from "@/app/actions/privacy";
-import { rfStorageReady } from "@/lib/privacy";
-export const metadata: Metadata = { title: "Персональные данные", robots: { index: false, follow: false } };
-const types: Record<string, string> = { ACCESS: "Сведения об обработке", CORRECT: "Исправление данных", DELETE: "Блокирование / удаление", WITHDRAW: "Отзыв согласия — отключить соцсети и расчёты Ozon" };
-const statuses: Record<string, string> = { OPEN: "Получен", IN_PROGRESS: "В работе", RESOLVED: "Ответ получен" };
-export default async function PrivacyAccountPage({ searchParams }: { searchParams: Promise<{ sent?: string; error?: string }> }) {
-  const [user, params] = await Promise.all([requireUser(), searchParams]);
-  const requests = await prisma.privacyRequest.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 100 });
-  const storageReady = rfStorageReady();
-  return <><h1>Персональные данные</h1><p>Выгрузка содержит только ваши сведения, без паролей, ключей и внутренних заметок сотрудников.</p><a download className="button button--outline" href="/api/account/personal-data/">Скачать мои данные (JSON)</a><p><Link className="text-link" href="/account/profile/">Исправить профиль</Link> · <Link className="text-link" href="/legal/privacy/">Политика обработки</Link></p>{params.sent && <p className="notice notice--success">Обращение сохранено. Ответ оператора появится здесь. При отзыве разрешения на прежние расчёты Ozon прекращены немедленно.</p>}{params.error && <p className="notice notice--danger">{params.error === "rate" ? "Лимит обращений достигнут. Повторите позже." : params.error === "localization" ? "Запись нового обращения временно недоступна: российское размещение базы данных не подтверждено. Используйте опубликованные контакты оператора." : "Выберите тип и опишите обращение."}</p>}{storageReady ? <form action={requestPersonalData} className="content-card"><h2>Обращение оператору</h2><label className="field"><span>Тип обращения</span><select name="type">{Object.entries(types).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="field"><span>Что требуется</span><textarea name="message" minLength={5} maxLength={2000} required placeholder="Опишите запрос. Не прикладывайте паспорт или реквизиты карты." /></label><p className="muted">Оператор проверит запрос и законные основания дальнейшего хранения. Обязательные документы и действующие заказы не удаляются автоматически. Для отзыва согласия кабинета может потребоваться прекращение доступа после проверки.</p><button className="button">Отправить обращение</button></form> : <p className="notice notice--danger">Новые обращения временно не принимаются через сайт: размещение базы и резервных копий в России не подтверждено. Используйте опубликованные контакты оператора. Выгрузка существующих данных остаётся доступной.</p>}<h2>Мои обращения</h2>{requests.length ? requests.map(request => <article className="content-card" key={request.id}><strong>{types[request.type]} · {statuses[request.status]}</strong><p>{request.createdAt.toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })} МСК</p><p>{request.message}</p>{request.response && <p className="notice">Ответ: {request.response}</p>}</article>) : <p>Обращений пока нет.</p>}</>;
+import { redirect } from "next/navigation";
+
+// Old bookmarks lead to store contacts; the self-service portal is retired.
+export default function PersonalDataPage() {
+  redirect("/contacts/");
 }

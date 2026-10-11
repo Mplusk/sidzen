@@ -30,6 +30,22 @@ try {
   await prisma.siteSetting.upsert({ where: { key: TELEGRAM_KEY }, create: { key: TELEGRAM_KEY, group: "integrations", value: stored }, update: { value: stored } });
   const login = (await form("/login/", 'name="email"')).body; login.set("email", "qa@example.test"); login.set("password", "LocalGalleryQA-2026"); assert.equal((await request("/login/", login)).status, 303);
   const telegram = await form(path, 'name="chatId"');
+  const sidebar = telegram.html.match(/<aside class="account-nav">[\s\S]*?<\/aside>/)?.[0];
+  assert(sidebar, "Account navigation must render");
+  assert(!sidebar.includes('/account/documents/') && !sidebar.includes('/account/privacy/'));
+  for (const retained of ['/account/orders/', '/account/reviews/', '/account/profile/']) assert(sidebar.includes(retained));
+  const profile = await (await request('/account/profile/')).text();
+  assert(!profile.includes('href="/account/privacy/"'));
+  assert.equal((await request('/account/privacy/')).headers.get("location"), "/contacts/");
+  const requestCount = await prisma.privacyRequest.count();
+  const oldSubmission = new FormData(); oldSubmission.set("type", "WITHDRAW"); oldSubmission.set("message", "Retired portal must not accept this synthetic request");
+  await request('/account/privacy/', oldSubmission);
+  assert.equal(await prisma.privacyRequest.count(), requestCount, "Old form submissions must not create requests");
+  for (const authenticated of [false, true]) {
+    const retired = await request("/api/account/personal-data/", undefined, authenticated);
+    assert.equal(retired.status, 410); assert.equal(await retired.text(), "");
+    assert.match(retired.headers.get("cache-control") ?? "", /no-store/);
+  }
   assert(telegram.html.includes("Telegram · уведомления о новых заказах")); assert(telegram.html.includes("DeepSeek · модерация отзывов"));
   assert(!telegram.html.includes(token) && !telegram.html.includes(stored.token));
   telegram.body.set("chatId", "@not-a-numeric-chat");
@@ -55,7 +71,11 @@ try {
   const consent = await (await request("/legal/consent/?purpose=review-ai", undefined, false)).text(); assert(consent.includes("Добровольное согласие") && consent.includes("Китай"));
   const catalog = await (await request("/catalog/", undefined, false)).text();
   assert(!catalog.includes("<h3>Магазин</h3>")); assert(catalog.includes('href="/delivery/"'));
-  console.log("PASS: real HTTP action auth/permission/CSRF, encrypted Telegram configuration, hidden secrets, revision guard, review AI operator confirmation, private alert route and footer.");
+  const header = catalog.match(/<header class="site-header">[\s\S]*?<\/header>/)?.[0];
+  assert(header, "Storefront header must render");
+  for (const removed of ['/delivery/', '/contacts/', 'mailto:']) assert(!header.includes(removed));
+  for (const retained of ['header-search', '/catalog/', '/account/', '/cart/']) assert(header.includes(retained));
+  console.log("PASS: real HTTP action auth/permission/CSRF, encrypted Telegram configuration, hidden secrets, revision guard, review AI operator confirmation, private alert route, compact header/account navigation, retired data portal/export and preserved footer.");
 } finally {
   await prisma.userRole.createMany({ data: roles, skipDuplicates: true });
   await prisma.siteSetting.deleteMany({ where: { key: { in: keys } } });

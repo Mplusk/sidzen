@@ -37,6 +37,10 @@ try {
   productId = (await prisma.product.create({ data: { sku: prefix, slug: prefix, name: "Салфетница", basePrice: 100 } })).id;
   await save(CATEGORY_AI_KEY, { apiKey: encryptSecret("sk-fixture-not-real", CATEGORY_AI_KEY), model: "deepseek-flash", checkedAt: "2030-01-01Z" });
   await save(REVIEW_AI_KEY, { enabled: true, operatorReviewed: true, revision: "qa" });
+  // Retiring the portal changes the contact path, not existing moderation permission.
+  const previousConsent = await review();
+  await prisma.privacyConsent.update({ where: { id: (await job(previousConsent.id)).consentId! }, data: { version: "2026-10-09-review-ai-v1" } });
+  assert.equal(await processReviewAiJob(async () => response(safe)), true);
   let calls = 0;
   const transport: typeof fetch = async (_url, options) => {
     calls++; const body = JSON.parse(String(options?.body)); const input = JSON.parse(body.messages[1].content);

@@ -94,15 +94,21 @@ try {
     await prisma.review.create({ data: { id: `${slug}-${i}`, productId, author: "QA historical", text: `QA_PAGE_${i}`, rating: 1, approved: true, status: "PUBLISHED", consentId: consent.id } });
   }
   const pageOne = await (await request(productPath)).text(), pageTwo = await (await request(`${productPath}?reviewsPage=2`)).text(); assert(pageOne.includes('"reviewCount":11') && pageOne.includes('"ratingValue":"1.4"')); assert(pageOne.includes("Следующие отзывы") && pageTwo.includes("Предыдущие отзывы"));
-  const exporting = await (await request("/api/account/personal-data/", undefined, buyer)).json(); assert.equal(exporting.reviews.length, 1); assert.equal(exporting.reviews[0].author, "QA Покупатель"); assert(!JSON.stringify(exporting.reviews).includes(review.images[0].fileName));
-  const withdrawal = actionForm(await (await request("/account/privacy/", undefined, buyer)).text(), 'name="type"'); withdrawal.set("type", "WITHDRAW"); withdrawal.set("message", "Отзываю разрешение на публикацию отзыва"); assert.match((await request("/account/privacy/", withdrawal, buyer)).headers.get("location")!, /sent=1/);
+  const exporting = await request("/api/account/personal-data/", undefined, buyer);
+  assert.equal(exporting.status, 410); assert.equal(await exporting.text(), "");
+  assert.equal((await request("/account/privacy/", undefined, buyer)).headers.get("location"), "/contacts/");
+  // Synthetic operator-handled withdrawal, not a customer portal operation.
+  await prisma.$transaction(async tx => {
+    await tx.privacyConsent.update({ where: { id: review.consentId! }, data: { revokedAt: new Date() } });
+    await tx.review.update({ where: { id: review.id }, data: { approved: false, status: "HIDDEN" } });
+  });
   assert.equal((await request(photoPath)).status, 404); assert(!((await (await request(productPath)).text()).includes("QA_PUBLIC_REVIEW_TEXT")));
   assert.match((await request(moderation, approve, staff)).headers.get("location")!, /error=consent/);
   html = await (await request(path, undefined, buyer)).text(); const deletion = actionForm(html, 'name="reviewId"'); deletion.delete("confirmation"); assert.match((await request(path, deletion, buyer)).headers.get("location")!, /error=confirmation/);
   deletion.set("confirmation", "delete-review"); assert.match((await request(path, deletion, outsider)).headers.get("location")!, /error=missing/);
   assert.match((await request(path, deletion, buyer)).headers.get("location")!, /deleted=1/); assert.equal(await prisma.review.count({ where: { id: review.id } }), 0); assert.equal((await request(photoPath, undefined, buyer)).status, 404);
   for (const file of photoFiles) await assert.rejects(stat(join(process.cwd(), "private-uploads", "reviews", file)), { code: "ENOENT" });
-  console.log("PASS: anonymous/foreign-buyer/unpaid/undelivered/refunded/spoofed/CSRF denial; concurrent review dedup; explicit publication consent; two real photos + metadata stripping; pending photo ACL; moderator approval; public review/rating/photo without account data; all-row aggregate + pagination; scoped export; withdrawal prevents republish; confirmed own deletion removes files. Only isolated synthetic QA orders/payments, no provider APIs.");
+  console.log("PASS: anonymous/foreign-buyer/unpaid/undelivered/refunded/spoofed/CSRF denial; concurrent review dedup; explicit publication consent; two real photos + metadata stripping; pending photo ACL; moderator approval; public review/rating/photo without account data; all-row aggregate + pagination; retired export/portal; operator withdrawal prevents republish; confirmed own deletion removes files. Only isolated synthetic QA orders/payments, no provider APIs.");
 } finally {
   const { unlink } = await import("node:fs/promises");
   for (const file of photoFiles) await unlink(join(process.cwd(), "private-uploads", "reviews", file)).catch(() => undefined);
