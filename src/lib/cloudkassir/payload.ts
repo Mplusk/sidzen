@@ -3,7 +3,7 @@ import { z } from "zod";
 export const fiscalPayloadSchema = z.object({ Inn: z.string(), Type: z.enum(["Income", "IncomeReturn"]), InvoiceId: z.string(), CustomerReceipt: z.object({
   Items: z.array(z.object({ Label: z.string().min(1).max(128), Price: z.number().positive(), Quantity: z.number().int().positive(), Amount: z.number().positive(), Vat: z.null(), Method: z.union([z.literal(1), z.literal(4)]), Object: z.union([z.literal(1), z.literal(4)]), UnitCode: z.literal(0) })).min(1).max(100),
   TaxationSystem: z.literal(1), Amounts: z.object({ Electronic: z.number().nonnegative(), AdvancePayment: z.number().nonnegative(), Credit: z.literal(0), Provision: z.literal(0) }),
-  Email: z.email(), CalculationPlace: z.literal("https://3dprinta.shop"), IsInternetPayment: z.literal(true),
+  Email: z.email(), CalculationPlace: z.literal("https://sidzen.shop"), IsInternetPayment: z.literal(true),
 }) });
 export type FiscalPayload = z.infer<typeof fiscalPayloadSchema>;
 type Money = string | number | { toString(): string };
@@ -39,7 +39,7 @@ export function createFiscalPayload(order: FiscalOrder, inn: string, invoiceId: 
     for (const [unit, quantity] of [[price, item.quantity - extra], [price + 1, extra]]) if (quantity) Items.push({ Label: item.productName.trim().slice(0, 128), Price: unit / 100, Quantity: quantity, Amount: unit * quantity / 100, Vat: null, Method: 1, Object: 1, UnitCode: 0 });
   });
   if (delivery) Items.push({ Label: "Доставка", Price: delivery / 100, Quantity: 1, Amount: delivery / 100, Vat: null, Method: 1, Object: 4, UnitCode: 0 });
-  return fiscalPayloadSchema.parse({ Inn: inn, Type: "Income", InvoiceId: invoiceId, CustomerReceipt: { Items, TaxationSystem: 1, Email: order.customerEmail, CalculationPlace: "https://3dprinta.shop", IsInternetPayment: true, Amounts: { Electronic: total / 100, AdvancePayment: 0, Credit: 0, Provision: 0 } } });
+  return fiscalPayloadSchema.parse({ Inn: inn, Type: "Income", InvoiceId: invoiceId, CustomerReceipt: { Items, TaxationSystem: 1, Email: order.customerEmail, CalculationPlace: "https://sidzen.shop", IsInternetPayment: true, Amounts: { Electronic: total / 100, AdvancePayment: 0, Credit: 0, Provision: 0 } } });
 }
 export function derivedFiscalPayload(original: FiscalPayload, kind: "SETTLEMENT" | "REFUND", invoiceId: string, delivered: boolean) {
   const payload = structuredClone(original);

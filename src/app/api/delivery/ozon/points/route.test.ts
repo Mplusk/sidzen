@@ -7,7 +7,7 @@ vi.mock("@/lib/rate-limit", () => ({ rateLimit: m.limit }));
 import { GET } from "./route";
 
 const point = { id: "42", name: "ПВЗ", address: "Яблоновский, улица 1", type: "pvz", latitude: null, longitude: null };
-const request = () => new Request("https://3dprinta.shop/api/delivery/ozon/points/?q=Яблоновский");
+const request = () => new Request("https://sidzen.shop/api/delivery/ozon/points/?q=Яблоновский");
 describe("public Ozon PVZ map directory", () => {
   beforeEach(() => {
     vi.resetAllMocks();

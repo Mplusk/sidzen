@@ -6,7 +6,8 @@ const registration = { google: "https://console.cloud.google.com/auth/clients", 
 export async function SocialSettings() {
   const configs = await Promise.all(providers.map(async provider => ({ provider, config: await getSocialConfig(provider) })));
   return <section id="social-login" className="content-card"><h2>Вход через Google, ВКонтакте и Яндекс</h2>
-    <p>Создайте отдельное приложение каждого сервиса для сайта 3dprinta.shop. Ключи маркетплейса и доставки для входа покупателей не подходят. Кнопка появится на странице входа после заполнения и включения настроек.</p>
+    <p>Создайте отдельное приложение каждого сервиса для сайта sidzen.shop. Ключи маркетплейса и доставки для входа покупателей не подходят. Кнопка появится на странице входа после заполнения и включения настроек.</p>
+    <p className="muted">Если приложение зарегистрировано для прежнего сайта, обновите доверенный домен на sidzen.shop и адрес возврата в кабинете провайдера. Новые адреса приведены ниже; сайт не меняет настройки внешнего приложения автоматически.</p>
     {configs.map(({ provider, config }) => <section className="social-settings__provider" key={provider}><h3>{providerNames[provider]} · {socialReady(provider, config) ? "включён" : "выключен"}</h3>
       <p><a className="text-link" href={registration[provider]} target="_blank" rel="noreferrer">Создать приложение {providerNames[provider]} →</a></p>
       <label className="field">Адрес возврата · Redirect URI<input readOnly value={callbackUrl(provider)} /><small>Скопируйте полностью, включая завершающий /. У Google тип клиента — веб-приложение; у VK ID — веб-сайт. Не используйте старый OAuth ВКонтакте.</small></label>

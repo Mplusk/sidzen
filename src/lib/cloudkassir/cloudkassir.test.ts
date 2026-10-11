@@ -22,7 +22,7 @@ describe("CloudKassir AUSN income / no VAT", () => {
     for (const inn of ["", "0000000000", "000000000000", "7707083894", "500100732258", "abcdefghij"]) expect(validInn(inn)).toBe(false);
   });
   it("creates email-only full prepayment, no VAT (null, NOT zero), no free delivery line", () => {
-    expect(original.CustomerReceipt).toMatchObject({ TaxationSystem: 1, Email: order.customerEmail, IsInternetPayment: true, CalculationPlace: "https://3dprinta.shop", Amounts: { Electronic: 150, AdvancePayment: 0 }, Items: [{ Label: "Салфетница", Quantity: 3, Price: 50, Amount: 150, Vat: null, Method: 1, Object: 1 }] });
+    expect(original.CustomerReceipt).toMatchObject({ TaxationSystem: 1, Email: order.customerEmail, IsInternetPayment: true, CalculationPlace: "https://sidzen.shop", Amounts: { Electronic: 150, AdvancePayment: 0 }, Items: [{ Label: "Салфетница", Quantity: 3, Price: 50, Amount: 150, Vat: null, Method: 1, Object: 1 }] });
     expect(original.CustomerReceipt.Items).toHaveLength(1);
     const json = JSON.stringify(original); for (const privateValue of [order.customerName, order.customerPhone, order.shippingAddress]) expect(json).not.toContain(privateValue);
   });
@@ -66,11 +66,11 @@ describe("CloudKassir AUSN income / no VAT", () => {
     expect(verifyCloudHmac(body, signature, "wrong")).toBe(false); expect(verifyCloudHmac(body, null, "qa-secret")).toBe(false); expect(verifyCloudHmac(body, "x", "qa-secret")).toBe(false);
   });
   it("bounds notification bodies and provider responses", async () => {
-    await expect(readCloudBody(new Request("https://3dprinta.shop/", { method: "POST", body: "x".repeat(65537) }))).rejects.toThrow("size");
+    await expect(readCloudBody(new Request("https://sidzen.shop/", { method: "POST", body: "x".repeat(65537) }))).rejects.toThrow("size");
     vi.stubGlobal("fetch", vi.fn(async () => new Response("x".repeat(131073)))); await expect(cloudRequest(config, "test")).rejects.toThrow("cloud-response-size");
   });
   it("checks authentication and a live registered matching cashbox without generating any receipts", async () => {
-    const state = { Inn: config.inn, DeviceNumber: config.deviceNumber, FiscalNumber: config.fiscalNumber, Status: 1, Fiscal: true, IsBso: false, FiscalDateEnd: "2099-01-01T00:00:00", CalculationPlace: "3dprinta.shop" };
+    const state = { Inn: config.inn, DeviceNumber: config.deviceNumber, FiscalNumber: config.fiscalNumber, Status: 1, Fiscal: true, IsBso: false, FiscalDateEnd: "2099-01-01T00:00:00", CalculationPlace: "sidzen.shop" };
     const requests: string[] = [];
     const fetcher = vi.fn(async (url: string, init: RequestInit) => { requests.push(url); expect(init.redirect).toBe("error"); expect((init.headers as Record<string, string>).Authorization).toBe(`Basic ${Buffer.from(`${config.publicId}:${config.apiSecret}`).toString("base64")}`); return Response.json({ Success: true, Model: url.endsWith("/test") ? undefined : state }); });
     vi.stubGlobal("fetch", fetcher); await checkCloud(config); expect(requests.map(url => new URL(url).pathname)).toEqual(["/test", "/kkt/state/get"]);

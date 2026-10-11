@@ -8,9 +8,10 @@ it("uses the supplied brand palette, Inter and a dense responsive catalog", () =
   expect(css).not.toContain("#d90068");
   expect(css).not.toContain("#285de8");
 });
-it("serves both domains without a cross-brand redirect and redirects www to its own host", () => {
+it("serves only SIDZEN and redirects www to the canonical host", () => {
   const caddy = readFileSync(new URL("../../deploy/caddy/Caddyfile", import.meta.url), "utf8");
-  expect(caddy).toContain("3dprinta.shop, sidzen.shop {");
+  expect(caddy).toContain("sidzen.shop {");
+  expect(caddy.match(/reverse_proxy app:3000/g)).toHaveLength(1);
   expect(caddy).toContain("redir https://sidzen.shop{uri} permanent");
 });
 it("uses exact extracted outlined logo glyphs, with no external fonts in the logo", () => {

@@ -15,7 +15,7 @@ describe("privacy-preserving map tile proxy", () => {
     expect(response.status).toBe(200);
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(png);
     expect(response.headers.get("cache-control")).toBe(`public, max-age=${TILE_CACHE_SECONDS}`);
-    expect(transport.mock.calls[0][1]).toMatchObject({ cache: "force-cache", next: { revalidate: 604800 }, redirect: "error", headers: { "User-Agent": "SIDZEN-PickupMap/1.0 (+https://3dprinta.shop/contacts/)", Referer: "https://3dprinta.shop/" } });
+    expect(transport.mock.calls[0][1]).toMatchObject({ cache: "force-cache", next: { revalidate: 604800 }, redirect: "error", headers: { "User-Agent": "SIDZEN-PickupMap/1.0 (+https://sidzen.shop/contacts/)", Referer: "https://sidzen.shop/" } });
     expect(Object.keys(transport.mock.calls[0][1]!.headers!)).toEqual(["User-Agent", "Referer"]);
   });
   it("rejects invalid requests before contacting the provider", async () => {

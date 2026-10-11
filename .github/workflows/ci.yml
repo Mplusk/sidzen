@@ -33,7 +33,7 @@ jobs:
       AUTH_SECRET: build-only-secret
       # Isolated synthetic QA data only; this does not configure production.
       PERSONAL_DATA_RF_STORAGE_CONFIRMED: "true"
-      NEXT_PUBLIC_SITE_URL: https://3dprinta.shop
+      NEXT_PUBLIC_SITE_URL: https://sidzen.shop
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -101,7 +101,7 @@ jobs:
     timeout-minutes: 45
     environment:
       name: production
-      url: https://3dprinta.shop
+      url: https://sidzen.shop
     concurrency:
       group: production-deploy
       cancel-in-progress: false

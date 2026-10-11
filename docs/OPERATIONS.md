@@ -8,10 +8,10 @@
 POSTGRES_PASSWORD=<случайный пароль>
 DATABASE_URL=postgresql://3dprinta:<тот же URL-encoded пароль>@db:5432/3dprinta?schema=public
 AUTH_SECRET=<минимум 32 случайных байта>
-NEXT_PUBLIC_SITE_URL=https://3dprinta.shop
+NEXT_PUBLIC_SITE_URL=https://sidzen.shop
 UPLOAD_DIR=/app/private-uploads
 MAX_UPLOAD_MB=100
-BOOTSTRAP_ADMIN_EMAIL=admin@3dprinta.shop
+BOOTSTRAP_ADMIN_EMAIL=admin@sidzen.shop
 BOOTSTRAP_ADMIN_PASSWORD=<уникальный пароль>
 PAYMENT_PROVIDER=manual
 DELIVERY_PROVIDER=manual
@@ -60,9 +60,9 @@ curl --fail http://127.0.0.1:3000/api/health/
 
 На чистом Ubuntu 24.04 выполните от root `bash scripts/provision-server.sh`. Скрипт установит Docker Engine и Compose из официального apt-репозитория, создаст deploy-пользователя, каталог проекта, cron резервных копий и случайные production-секреты. Повторный запуск не заменяет существующий `.env.production`. Добавьте SSH-ключ деплоя в `/home/deploy/.ssh/authorized_keys` и обновите repository secrets GitHub.
 
-DNS `3dprinta.shop` и `www.3dprinta.shop` должен указывать на сервер. Caddy настраивается в `deploy/caddy/Caddyfile`; отдельные Nginx и Certbot для нового развёртывания не нужны. Проверка: `docker compose exec -T proxy caddy validate --config /etc/caddy/Caddyfile`, затем `curl --fail https://3dprinta.shop/api/health/`.
+DNS `sidzen.shop` и `www.sidzen.shop` должен указывать на сервер. Caddy настраивается в `deploy/caddy/Caddyfile`; отдельные Nginx и Certbot для нового развёртывания не нужны. Проверка: `docker compose exec -T proxy caddy validate --config /etc/caddy/Caddyfile`, затем `curl --fail https://sidzen.shop/api/health/`.
 
-Первый администратор: `admin@3dprinta.shop`; автоматически сгенерированный пароль находится в `BOOTSTRAP_ADMIN_PASSWORD` production env. Секреты не попадают в репозиторий или журналы CI. После переустановки ОС старые товары, заказы и фотографии можно вернуть только из отдельной сохранённой резервной копии. Исходный код содержит демонстрационный каталог для пустой базы.
+Первый администратор: `admin@sidzen.shop`; автоматически сгенерированный пароль находится в `BOOTSTRAP_ADMIN_PASSWORD` production env. Секреты не попадают в репозиторий или журналы CI. После переустановки ОС старые товары, заказы и фотографии можно вернуть только из отдельной сохранённой резервной копии. Исходный код содержит демонстрационный каталог для пустой базы.
 
 ## Прежняя конфигурация Nginx
 

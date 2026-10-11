@@ -84,10 +84,15 @@ try {
   await prisma.privacyConsent.update({ where: { id: review.consentId }, data: { version: "2026-10-06-reviews-v1" } });
   assert(!((await (await aliasRequest(productPath)).text()).includes("QA_PUBLIC_REVIEW_TEXT")), "Single-domain consent must not publish on SIDZEN");
   assert.equal((await aliasRequest(photoPath)).status, 404);
-  assert((await (await request(productPath)).text()).includes("QA_PUBLIC_REVIEW_TEXT"), "Old consent remains valid on its original domain");
+  assert(!((await (await request(productPath)).text()).includes("QA_PUBLIC_REVIEW_TEXT")), "Retired single-site consent must remain private on every SIDZEN path");
+  await prisma.privacyConsent.update({ where: { id: review.consentId }, data: { version: "2026-10-07-reviews-sidzen-v2" } });
+  assert((await (await aliasRequest(productPath)).text()).includes("QA_PUBLIC_REVIEW_TEXT"), "Previous consent explicitly including SIDZEN stays valid");
   await prisma.privacyConsent.update({ where: { id: review.consentId }, data: { version: REVIEW_CONSENT_VERSION } });
   // More than one page: aggregate must use all rows, not just latest ten.
-  await prisma.review.createMany({ data: Array.from({ length: 10 }, (_, i) => ({ id: `${slug}-${i}`, productId, author: "QA historical", text: `QA_PAGE_${i}`, rating: 1, approved: true, status: "PUBLISHED" })) });
+  for (let i = 0; i < 10; i++) {
+    const consent = await prisma.privacyConsent.create({ data: { userId: owner.id, subjectHash: "synthetic-local-only", purpose: "review", version: REVIEW_CONSENT_VERSION, document: { url: "https://sidzen.shop/legal/consent/?purpose=review", text: "Synthetic SIDZEN publication consent" } } });
+    await prisma.review.create({ data: { id: `${slug}-${i}`, productId, author: "QA historical", text: `QA_PAGE_${i}`, rating: 1, approved: true, status: "PUBLISHED", consentId: consent.id } });
+  }
   const pageOne = await (await request(productPath)).text(), pageTwo = await (await request(`${productPath}?reviewsPage=2`)).text(); assert(pageOne.includes('"reviewCount":11') && pageOne.includes('"ratingValue":"1.4"')); assert(pageOne.includes("Следующие отзывы") && pageTwo.includes("Предыдущие отзывы"));
   const exporting = await (await request("/api/account/personal-data/", undefined, buyer)).json(); assert.equal(exporting.reviews.length, 1); assert.equal(exporting.reviews[0].author, "QA Покупатель"); assert(!JSON.stringify(exporting.reviews).includes(review.images[0].fileName));
   const withdrawal = actionForm(await (await request("/account/privacy/", undefined, buyer)).text(), 'name="type"'); withdrawal.set("type", "WITHDRAW"); withdrawal.set("message", "Отзываю разрешение на публикацию отзыва"); assert.match((await request("/account/privacy/", withdrawal, buyer)).headers.get("location")!, /sent=1/);

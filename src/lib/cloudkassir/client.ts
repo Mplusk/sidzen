@@ -23,7 +23,7 @@ export async function checkCloud(config: CloudConfig) {
   await cloudRequest(config, "test");
   const state = z.object({ Inn: z.string(), DeviceNumber: z.string(), FiscalNumber: z.string(), Status: z.number(), Fiscal: z.boolean(), IsBso: z.boolean(), IsReceiptProcessingBlocked: z.boolean().optional(), FiscalDateEnd: z.string(), CalculationPlace: z.string() }).parse(await cloudRequest(config, "kkt/state/get", { DeviceNumber: config.deviceNumber, FiscalNumber: config.fiscalNumber }));
   const normalize = (value: string) => value.replace(/^https?:\/\//, "").replace(/\/$/, "");
-  if (state.Inn !== config.inn || state.DeviceNumber !== config.deviceNumber || state.FiscalNumber !== config.fiscalNumber || state.Status !== 1 || !state.Fiscal || state.IsBso || state.IsReceiptProcessingBlocked || !(Date.parse(state.FiscalDateEnd) > Date.now()) || normalize(state.CalculationPlace) !== "3dprinta.shop") throw new Error("cloud-cashbox");
+  if (state.Inn !== config.inn || state.DeviceNumber !== config.deviceNumber || state.FiscalNumber !== config.fiscalNumber || state.Status !== 1 || !state.Fiscal || state.IsBso || state.IsReceiptProcessingBlocked || !(Date.parse(state.FiscalDateEnd) > Date.now()) || normalize(state.CalculationPlace) !== "sidzen.shop") throw new Error("cloud-cashbox");
 }
 export function safeReceiptUrl(value: unknown) {
   if (typeof value !== "string" || value.length > 2048) return null;

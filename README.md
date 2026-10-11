@@ -2,7 +2,7 @@
 
 Вход через Google, VK ID и Яндекс: [настройка и ограничения](docs/SOCIAL_LOGIN.md). Приложения и ключи задаются администратором; до настройки кнопки скрыты.
 
-Production-ready SSR интернет-магазин готовых изделий для [3dprinta.shop](https://3dprinta.shop).
+Production-ready SSR интернет-магазин готовых изделий для [sidzen.shop](https://sidzen.shop).
 
 ## Возможности
 

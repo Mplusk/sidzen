@@ -18,8 +18,10 @@ describe("social provider activation and redirect safety", () => {
     expect(safeSocialReturn("/checkout/?a=1#shipping")).toBe("/checkout/?a=1#shipping");
   });
   it("uses configured origin only and fixed callback path with trailing slash", () => {
-    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://3dprinta.shop/path"); expect(callbackUrl("vk")).toBe("https://3dprinta.shop/api/auth/social/vk/callback/");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://sidzen.shop/path"); expect(callbackUrl("vk")).toBe("https://sidzen.shop/api/auth/social/vk/callback/");
     vi.stubEnv("NEXT_PUBLIC_SITE_URL", "http://attacker.test"); expect(() => callbackUrl("vk")).toThrow();
     vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://secret@attacker.test"); expect(() => callbackUrl("vk")).toThrow();
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://unrelated.example"); expect(() => callbackUrl("vk")).toThrow();
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "http://localhost:3101"); expect(callbackUrl("vk")).toBe("http://localhost:3101/api/auth/social/vk/callback/");
   });
 });

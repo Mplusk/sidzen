@@ -67,11 +67,11 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
     "@context": "https://schema.org",
     "@type": "Product",
     name: product.name,
-    image: product.images.map((item) => `https://3dprinta.shop${item.path}`),
+    image: product.images.map((item) => `https://sidzen.shop${item.path}`),
     description: product.shortDescription,
     sku: product.sku,
     brand: { "@type": "Brand", name: "SIDZEN" },
-    offers: { "@type": "Offer", url: `https://3dprinta.shop/catalog/${category.slug}/${product.slug}/`, priceCurrency: "RUB", price: defaultPrice, availability: product.stock > 0 ? "https://schema.org/InStock" : product.madeToOrder ? "https://schema.org/PreOrder" : "https://schema.org/OutOfStock" },
+    offers: { "@type": "Offer", url: `https://sidzen.shop/catalog/${category.slug}/${product.slug}/`, priceCurrency: "RUB", price: defaultPrice, availability: product.stock > 0 ? "https://schema.org/InStock" : product.madeToOrder ? "https://schema.org/PreOrder" : "https://schema.org/OutOfStock" },
     ...(reviewCount ? { aggregateRating: { "@type": "AggregateRating", ratingValue: rating.toFixed(1), reviewCount } } : {}),
   };
   const specs = productSpecificationRows(product);

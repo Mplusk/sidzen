@@ -1,23 +1,23 @@
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
-import { usesSidzenDomain } from "@/lib/storefront-domains";
 
 export const MAX_REVIEW_PHOTOS = 5;
 export const MAX_REVIEW_PHOTO_BYTES = 5 * 1024 * 1024;
-export const REVIEW_CONSENT_VERSION = "2026-10-07-reviews-sidzen-v2";
-export const REVIEW_CONSENT_TEXT = "Я отдельно разрешаю оператору магазина SIDZEN публиковать на сайтах одного магазина — sidzen.shop и 3dprinta.shop выбранное мной публичное имя, оценку, текст отзыва и приложенные фотографии для информирования покупателей. Эти сведения будут доступны неограниченному кругу посетителей, которые могут их копировать. Разрешаю распространение только на этих двух сайтах; передачу для рекламы и размещение на других площадках не разрешаю. Телефон, email, адрес, сведения профиля и номер заказа публиковать не разрешаю. Не прикладываю изображения людей и чужие персональные данные. Согласие действует до отзыва. Отозвать его и прекратить публикацию можно кнопкой «Удалить отзыв» в разделе «Мои отзывы» либо через «Персональные данные» и по контактам оператора. Сайт прекратит доступ к отзыву и фото; копии, ранее сделанные посетителями, могут сохраниться.";
+export const REVIEW_CONSENT_VERSION = "2026-10-11-reviews-sidzen-v3";
+// v2 explicitly authorized SIDZEN too. Keep that scope without rewriting
+// stored consent documents; older single-site consents remain private.
+export const SIDZEN_REVIEW_CONSENT_VERSIONS = [REVIEW_CONSENT_VERSION, "2026-10-07-reviews-sidzen-v2"];
+export const REVIEW_CONSENT_TEXT = "Я отдельно разрешаю оператору магазина SIDZEN публиковать на сайте sidzen.shop выбранное мной публичное имя, оценку, текст отзыва и приложенные фотографии для информирования покупателей. Эти сведения будут доступны неограниченному кругу посетителей, которые могут их копировать. Разрешаю распространение только на этом сайте; передачу для рекламы и размещение на других площадках не разрешаю. Телефон, email, адрес, сведения профиля и номер заказа публиковать не разрешаю. Не прикладываю изображения людей и чужие персональные данные. Согласие действует до отзыва. Отозвать его и прекратить публикацию можно кнопкой «Удалить отзыв» в разделе «Мои отзывы» либо через «Персональные данные» и по контактам оператора. Сайт прекратит доступ к отзыву и фото; копии, ранее сделанные посетителями, могут сохраниться.";
 
 export const publicReviewWhere: Prisma.ReviewWhereInput = {
   approved: true,
-  OR: [{ verifiedPurchase: false }, { consent: { is: { revokedAt: null } } }],
+  consent: { is: { revokedAt: null, purpose: "review", version: { in: SIDZEN_REVIEW_CONSENT_VERSIONS } } },
 };
 
-export function publicReviewsForHost(host: string | null | undefined): Prisma.ReviewWhereInput {
-  // Older consents explicitly authorized only 3dprinta.shop. Never broaden
-  // their scope by changing branding or rewriting a stored consent document.
-  return usesSidzenDomain(host)
-    ? { approved: true, consent: { is: { revokedAt: null, purpose: "review", version: REVIEW_CONSENT_VERSION } } }
-    : publicReviewWhere;
+export function publicReviewsForHost(_host: string | null | undefined): Prisma.ReviewWhereInput {
+  // One storefront: identical scope for HTML, JSON-LD and protected photos.
+  void _host;
+  return publicReviewWhere;
 }
 
 // Match a real account-owned, paid and delivered line item. Neither an email

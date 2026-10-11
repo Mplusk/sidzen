@@ -31,7 +31,7 @@ const messages: Record<string, string> = {
   "cloud-verified": "Доступ к CloudKassir и состояние кассы проверены. Проверка не создаёт чеков и не списывает деньги.",
   "cloud-invalid": "Проверьте формат Public ID, ИНН и номеров кассы и фискального накопителя.",
   "cloud-incomplete": "Сначала заполните и включите CloudKassir: Public ID, API Secret, ИНН продавца (как в реквизитах магазина), заводской номер кассы и номер ФН. Заполните реквизиты магазина и подтвердите размещение данных в России, рабочую кассу, настройки АУСН «Доходы» / без НДС и условия обработки данных.",
-  "cloud-connection": "CloudKassir не подтвердил рабочую кассу. Проверьте ключи, ИНН, кассу и ФН: касса должна быть фискализирована, доступна, без блокировки, с действующим ФН и местом расчётов 3dprinta.shop. Настройки не изменены.",
+  "cloud-connection": "CloudKassir не подтвердил рабочую кассу. Проверьте ключи, ИНН, кассу и ФН: касса должна быть фискализирована, доступна, без блокировки, с действующим ФН и местом расчётов sidzen.shop. Настройки не изменены.",
   "cloud-pending": "Есть незавершённые чеки или оплаченные заказы CloudKassir, либо настройки изменились параллельно. Сменить терминал / ИНН сейчас нельзя. Секрет того же терминала можно обновить.",
   "cloud-rate": "Слишком много проверок. Повторите через минуту.",
   "social-saved": "Настройки входа сохранены. Ключи и адрес возврата проверяются при настоящем входе в сервис.",
@@ -92,7 +92,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
         <SubmitButton className="button" pendingLabel="Сохраняем…">Сохранить</SubmitButton><SubmitButton className="button button--outline" name="intent" value="check" pendingLabel="Проверяем…">Проверить и сохранить</SubmitButton>
       </form>
       <p className="muted">При включении проверяем доступ и торговую точку без списания денег. Пустое поле сохраняет прежний ключ. «Сохранить» с выключенной оплатой позволяет сохранить незавершённые настройки. Отключение запрещает создание новых платёжных ссылок, но сохраняет проверку уже созданных.</p>
-      <p>Для быстрых уведомлений подпишите своё приложение на событие <code>acquiringInternetPayment</code> методом Create Webhook (право ManageWebhookData), URL: <code>https://3dprinta.shop/api/payments/tochka/</code>. Подпись уведомлений проверяется. Без вебхука сайт сверяет платежи в фоне примерно раз в минуту и при возвращении покупателя.</p>
+      <p>Для быстрых уведомлений подпишите своё приложение на событие <code>acquiringInternetPayment</code> методом Create Webhook (право ManageWebhookData), URL: <code>https://sidzen.shop/api/payments/tochka/</code>. Подпись уведомлений проверяется. Без вебхука сайт сверяет платежи в фоне примерно раз в минуту и при возвращении покупателя.</p>
       <p><a className="text-link" href="https://developers.tochka.com/docs/tochka-api/opisanie-metodov/platyozhnye-ssylki" target="_blank" rel="noreferrer">Документация Точки и права API →</a></p>
     </section>
     <CloudKassirSettings />

@@ -11,7 +11,7 @@ import "./globals.css";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://3dprinta.shop"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://sidzen.shop"),
   title: { default: "SIDZEN — 3D декор для дома", template: "%s | SIDZEN" },
   description: "Предметы для дома, вдохновлённые природными формами. Декор, свет и полезные детали интерьера с доставкой по России.",
   applicationName: "SIDZEN",
@@ -29,7 +29,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     <html lang="ru">
       <body>
         <a className="skip-link" href="#main">К содержимому</a>
-        <JsonLd data={{ "@context": "https://schema.org", "@type": "Organization", "@id": "https://3dprinta.shop/#organization", name: "SIDZEN", url: "https://3dprinta.shop", logo: "https://3dprinta.shop/icon-512.png", ...(contacts.legalName ? { legalName: contacts.legalName } : {}), ...(contacts.phone ? { telephone: contacts.phone } : {}), ...(contacts.email ? { email: contacts.email } : {}) }} />
+        <JsonLd data={{ "@context": "https://schema.org", "@type": "Organization", "@id": "https://sidzen.shop/#organization", name: "SIDZEN", url: "https://sidzen.shop", logo: "https://sidzen.shop/icon-512.png", ...(contacts.legalName ? { legalName: contacts.legalName } : {}), ...(contacts.phone ? { telephone: contacts.phone } : {}), ...(contacts.email ? { email: contacts.email } : {}) }} />
         <Header />
         <main id="main">{children}</main>
         <Footer />

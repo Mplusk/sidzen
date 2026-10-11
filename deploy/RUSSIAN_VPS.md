@@ -1,7 +1,7 @@
 # Russian VPS deployment
 
 The shop is hosted on `92.63.101.127`. The authoritative DNS A records for
-`3dprinta.shop` and `www.3dprinta.shop` must point to this address. Leave other
+`sidzen.shop` and `www.sidzen.shop` must point to this address. Leave other
 domains and mail records unchanged.
 
 Run `scripts/provision-container-runtime.sh` as root on Ubuntu 24.04. It installs

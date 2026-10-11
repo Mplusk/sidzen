@@ -2,13 +2,13 @@
 
 Настройки: личный кабинет администратора → «Доставка и оплата» → «Вход через Google, ВКонтакте и Яндекс». Право `settings.write`; ключи не связаны с Seller / Delivery API. По умолчанию все провайдеры выключены. Кнопки появляются только для включённых, заполненных подключений.
 
-Для каждого сервиса создайте собственное приложение для `3dprinta.shop`, задайте адрес возврата **с завершающим слешем**:
+Для каждого сервиса создайте собственное приложение для `sidzen.shop`, задайте адрес возврата **с завершающим слешем**:
 
 | Сервис | Redirect URI | Что заполнить |
 | --- | --- | --- |
-| Google | `https://3dprinta.shop/api/auth/social/google/callback/` | Веб-клиент, Client ID, Client Secret; права openid/email/profile |
-| VK ID | `https://3dprinta.shop/api/auth/social/vk/callback/` | Веб-приложение VK ID, App ID; право email, PKCE, без старого OAuth VK |
-| Яндекс ID | `https://3dprinta.shop/api/auth/social/yandex/callback/` | Client ID, Client Secret; права login:info и login:email |
+| Google | `https://sidzen.shop/api/auth/social/google/callback/` | Веб-клиент, Client ID, Client Secret; права openid/email/profile |
+| VK ID | `https://sidzen.shop/api/auth/social/vk/callback/` | Веб-приложение VK ID, App ID; право email, PKCE, без старого OAuth VK |
+| Яндекс ID | `https://sidzen.shop/api/auth/social/yandex/callback/` | Client ID, Client Secret; права login:info и login:email |
 
 Сохраните настройки, отметьте проверку оператором правил обработки и включение кнопки. Сохранение не проверяет пароль приложения: действительность ключей и Redirect URI проверяется полным входом в реальный аккаунт провайдера. Пока приложений нет, обычный вход работает, неработающие кнопки не показываются. Секрет вводится один раз; пустое поле сохраняет прежний секрет только при неизменном Client ID. Смена ID не переносит старые идентификаторы пользователей и отменяет незавершённые попытки входа. Можно выключить провайдера или удалить секрет. Перед сменой / отключением обеспечьте покупателям альтернативный доступ; социальные аккаунты без пароля иначе не смогут начать новый вход.
 

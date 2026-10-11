@@ -13,7 +13,7 @@ export async function getMapTile(z: string, x: string, y: string, transport: typ
   try {
     // Only public tile coordinates go to the provider. Never forward visitor
     // cookies, IP, query text, chosen PVZ, order IDs, or recipient information.
-    const upstream = await transport(url, { cache: "force-cache", next: { revalidate: TILE_CACHE_SECONDS }, redirect: "error", signal: AbortSignal.timeout(10_000), headers: { "User-Agent": "SIDZEN-PickupMap/1.0 (+https://3dprinta.shop/contacts/)", Referer: "https://3dprinta.shop/" } });
+    const upstream = await transport(url, { cache: "force-cache", next: { revalidate: TILE_CACHE_SECONDS }, redirect: "error", signal: AbortSignal.timeout(10_000), headers: { "User-Agent": "SIDZEN-PickupMap/1.0 (+https://sidzen.shop/contacts/)", Referer: "https://sidzen.shop/" } });
     if (!upstream.ok || !upstream.headers.get("content-type")?.startsWith("image/png") || Number(upstream.headers.get("content-length")) > 262144) return new Response(null, { status: 502 });
     const bytes = new Uint8Array(await upstream.arrayBuffer());
     if (bytes.length > 262144 || bytes.length < 8 || ![137, 80, 78, 71, 13, 10, 26, 10].every((value, index) => bytes[index] === value)) return new Response(null, { status: 502 });

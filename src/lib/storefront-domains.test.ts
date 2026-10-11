@@ -1,23 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { normalizedHost, usesSidzenDomain, socialLoginHandoff } from "./storefront-domains";
-import { publicReviewsForHost, publicReviewWhere, REVIEW_CONSENT_VERSION, REVIEW_CONSENT_TEXT } from "./reviews";
+import { normalizedHost, usesSidzenDomain, socialLoginHandoff, STOREFRONT_HOSTS } from "./storefront-domains";
+import { publicReviewsForHost, publicReviewWhere, REVIEW_CONSENT_VERSION, REVIEW_CONSENT_TEXT, SIDZEN_REVIEW_CONSENT_VERSIONS } from "./reviews";
 
-describe("additional SIDZEN domain", () => {
+describe("single SIDZEN storefront", () => {
   it("recognizes only the exact new storefront hosts", () => {
     expect(normalizedHost("SIDZEN.SHOP:443")).toBe("sidzen.shop");
+    expect(STOREFRONT_HOSTS).toEqual(["sidzen.shop"]);
     expect(usesSidzenDomain("sidzen.shop.evil.test")).toBe(false);
     expect(usesSidzenDomain("www.sidzen.shop")).toBe(true);
   });
-  it("starts OAuth on its registered domain without forwarding a password or binding cookie", () => {
-    expect(socialLoginHandoff("sidzen.shop", "https://3dprinta.shop", "/account/")).toBe("https://3dprinta.shop/login/?returnTo=%2Faccount%2F");
-    expect(socialLoginHandoff("sidzen.shop", "https://3dprinta.shop", "/cart/", true)).toBe("https://3dprinta.shop/account/profile/");
-    expect(socialLoginHandoff("3dprinta.shop", "https://3dprinta.shop", "/account/")).toBeNull();
+  it("normalizes www for OAuth and never redirects to an unrelated login", () => {
+    expect(socialLoginHandoff("www.sidzen.shop", "https://sidzen.shop", "/account/")).toBe("https://sidzen.shop/login/?returnTo=%2Faccount%2F");
+    expect(socialLoginHandoff("www.sidzen.shop", "https://sidzen.shop", "/cart/", true)).toBe("https://sidzen.shop/account/profile/");
+    expect(socialLoginHandoff("sidzen.shop", "https://unrelated.example", "/account/")).toBeNull();
     expect(socialLoginHandoff("sidzen.shop", "https://sidzen.shop", "/account/")).toBeNull();
   });
-  it("does not republish old single-domain consents on the alias", () => {
-    expect(publicReviewsForHost("3dprinta.shop")).toEqual(publicReviewWhere);
-    expect(publicReviewsForHost("sidzen.shop")).toEqual({ approved: true, consent: { is: { revokedAt: null, purpose: "review", version: REVIEW_CONSENT_VERSION } } });
-    expect(REVIEW_CONSENT_TEXT).toContain("sidzen.shop и 3dprinta.shop");
+  it("retains unchanged v2 SIDZEN consent, excludes old single-site consent", () => {
+    expect(publicReviewsForHost("sidzen.shop")).toEqual(publicReviewWhere);
+    expect(publicReviewsForHost("localhost:3101")).toEqual(publicReviewWhere);
+    expect(publicReviewWhere).toEqual({ approved: true, consent: { is: { revokedAt: null, purpose: "review", version: { in: SIDZEN_REVIEW_CONSENT_VERSIONS } } } });
+    expect(SIDZEN_REVIEW_CONSENT_VERSIONS).toContain("2026-10-07-reviews-sidzen-v2");
+    expect(SIDZEN_REVIEW_CONSENT_VERSIONS).not.toContain("2026-10-06-reviews-v1");
+    expect(REVIEW_CONSENT_TEXT).toContain("на сайте sidzen.shop");
+    expect(REVIEW_CONSENT_TEXT).not.toContain("двух сайтах");
     expect(REVIEW_CONSENT_VERSION).not.toBe("2026-10-06-reviews-v1");
   });
 });

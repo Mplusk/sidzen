@@ -10,7 +10,7 @@ beforeAll(async () => { keys = await generateKeyPair("RS256"); jwk = { ...await 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 describe("social OAuth transports", () => {
   it("uses fixed provider endpoints, PKCE and minimal scopes without secrets", () => {
-    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://3dprinta.shop");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://sidzen.shop");
     for (const provider of ["google", "vk", "yandex"] as const) {
       const url = new URL(authorizationUrl(provider, config, "state", input.verifier, "nonce"));
       expect(url.protocol).toBe("https:"); expect(url.searchParams.get("code_challenge")).toBe(pkceChallenge(input.verifier));

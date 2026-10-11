@@ -5,7 +5,7 @@ import { CONSENT_VERSION } from "@/lib/privacy-documents";
 export const metadata: Metadata = { title: "Политика обработки персональных данных" };
 export default async function PrivacyPage() {
   const contacts = await getStoreContacts();
-  return <article className="container prose-page"><h1>Политика обработки персональных данных</h1><p>Версия {CONSENT_VERSION}. SIDZEN — один магазин на sidzen.shop и 3dprinta.shop. Оператор и цели обработки не меняются при выборе домена.</p>
+  return <article className="container prose-page"><h1>Политика обработки персональных данных</h1><p>Версия {CONSENT_VERSION}. Интернет-магазин SIDZEN расположен на sidzen.shop.</p>
     <h2>Оператор и обращения</h2><p>{contacts.legalName || "Наименование оператора ещё не заполнено продавцом."} {contacts.inn && `ИНН ${contacts.inn}.`} {contacts.legalAddress}</p><p>{contacts.email ? <a className="text-link" href={`mailto:${contacts.email}`}>{contacts.email}</a> : "Email оператора ещё не заполнен продавцом."} Также можно направить обращение в <Link className="text-link" href="/account/privacy/">разделе «Персональные данные» кабинета</Link>. Для гостевых заказов используйте <Link className="text-link" href="/contacts/">контакты продавца</Link>; оператор проверяет принадлежность данных без избыточных документов.</p>
     <h2>Цели, данные и основания обработки</h2><ul>
       <li>Заявка, согласование заказа и доставка: имя, email, телефон, адрес или ПВЗ, товары, суммы и статусы. Основание — обработка обращения для заключения и исполнения договора по инициативе покупателя; документы учёта сохраняются для исполнения обязанностей по закону.</li>

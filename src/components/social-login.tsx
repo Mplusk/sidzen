@@ -14,7 +14,7 @@ export async function SocialLogin({ returnTo = "/account/", linking = false, pas
   if (!enabled.length) return null;
   const requestHeaders = await headers();
   const handoff = socialLoginHandoff(requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"), siteOrigin(), safeSocialReturn(returnTo), linking);
-  if (handoff) return <section className="social-login"><h2>{linking ? "Подключить способ входа" : "Вход через другой аккаунт"}</h2><p className="muted">Вход через соцсети проходит на основном домене этого же магазина — 3dprinta.shop. Это сохраняет безопасный возврат из сервиса. Кабинет и заказы общие; на каждом домене нужно войти отдельно.</p><a className="button button--outline" href={handoff}>{linking ? "Перейти к подключению" : "Продолжить вход через соцсети"}</a></section>;
+  if (handoff) return <section className="social-login"><h2>{linking ? "Подключить способ входа" : "Вход через другой аккаунт"}</h2><p className="muted">Продолжите безопасный вход на sidzen.shop.</p><a className="button button--outline" href={handoff}>{linking ? "Перейти к подключению" : "Продолжить вход через соцсети"}</a></section>;
   return <section className="social-login"><h2>{linking ? "Подключить способ входа" : "Или через другой аккаунт"}</h2>
     <form action={startSocialLogin}>
       <input type="hidden" name="returnTo" value={returnTo} /><input type="hidden" name="intent" value={linking ? "link" : "login"} />

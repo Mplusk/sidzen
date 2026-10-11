@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
-import { parseReview, purchasedProductWhere, publicReviewWhere, reviewPage } from "./reviews";
+import { parseReview, purchasedProductWhere, publicReviewWhere, reviewPage, SIDZEN_REVIEW_CONSENT_VERSIONS } from "./reviews";
 import { normalizeReviewPhoto, reviewImagePath, reviewPhotoFiles } from "./review-images";
 function form() { const value = new FormData(); for (const [key, field] of Object.entries({ productId: "p", author: "Максим", text: "Отличный товар, хорошо сделан", rating: "5", consent: "on" })) value.set(key, field); return value; }
 describe("verified buyer review input and privacy", () => {
@@ -8,7 +8,7 @@ describe("verified buyer review input and privacy", () => {
   it.each(["0", "6", "2.5", "NaN", ""])("rejects invalid rating %s", rating => { const value = form(); value.set("rating", rating); expect(parseReview(value).success).toBe(false); });
   it("requires explicit consent and substantive bounded text", () => { const value = form(); value.delete("consent"); expect(parseReview(value).success).toBe(false); value.set("consent", "on"); value.set("text", "short"); expect(parseReview(value).success).toBe(false); value.set("text", "x".repeat(3001)); expect(parseReview(value).success).toBe(false); });
   it("uses account ownership and delivery with either verified legacy payment or attested manual purchase", () => { expect(purchasedProductWhere("buyer", "product")).toEqual({ userId: "buyer", status: "DELIVERED", OR: [{ kind: "ORDER", payment: { is: { status: "PAID", refundReviewRequired: false } } }, { kind: "APPLICATION", purchaseConfirmedAt: { not: null }, payment: { is: null } }], items: { some: { productId: "product", quantity: { gt: 0 } } } }); });
-  it("new verified public reviews require a live consent, legacy rows survive unchanged", () => { expect(publicReviewWhere).toEqual({ approved: true, OR: [{ verifiedPurchase: false }, { consent: { is: { revokedAt: null } } }] }); });
+  it("public reviews require live SIDZEN-scoped consent", () => { expect(publicReviewWhere).toEqual({ approved: true, consent: { is: { revokedAt: null, purpose: "review", version: { in: SIDZEN_REVIEW_CONSENT_VERSIONS } } } }); });
   it("bounds pagination including malformed requests", () => { expect(reviewPage("99999999", 21)).toEqual({ page: 3, pages: 3 }); for (const value of ["abc", "-1", "NaN", ["2"], "Infinity"]) expect(reviewPage(value, 21).page).toBe(1); });
 });
 describe("review photo safety", () => {

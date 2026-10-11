@@ -48,7 +48,9 @@ async function seedAccess() {
     }
   }
 
-  const email = (process.env.BOOTSTRAP_ADMIN_EMAIL ?? "admin@3dprinta.shop").toLowerCase();
+  // Existing owner identities are not renamed or duplicated during a domain move.
+  const existingOwner = await prisma.user.findFirst({ where: { roles: { some: { role: { code: "superadmin" } } } }, orderBy: { createdAt: "asc" }, select: { email: true } });
+  const email = (process.env.BOOTSTRAP_ADMIN_EMAIL ?? existingOwner?.email ?? "admin@sidzen.shop").toLowerCase();
   const password = process.env.BOOTSTRAP_ADMIN_PASSWORD ?? "ChangeMe-3dprinta-2026";
   const admin = await prisma.user.upsert({
     where: { email },
@@ -210,7 +212,7 @@ async function seedContent() {
 
   const settings = [
     ["site.name", "3DPRINTA", "general", "Название"],
-    ["site.domain", "https://3dprinta.shop", "general", "Домен"],
+    ["site.domain", "https://sidzen.shop", "general", "Домен"],
     ["site.tagline", "Печатаем идеи в точных деталях", "general", "Слоган"],
     ["contacts.phone", "", "contacts", "Телефон"],
     ["contacts.email", "", "contacts", "Email"],

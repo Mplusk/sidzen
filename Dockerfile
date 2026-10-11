@@ -23,7 +23,7 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1 \
     DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build" \
     AUTH_SECRET="build-time-placeholder" \
-    NEXT_PUBLIC_SITE_URL="https://3dprinta.shop" \
+    NEXT_PUBLIC_SITE_URL="https://sidzen.shop" \
     NODE_OPTIONS="--max-old-space-size=1536"
 RUN pnpm build
 

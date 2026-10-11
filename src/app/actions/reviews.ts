@@ -30,7 +30,7 @@ export async function createReviewAction(form: FormData) {
   catch { redirect("/account/reviews/?error=images"); }
   let failure = "";
   try {
-    const document = { ...await consentDocument("account"), purpose: "review", version: REVIEW_CONSENT_VERSION, text: REVIEW_CONSENT_TEXT, url: "https://3dprinta.shop/legal/consent/?purpose=review" };
+    const document = { ...await consentDocument("account"), purpose: "review", version: REVIEW_CONSENT_VERSION, text: REVIEW_CONSENT_TEXT, url: "https://sidzen.shop/legal/consent/?purpose=review" };
     await prisma.$transaction(async tx => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412032)`;
       if (!await tx.order.findFirst({ where: purchasedProductWhere(user.id, input.productId), select: { id: true } })) throw new Error("purchase");

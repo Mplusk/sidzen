@@ -23,12 +23,12 @@ if [[ ! -f /opt/3dprinta/shared/.env.production ]]; then
   auth_secret="$(openssl rand -hex 32)"
   integration_key="$(openssl rand -hex 32)"
   admin_password="$(openssl rand -hex 16)"
-  printf 'POSTGRES_PASSWORD=%s\nDATABASE_URL=postgresql://3dprinta:%s@db:5432/3dprinta?schema=public\nAUTH_SECRET=%s\nINTEGRATION_ENCRYPTION_KEY=%s\nNEXT_PUBLIC_SITE_URL=https://3dprinta.shop\nUPLOAD_DIR=/app/private-uploads\nBOOTSTRAP_ADMIN_EMAIL=admin@3dprinta.shop\nBOOTSTRAP_ADMIN_PASSWORD=%s\nPAYMENT_PROVIDER=manual\nDELIVERY_PROVIDER=manual\nYOOKASSA_ALLOW_TEST=false\n' "$db_password" "$db_password" "$auth_secret" "$integration_key" "$admin_password" > /opt/3dprinta/shared/.env.production
+  printf 'POSTGRES_PASSWORD=%s\nDATABASE_URL=postgresql://3dprinta:%s@db:5432/3dprinta?schema=public\nAUTH_SECRET=%s\nINTEGRATION_ENCRYPTION_KEY=%s\nNEXT_PUBLIC_SITE_URL=https://sidzen.shop\nUPLOAD_DIR=/app/private-uploads\nBOOTSTRAP_ADMIN_EMAIL=admin@sidzen.shop\nBOOTSTRAP_ADMIN_PASSWORD=%s\nPAYMENT_PROVIDER=manual\nDELIVERY_PROVIDER=manual\nYOOKASSA_ALLOW_TEST=false\n' "$db_password" "$db_password" "$auth_secret" "$integration_key" "$admin_password" > /opt/3dprinta/shared/.env.production
   chown deploy:deploy /opt/3dprinta/shared/.env.production
   chmod 0600 /opt/3dprinta/shared/.env.production
 fi
 if [[ ! -f /opt/3dprinta/shared/admin-access.txt ]]; then
-  printf 'Site: https://3dprinta.shop\nAdmin: https://3dprinta.shop/admin/\nEmail: admin@3dprinta.shop\n' > /opt/3dprinta/shared/admin-access.txt
+  printf 'Site: https://sidzen.shop\nAdmin: https://sidzen.shop/admin/\nEmail: admin@sidzen.shop\n' > /opt/3dprinta/shared/admin-access.txt
   awk -F= '/^BOOTSTRAP_ADMIN_PASSWORD=/{ print "Password: " $2 }' /opt/3dprinta/shared/.env.production >> /opt/3dprinta/shared/admin-access.txt
   chown deploy:deploy /opt/3dprinta/shared/admin-access.txt
   chmod 0600 /opt/3dprinta/shared/admin-access.txt

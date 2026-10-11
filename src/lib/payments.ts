@@ -120,7 +120,7 @@ export async function createOnlinePayment(orderId: string) {
     return tochkaPaymentUrl(remote);
   }
   const { config } = claim;
-  const url = new URL(`/checkout/success/${encodeURIComponent(order.number)}/`, process.env.NEXT_PUBLIC_SITE_URL ?? "https://3dprinta.shop");
+  const url = new URL(`/checkout/success/${encodeURIComponent(order.number)}/`, process.env.NEXT_PUBLIC_SITE_URL ?? "https://sidzen.shop");
   const Data = {
     customerCode: config.customerCode, merchantId: config.merchantId, amount: Number(order.total), purpose: `Заказ ${order.number}`.slice(0, 140), paymentLinkId: payment.id,
     paymentMode: [...(config.card ? ["card"] : []), ...(config.sbp ? ["sbp"] : [])], preAuthorization: false, saveCard: false, ttl: 1440,

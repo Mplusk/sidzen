@@ -26,7 +26,7 @@ export async function verifyTelegram(config: TelegramConfig, transport: typeof f
 }
 export function telegramOrderText(orderId: string, baseUrl: string) {
   const base = new URL(baseUrl);
-  if (base.protocol !== "https:" || !["sidzen.shop", "3dprinta.shop"].includes(base.hostname) || base.port || base.username || base.password) throw new TelegramError("response");
+  if (base.origin !== "https://sidzen.shop" || base.port || base.username || base.password) throw new TelegramError("response");
   // No buyer names, contacts, address, comments, order number or product data.
   // The opaque internal reference opens an authenticated admin-only page.
   return `SIDZEN · новая заявка\nОткройте заказ в кабинете администратора:\n${base.origin}/admin/order-alert/${encodeURIComponent(orderId)}/`;
