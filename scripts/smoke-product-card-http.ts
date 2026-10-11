@@ -37,7 +37,10 @@ try {
   assert(card.includes('product-card__discount') && card.includes('−20') && card.includes('Нет в наличии'));
   assert(!card.includes(product.shortDescription!) && !card.includes('Базовая цена') && !card.includes('round-link'));
   assert(card.includes('gallery-dots') && card.includes('aria-pressed="true"'));
-  assert(catalogHtml.includes('role="search"') && catalogHtml.includes('action="/catalog/"') && catalogHtml.includes('catalog-category-strip'));
+  assert(catalogHtml.includes('role="search"') && catalogHtml.includes('action="/catalog/"') && !catalogHtml.includes('catalog-category-strip'));
+  const menu = catalogHtml.match(/<details class="header-catalog-menu"[\s\S]*?<\/details>/)?.[0];
+  assert(menu && !menu.match(/<details[^>]*\sopen(?:[\s=>])/), "Categories must start closed");
+  assert(menu.includes('aria-expanded="false"') && menu.includes('aria-label="Категории товаров"') && menu.includes('href="/catalog/"'));
   const path = `/catalog/${category.slug}/${product.slug}/`;
   const response = await request(path); assert.equal(response.status, 200);
   let html = await response.text();
