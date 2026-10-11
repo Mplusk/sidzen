@@ -7,6 +7,7 @@ import { pruneTransientPersonalData } from "../src/lib/privacy-maintenance";
 import { reconcileTochkaPayments } from "../src/lib/payments";
 import { processFiscalReceipt } from "../src/lib/cloudkassir/worker";
 import { pruneDiagnosticLogs, writeDiagnostic } from "../src/lib/diagnostics";
+import { pruneMonitoring } from "../src/lib/monitoring";
 import { pruneOrphanReviewPhotos } from "../src/lib/review-image-maintenance";
 import { processCategoryAiJob } from "../src/lib/category-ai/worker";
 import { processReviewAiJob } from "../src/lib/review-ai/worker";
@@ -80,6 +81,7 @@ try {
       if (Date.now() >= nextPrivacyCleanup) {
         await pruneTransientPersonalData();
         await pruneDiagnosticLogs();
+        await pruneMonitoring();
         await pruneOrphanReviewPhotos();
         nextPrivacyCleanup = Date.now() + 3600000;
       }

@@ -17,7 +17,7 @@ export async function CatalogView({ category, searchParams }: { category?: { slu
     <JsonLd data={{ "@context": "https://schema.org", "@type": "ItemList", numberOfItems: data.count, itemListElement: data.products.map((product, index) => ({ "@type": "ListItem", position: (data.page - 1) * data.pageSize + index + 1, name: product.name, url: `https://sidzen.shop/catalog/${(product.categories.find((item) => item.isPrimary) ?? product.categories[0])?.category.slug ?? "products"}/${product.slug}/` })) }} />
     <h1 className="visually-hidden">{category?.h1 ?? category?.name ?? "Каталог изделий"}</h1>
     <div className="container catalog-shell">
-      <CatalogFilters base={base} params={params} categories={data.categories.map((item) => ({ slug: item.slug, name: item.name, count: item._count.products }))} groups={groups} count={data.count} />
+      <CatalogFilters base={base} params={params} groups={groups} count={data.count} />
       <section className="catalog-results" aria-label="Товары">
         <div className="catalog-result-heading"><span>{category?.name ?? "Все товары"}</span><small>{data.count} {pluralRu(data.count, ["товар", "товара", "товаров"])}</small></div>
         {chips.length > 0 && <nav className="filter-chips" aria-label="Выбранные фильтры">{chips.map((chip) => <Link key={chip.label} href={chip.href} scroll={false} aria-label={"Убрать фильтр " + chip.label}>{chip.label} ×</Link>)}<Link href={base}>Сбросить всё</Link></nav>}

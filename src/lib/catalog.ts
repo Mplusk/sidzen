@@ -5,6 +5,10 @@ import { filterValues, priceBound, searchTerms } from "@/lib/catalog-search";
 import { productOptionInclude } from "@/lib/product-options-server";
 
 export type CatalogParams = { category?: string; material?: string; technology?: string; color?: string; min?: string; max?: string; availability?: string; sort?: string; page?: string; q?: string };
+export const getCatalogMenuCategories = unstable_cache(() => prisma.category.findMany({
+  where: { visible: true, products: { some: { product: { status: "PUBLISHED", type: { in: ["READY", "PARAMETRIC"] } } } } },
+  select: { slug: true, name: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+}), ["catalog-menu-v1"], { revalidate: 60, tags: ["catalog"] });
 export function normalizeCatalogParams(input: Record<string, unknown>): CatalogParams {
   return Object.fromEntries(["category", "material", "technology", "color", "min", "max", "availability", "sort", "page", "q"].flatMap((key) => typeof input[key] === "string" ? [[key, (input[key] as string).slice(0, 160)]] : []));
 }

@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  outputFileTracingIncludes: { "/api/monitoring": ["./node_modules/@iplookup/country/**/*", "./docs/licenses/ip-country-data.md"] },
   trailingSlash: true,
   poweredByHeader: false,
   turbopack: { root: process.cwd() },

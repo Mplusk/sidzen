@@ -19,6 +19,8 @@ const permissionDefinitions = [
   ["settings.write", "Настройки магазина"],
   ["users.write", "Пользователи и роли"],
   ["audit.read", "Журнал аудита"],
+  ["monitoring.read", "Просмотр мониторинга"],
+  ["monitoring.clear", "Очистка мониторинга"],
 ] as const;
 
 const roleDefinitions = [

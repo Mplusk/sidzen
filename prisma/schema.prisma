@@ -86,6 +86,52 @@ model User {
   privacyRequests PrivacyRequest[]
   socialAccounts SocialAccount[]
   oauthAttempts OAuthAttempt[]
+  monitoringVisits MonitoringVisit[]
+}
+
+// Optional first-party statistics, consent-bound and retained for at most 30 days.
+model MonitoringConsent {
+  visitorHash String @id
+  createdAt DateTime
+  version String
+  expiresAt DateTime
+  @@index([expiresAt])
+}
+
+model MonitoringVisit {
+  id             String   @id
+  visitorHash    String
+  userId         String?
+  consentAt      DateTime
+  consentVersion String
+  ip             String?
+  country        String?
+  browser        String
+  device         String
+  source         String?
+  searchPhrase   String?
+  campaign       String?
+  createdAt      DateTime @default(now())
+  lastSeenAt     DateTime @default(now())
+  user           User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  pages          MonitoringPage[]
+
+  @@index([createdAt])
+  @@index([visitorHash, createdAt])
+  @@index([ip, createdAt])
+}
+
+model MonitoringPage {
+  id            String   @id
+  visitId       String
+  path          String
+  search        String?
+  activeSeconds Int      @default(0)
+  createdAt     DateTime @default(now())
+  lastSeenAt    DateTime @default(now())
+  visit         MonitoringVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  @@index([visitId, createdAt])
 }
 
 model SocialAccount {

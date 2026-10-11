@@ -14,6 +14,8 @@ export const PERMISSIONS = {
   settingsWrite: "settings.write",
   usersWrite: "users.write",
   auditRead: "audit.read",
+  monitoringRead: "monitoring.read",
+  monitoringClear: "monitoring.clear",
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

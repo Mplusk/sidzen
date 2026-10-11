@@ -4,6 +4,8 @@ import { getStoreContacts } from "@/lib/settings";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { CookieBanner } from "@/components/cookie-banner";
+import { MonitoringTracker } from "@/components/monitoring-tracker";
+import { Suspense } from "react";
 import "leaflet/dist/leaflet.css";
 import "@fontsource-variable/inter/opsz.css";
 import "./globals.css";
@@ -34,6 +36,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <main id="main">{children}</main>
         <Footer />
         <CookieBanner />
+        <Suspense fallback={null}><MonitoringTracker /></Suspense>
       </body>
     </html>
   );

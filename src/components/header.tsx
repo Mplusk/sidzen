@@ -1,8 +1,11 @@
 import { Logo } from "@/components/logo";
-import { CartIcon, UserIcon, SearchIcon, CatalogIcon } from "@/components/icons";
+import { CartIcon, UserIcon, SearchIcon } from "@/components/icons";
 import { NavLink } from "@/components/nav-link";
+import { CatalogMenu } from "@/components/catalog-menu";
+import { getCatalogMenuCategories } from "@/lib/catalog";
 
-export function Header() {
+export async function Header() {
+  const categories = await getCatalogMenuCategories();
   return (
     <header className="site-header">
       <div className="utility-bar">
@@ -12,7 +15,7 @@ export function Header() {
       </div>
       <div className="container header-main">
         <Logo />
-        <NavLink className="header-catalog" href="/catalog/"><CatalogIcon aria-hidden="true" /><span>Каталог</span></NavLink>
+        <CatalogMenu categories={categories} />
         <form className="header-search" action="/catalog/" method="get" role="search">
           <label className="visually-hidden" htmlFor="shop-search">Поиск товаров</label>
           <input id="shop-search" name="q" type="search" placeholder="Найти предмет для дома" maxLength={160} />

@@ -11,6 +11,9 @@ importers:
       '@fontsource-variable/inter':
         specifier: 5.3.0
         version: 5.3.0
+      '@iplookup/country':
+        specifier: 1.0.20261010
+        version: 1.0.20261010
       '@prisma/client':
         specifier: 6.19.0
         version: 6.19.0(prisma@6.19.0(typescript@5.9.3))(typescript@5.9.3)
@@ -553,6 +556,9 @@ packages:
     engines: {node: '>=20.9.0'}
     cpu: [x64]
     os: [win32]
+
+  '@iplookup/country@1.0.20261010':
+    resolution: {integrity: sha512-DLBMmQj0DB4OLsZhpBifR0jf1JV1G0HP6QM40RKdPQSBpohvsxb41sJH57SPs8Z1RXussylRjf2c4uhgiOdIVA==}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -3041,6 +3047,8 @@ snapshots:
 
   '@img/sharp-win32-x64@0.35.4':
     optional: true
+
+  '@iplookup/country@1.0.20261010': {}
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
