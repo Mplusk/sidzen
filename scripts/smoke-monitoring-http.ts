@@ -9,7 +9,7 @@ assert(["localhost", "127.0.0.1"].includes(base.hostname) && ["localhost", "127.
 const admin = new Map<string, string>(), guest = new Map<string, string>(), buyer = new Map<string, string>();
 const settings = await prisma.siteSetting.findMany({ where: { key: { in: ["legal.seller", "legal.address", "contacts.email"] } } });
 const oldAudits = (await prisma.auditLog.findMany({ where: { action: "monitoring.clear" }, select: { id: true } })).map(row => row.id);
-let buyerId: string | undefined;
+let buyerId: string | undefined, adminSessionId: string | undefined;
 async function request(path: string, body?: FormData | string, jar = guest, origin?: string, extra: Record<string, string> = {}) {
   const response = await fetch(new URL(path, base), { method: body !== undefined ? "POST" : "GET", redirect: "manual", body, headers: { Cookie: [...jar].map(([key, value]) => `${key}=${value}`).join("; "), ...(body !== undefined ? { Origin: origin ?? (body instanceof FormData ? base.origin : process.env.NEXT_PUBLIC_SITE_URL ?? base.origin) } : {}), ...(typeof body === "string" ? { "Content-Type": "application/json" } : {}), ...extra } });
   for (const cookie of response.headers.getSetCookie()) { const pair = cookie.split(";")[0], at = pair.indexOf("="); jar.set(pair.slice(0, at), pair.slice(at + 1)); }
@@ -59,7 +59,11 @@ try {
   assert.equal((await request("/api/monitoring/consent/?choice=deny", "")).status, 204); assert.equal(await prisma.monitoringVisit.count(), 0);
   guest.set(MONITORING_COOKIE, oldCookie); assert.equal((await request("/api/monitoring/", view)).status, 403); assert.equal(await prisma.monitoringVisit.count(), 0);
   assert.equal((await request("/api/monitoring/consent/?choice=allow", "")).status, 204); assert.equal((await request("/api/monitoring/", view)).status, 204);
-  const login = await form("/login/", 'name="email"', admin); login.set("email", "qa@example.test"); login.set("password", "LocalGalleryQA-2026"); assert.equal((await request("/login/", login, admin)).headers.get("location"), "/account/");
+  // Login rate limiting is exercised elsewhere. Give this isolated permission
+  // fixture its own synthetic session instead of consuming shared login quota.
+  const administrator = await prisma.user.findUniqueOrThrow({ where: { email: "qa@example.test" } }), adminToken = randomUUID();
+  adminSessionId = (await prisma.session.create({ data: { userId: administrator.id, tokenHash: createHash("sha256").update(adminToken).digest("hex"), expiresAt: new Date(Date.now() + 600000) } })).id;
+  admin.set("3dp_session", adminToken);
   const html = await (await request("/account/monitoring/", undefined, admin)).text(); assert(html.includes("Мониторинг") && html.includes("www.google.com") && html.includes("Очистить мониторинг"));
   const deletion = await form("/account/monitoring/", "clear-all-monitoring", admin);
   assert.match((await request("/account/monitoring/", deletion, admin)).headers.get("location")!, /confirmation/);
@@ -75,6 +79,7 @@ try {
   await prisma.monitoringVisit.deleteMany(); await prisma.monitoringConsent.deleteMany();
   await prisma.auditLog.deleteMany({ where: { action: "monitoring.clear", id: { notIn: oldAudits } } });
   if (buyerId) await prisma.user.delete({ where: { id: buyerId } });
+  if (adminSessionId) await prisma.session.deleteMany({ where: { id: adminSessionId } });
   for (const key of ["legal.seller", "legal.address", "contacts.email"]) { const old = settings.find(row => row.key === key); if (old) await prisma.siteSetting.update({ where: { key }, data: { value: old.value! } }); else await prisma.siteSetting.deleteMany({ where: { key } }); }
   await prisma.$disconnect();
 }
