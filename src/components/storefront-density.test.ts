@@ -10,6 +10,14 @@ it("keeps smaller mobile circles with 44px targets and native swipe", () => {
 it("removes category breadcrumbs but preserves category controls", () => {
   const catalog = read("./catalog-view.tsx"); expect(catalog).not.toContain("Breadcrumbs"); expect(catalog).toContain("<CatalogFilters");
 });
+it("reveals the familiar wrapping category buttons only in the open Catalog menu", () => {
+  const css = read("../app/globals.css"), menu = read("./catalog-menu.tsx");
+  expect(menu).toContain('<details className="header-catalog-menu"');
+  expect(menu).toContain('aria-expanded={open}');
+  expect(css).toContain('.header-catalog-menu[open] .header-catalog-panel { display: flex; flex-wrap: wrap; gap: 8px; }');
+  expect(css).toContain('.header-catalog-panel a { display: inline-flex;');
+  expect(css).toContain('.header-catalog-panel a[aria-current="page"] { background: var(--blue); color: var(--white); }');
+});
 it("keeps exactly four information links and no Shop footer block", () => {
   const footer = read("./footer.tsx"); expect(footer).not.toContain("<h3>Магазин</h3>");
   for (const href of ["/about/", "/contacts/", "/faq/", "/delivery/"]) expect(footer).toContain(`href="${href}"`);
