@@ -5,12 +5,12 @@ import { formatPrice } from "@/lib/format";
 
 type ProductCardData = Prisma.ProductGetPayload<{ include: { images: true; categories: { include: { category: true } } } }>;
 
-export function ProductCard({ product }: { product: ProductCardData }) {
+export function ProductCard({ product, highPriority = false }: { product: ProductCardData; highPriority?: boolean }) {
   const category = product.categories.find((item) => item.isPrimary)?.category ?? product.categories[0]?.category;
   const discounted = product.oldPrice && Number(product.oldPrice) > Number(product.basePrice);
   return (
     <article className="product-card">
-      <ProductGallery images={product.images.map(({ path, alt, caption }) => ({ path, alt, caption }))} name={product.name} badge={product.badge} href={`/catalog/${category?.slug ?? "products"}/${product.slug}/`} compact />
+      <ProductGallery images={product.images.map(({ path, alt, caption }) => ({ path, alt, caption }))} name={product.name} badge={product.badge} href={`/catalog/${category?.slug ?? "products"}/${product.slug}/`} compact highPriority={highPriority} />
       <div className="product-card__body">
         <div className={"product-card__price" + (discounted ? " product-card__price--sale" : "")}>
           <strong>{formatPrice(product.basePrice)}</strong>

@@ -5,6 +5,10 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: { "/api/monitoring": ["./node_modules/@iplookup/country/**/*", "./docs/licenses/ip-country-data.md"] },
   trailingSlash: true,
   poweredByHeader: false,
+  images: {
+    minimumCacheTTL: 2_678_400,
+    maximumDiskCacheSize: 512_000_000,
+  },
   turbopack: { root: process.cwd() },
   experimental: {
     serverActions: {
@@ -21,6 +25,12 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      {
+        // Uploaded photos use UUIDs or content hashes and are never overwritten.
+        // Include public-file routing, but not mutable assets or private photos.
+        source: "/uploads/products/:name((?:mp-[0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\\.(?:jpg|png|webp|avif))",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
       {
         source: "/:path*",
         headers: [

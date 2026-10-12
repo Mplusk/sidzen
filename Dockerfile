@@ -53,8 +53,8 @@ RUN groupadd --system --gid 1001 nodejs \
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-RUN mkdir -p /app/private-uploads /app/public/uploads/products \
-  && chown nextjs:nodejs /app/private-uploads /app/public/uploads/products
+RUN mkdir -p /app/private-uploads /app/public/uploads/products /app/.next/cache/images \
+  && chown nextjs:nodejs /app/private-uploads /app/public/uploads/products /app/.next/cache/images
 
 USER nextjs
 EXPOSE 3000

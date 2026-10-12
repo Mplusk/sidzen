@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { copyFile, mkdir, unlink } from "node:fs/promises";
+import { join } from "node:path";
 import { prisma } from "../src/lib/prisma";
 
 const base = new URL(process.env.SMOKE_BASE_URL || "http://localhost:3101");
@@ -7,6 +9,7 @@ const db = new URL(process.env.DATABASE_URL || "");
 assert(["localhost", "127.0.0.1"].includes(base.hostname) && ["localhost", "127.0.0.1"].includes(db.hostname) && db.pathname === "/shop_qa");
 const jar = new Map<string, string>();
 let productId: string | undefined, cartId: string | undefined, categoryId: string | undefined, sessionId: string | undefined;
+let imageFixture: string | undefined;
 const adminCodes = { "ТН ВЭД коды ЕАЭС": "0012345678", "Код ОКПД 2": "22.29.23.199", tn_ved_code: "0098765432", okpd2: "27.40.22.190" };
 async function request(path: string, body?: FormData) {
   const response = await fetch(new URL(path, base), { method: body ? "POST" : "GET", redirect: "manual", headers: { Cookie: [...jar].map(([key, value]) => `${key}=${value}`).join("; "), ...(body ? { Origin: base.origin } : {}) }, body, signal: AbortSignal.timeout(15000) });
@@ -37,6 +40,28 @@ try {
   assert(card.includes('product-card__discount') && card.includes('−20') && card.includes('Нет в наличии'));
   assert(!card.includes(product.shortDescription!) && !card.includes('Базовая цена') && !card.includes('round-link'));
   assert(card.includes('gallery-dots') && card.includes('aria-pressed="true"'));
+  assert.equal([...card.matchAll(/<img\b/g)].length, 1, "Hidden catalog photos must not download on initial render");
+  assert.equal([...card.matchAll(/class="product-gallery__slide"/g)].length, 2, "Keep all native swipe slots");
+  assert(card.includes('loading="eager"') && card.includes('fetchPriority="high"'), "Prioritize the first visible card");
+  const imageDirectory = join(process.cwd(), "public", "uploads", "products");
+  await mkdir(imageDirectory, { recursive: true });
+  const imageName = `${randomUUID()}.webp`;
+  imageFixture = join(imageDirectory, imageName);
+  await copyFile(join(process.cwd(), "public", "generated", "product-organizer.webp"), imageFixture);
+  const imagePath = `/uploads/products/${imageName}`;
+  const original = await request(imagePath);
+  assert.equal(original.status, 200);
+  assert.equal(original.headers.get("cache-control"), "public, max-age=31536000, immutable");
+  await original.arrayBuffer();
+  const optimized = await request(`/_next/image/?url=${encodeURIComponent(imagePath)}&w=48&q=75`);
+  assert.equal(optimized.status, 200);
+  assert(Number(optimized.headers.get("cache-control")?.match(/max-age=(\d+)/)?.[1]) >= 2_678_400);
+  await optimized.arrayBuffer();
+  assert(!(await request("/generated/product-organizer.webp")).headers.get("cache-control")?.includes("immutable"), "Do not force immutable caching on replaceable assets");
+  assert((await request("/account/")).headers.get("cache-control")?.includes("no-store"));
+  const missingImage = await request(`/uploads/products/${randomUUID()}.webp`);
+  assert.equal(missingImage.status, 404);
+  assert(missingImage.headers.get("cache-control")?.includes("no-store"), "Do not cache missing uploads for a year");
   assert(catalogHtml.includes('role="search"') && catalogHtml.includes('action="/catalog/"') && !catalogHtml.includes('catalog-category-strip'));
   const trigger = catalogHtml.match(/<button\b[^>]*class="header-catalog"[^>]*>/)?.[0];
   const menu = catalogHtml.match(/<nav\b[^>]*class="header-catalog-panel"[^>]*>[\s\S]*?<\/nav>/)?.[0];
@@ -94,7 +119,9 @@ try {
   assert.deepEqual((await prisma.product.findUniqueOrThrow({ where: { id: productId }, select: { specifications: true } })).specifications, product.specifications);
   console.log("PASS: dense catalog cards, price before title, real discount/availability, photo dots, header search, product HTML, readable specifications, absent empty/legacy rows, description paragraphs, two-photo gallery controls, out-of-stock purchase rejection, in-stock cart addition/removal, quantity limit, made-to-order purchase. Isolated QA data only; no orders or payments.");
   console.log("PASS: TN VED / OKPD 2 absent from public HTML/RSC for guests and signed-in administrators, retained verbatim in protected administrator editor and database.");
+  console.log("PASS: one initial photo per card, eager/high priority on the first card, preserved native swipe slots, immutable public uploads, long optimized-image TTL, uncached errors and private account responses.");
 } finally {
+  if (imageFixture) await unlink(imageFixture);
   if (sessionId) await prisma.session.deleteMany({ where: { id: sessionId } });
   if (cartId) await prisma.cart.deleteMany({ where: { id: cartId } });
   if (productId) await prisma.product.deleteMany({ where: { id: productId } });

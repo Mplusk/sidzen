@@ -9,7 +9,7 @@ const contentTypes: Record<string, string> = { jpg: "image/jpeg", png: "image/pn
 export async function GET(_request: Request, { params }: { params: Promise<{ name: string }> }) {
   const { name } = await params;
   const storedName = servedProductImageName(`/uploads/products/${name}`);
-  if (!storedName) return new Response(null, { status: 404 });
+  if (!storedName) return new Response(null, { status: 404, headers: { "Cache-Control": "private, no-store" } });
   try {
     const bytes = await readFile(join(process.cwd(), "public", "uploads", "products", storedName));
     return new Response(new Uint8Array(bytes), { headers: {
@@ -19,8 +19,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ nam
       "X-Content-Type-Options": "nosniff",
     } });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return new Response(null, { status: 404 });
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return new Response(null, { status: 404, headers: { "Cache-Control": "private, no-store" } });
     console.error("Could not read product image", error);
-    return new Response(null, { status: 500 });
+    return new Response(null, { status: 500, headers: { "Cache-Control": "private, no-store" } });
   }
 }

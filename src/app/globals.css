@@ -218,6 +218,7 @@ h3 { font-size: clamp(1.125rem, 1.5vw, 1.375rem); }
 .product-gallery__slide { position: relative; flex: 0 0 100%; min-width: 0; height: 100%; scroll-snap-align: start; scroll-snap-stop: always; }
 .product-gallery__photo { position: absolute; inset: 0; }
 .product-gallery__photo img { object-fit: contain; }
+.gallery-image-placeholder { position: absolute; inset: 0; background: var(--paper-2); }
 .product-gallery__caption { margin: 10px 0 0; color: var(--muted); font-size: .84rem; line-height: 1.4; }
 .product-gallery--compact { max-width: none; }
 .product-gallery--compact .product-gallery__main { aspect-ratio: 4 / 5; max-height: none; border: 0; border-radius: 10px; background: #fff; }
