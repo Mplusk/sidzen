@@ -42,24 +42,29 @@ it("keeps categories after the search row in normal document order", async () =>
   expect(panel().previousElementSibling?.className).toBe("header-main");
   expect([...panel().querySelectorAll("a")].map(link => link.textContent)).toEqual(["Все товары", "Декор"]);
 });
-it("does not collapse on pointerdown or blur and lets the Filters click finish first", async () => {
+it("does not collapse on pointerdown, blur or clicking Filters", async () => {
   await render(); await toggle();
   const filters = container.querySelector<HTMLButtonElement>("#filters")!;
   await act(async () => { trigger().focus(); filters.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })); filters.focus(); });
   expect(panel().hidden).toBe(false);
   await act(async () => filters.click());
-  expect(filterClick).toHaveBeenCalledTimes(1); expect(panel().hidden).toBe(true);
+  expect(filterClick).toHaveBeenCalledTimes(1); expect(panel().hidden).toBe(false);
 });
-it("closes with Escape and returns focus to Catalog", async () => {
+it("does not hide category navigation on Escape", async () => {
   await render(); await toggle();
   await act(async () => { panel().querySelector<HTMLAnchorElement>("a")!.focus(); document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
-  expect(panel().hidden).toBe(true); expect(document.activeElement).toBe(trigger());
+  expect(panel().hidden).toBe(false); expect(trigger().getAttribute("aria-expanded")).toBe("true");
 });
-it("closes on category selection and after a route change", async () => {
+it("stays open after category selection and route changes until Catalog is pressed again", async () => {
   await render(); await toggle();
   await act(async () => panel().querySelectorAll<HTMLAnchorElement>("a")[1].click());
-  expect(panel().hidden).toBe(true);
-  await toggle(); route.pathname = "/catalog/decor/"; await render();
-  expect(panel().hidden).toBe(true); await toggle();
+  expect(panel().hidden).toBe(false);
+  route.pathname = "/catalog/decor/"; await render();
+  expect(panel().hidden).toBe(false);
   expect(panel().querySelector('a[href="/catalog/decor/"]')!.getAttribute("aria-current")).toBe("page");
+  route.pathname = "/catalog/"; await render();
+  expect(panel().hidden).toBe(false);
+  expect(panel().querySelector('a[href="/catalog/"]')!.getAttribute("aria-current")).toBe("page");
+  await toggle(); expect(panel().hidden).toBe(true);
+  route.pathname = "/catalog/decor/"; await render(); expect(panel().hidden).toBe(true);
 });
