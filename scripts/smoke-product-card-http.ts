@@ -38,9 +38,11 @@ try {
   assert(!card.includes(product.shortDescription!) && !card.includes('Базовая цена') && !card.includes('round-link'));
   assert(card.includes('gallery-dots') && card.includes('aria-pressed="true"'));
   assert(catalogHtml.includes('role="search"') && catalogHtml.includes('action="/catalog/"') && !catalogHtml.includes('catalog-category-strip'));
-  const menu = catalogHtml.match(/<details class="header-catalog-menu"[\s\S]*?<\/details>/)?.[0];
-  assert(menu && !menu.match(/<details[^>]*\sopen(?:[\s=>])/), "Categories must start closed");
-  assert(menu.includes('aria-expanded="false"') && menu.includes('aria-label="Категории товаров"') && menu.includes('href="/catalog/"'));
+  const trigger = catalogHtml.match(/<button\b[^>]*class="header-catalog"[^>]*>/)?.[0];
+  const menu = catalogHtml.match(/<nav\b[^>]*class="header-catalog-panel"[^>]*>[\s\S]*?<\/nav>/)?.[0];
+  assert(trigger?.includes('type="button"') && trigger.includes('aria-expanded="false"'));
+  assert(menu && /<nav[^>]*\shidden(?:[\s=>])/.test(menu), "Categories must start closed");
+  assert(menu.includes('aria-label="Категории товаров"') && menu.includes('href="/catalog/"'));
   const path = `/catalog/${category.slug}/${product.slug}/`;
   const response = await request(path); assert.equal(response.status, 200);
   let html = await response.text();

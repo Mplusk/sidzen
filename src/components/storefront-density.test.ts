@@ -12,9 +12,11 @@ it("removes category breadcrumbs but preserves category controls", () => {
 });
 it("reveals the familiar wrapping category buttons only in the open Catalog menu", () => {
   const css = read("../app/globals.css"), menu = read("./catalog-menu.tsx");
-  expect(menu).toContain('<details className="header-catalog-menu"');
+  expect(menu).toContain('type="button" className="header-catalog"');
   expect(menu).toContain('aria-expanded={open}');
-  expect(css).toContain('.header-catalog-menu[open] .header-catalog-panel { display: flex; flex-wrap: wrap; gap: 8px; }');
+  expect(menu).toContain('hidden={!open}');
+  expect(css).toContain('.header-catalog-panel { position: static;');
+  expect(css).toContain('.header-catalog-panel:not([hidden]) { display: flex; flex-wrap: wrap; gap: 8px; }');
   expect(css).toContain('.header-catalog-panel a { display: inline-flex;');
   expect(css).toContain('.header-catalog-panel a[aria-current="page"] { background: var(--blue); color: var(--white); }');
 });
