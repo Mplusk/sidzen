@@ -31,3 +31,14 @@ it("places footer information at the right edge on desktop and the left edge on 
   expect(css).toContain(".footer-info { justify-self: end; }");
   expect(css.slice(css.lastIndexOf("@media (max-width: 600px)"))).toContain(".footer-info { justify-self: start; }");
 });
+it("keeps the footer on a shared readable grid with copyright and legal links below", () => {
+  const footer = read("./footer.tsx"), css = read("../app/globals.css");
+  expect(footer).toContain('className="footer-brand"');
+  expect(footer).toContain('<nav className="footer-info" aria-labelledby="footer-information-heading">');
+  expect(footer.indexOf('className="footer-note"')).toBeGreaterThan(footer.indexOf('className="container footer-bottom"'));
+  expect(footer).toContain('aria-label="Правовая информация"');
+  expect(css).toContain('.site-footer > .container { width: min(75rem, calc(100% - 2rem)); }');
+  expect(css).toContain('.footer-description { max-width: 42ch;');
+  expect(css).toContain('line-height: 1.65; text-wrap: balance;');
+  expect(css).toContain('.footer-bottom { display: flex; flex-wrap: wrap; justify-content: space-between;');
+});
