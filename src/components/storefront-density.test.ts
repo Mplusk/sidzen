@@ -10,6 +10,14 @@ it("keeps smaller mobile circles with 44px targets and native swipe", () => {
 it("removes category breadcrumbs but preserves category controls", () => {
   const catalog = read("./catalog-view.tsx"); expect(catalog).not.toContain("Breadcrumbs"); expect(catalog).toContain("<CatalogFilters");
 });
+it("omits visible product breadcrumbs and uses a solid header to prevent text showing through", () => {
+  const product = read("../app/catalog/[category]/[product]/page.tsx"), css = read("../app/globals.css");
+  expect(product).toContain('<Breadcrumbs visible={false}');
+  expect(product).not.toContain('className="container product-breadcrumbs"');
+  const header = css.match(/\.site-header \{[^}]+\}/)?.[0];
+  expect(header).toContain('background: var(--paper);');
+  expect(header).not.toContain('rgba(');
+});
 it("reveals the familiar wrapping category buttons only in the open Catalog menu", () => {
   const css = read("../app/globals.css"), menu = read("./catalog-menu.tsx");
   expect(menu).toContain('type="button" className="header-catalog"');

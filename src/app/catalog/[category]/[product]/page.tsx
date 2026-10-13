@@ -79,7 +79,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
   return (
     <>
       <JsonLd data={schema} />
-      <div className="container product-breadcrumbs"><Breadcrumbs items={[{ label: "Каталог", href: "/catalog/" }, { label: category.name, href: `/catalog/${category.slug}/` }, { label: product.name, href: `/catalog/${category.slug}/${product.slug}/` }]} /></div>
+      <Breadcrumbs visible={false} items={[{ label: "Каталог", href: "/catalog/" }, { label: category.name, href: `/catalog/${category.slug}/` }, { label: product.name, href: `/catalog/${category.slug}/${product.slug}/` }]} />
       <article className="container product-detail">
         <div className="product-detail__grid">
           <ProductGallery key={product.id} images={product.images.map(({ path, alt, caption, width, height }) => ({ path, alt, caption, width, height }))} name={product.name} badge={product.badge} />

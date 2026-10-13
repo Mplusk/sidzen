@@ -71,6 +71,8 @@ try {
   const path = `/catalog/${category.slug}/${product.slug}/`;
   const response = await request(path); assert.equal(response.status, 200);
   let html = await response.text();
+  assert(!html.includes('aria-label="Хлебные крошки"') && !html.includes('class="container product-breadcrumbs"'));
+  assert(html.includes('"@type":"BreadcrumbList"'), "Retain breadcrumb structured data without visible navigation");
   for (const text of [...Object.keys(adminCodes), ...Object.values(adminCodes)]) assert(!html.includes(text), `Administrative classification leaked into public HTML/RSC: ${text}`);
   const table = html.match(/<table class="spec-table">[\s\S]*?<\/table>/)?.[0];
   assert(table); assert(table.includes("PLA пластик") && table.includes("черный") && table.includes("Вес с упаковкой, г"));
