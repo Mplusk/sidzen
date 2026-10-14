@@ -11,7 +11,7 @@ import { OzonPointSearch } from "@/components/ozon-point-search";
 const PickupMap = dynamic(() => import("@/components/ozon-pickup-map"), { ssr: false, loading: () => <div className="ozon-map-wrapper"><div className="ozon-pickup-map ozon-pickup-map--loading" role="status">Загружаем карту ПВЗ…</div></div> });
 export type DeliveryQuoteView = { token: string; cost: number; days: number; address: string };
 
-export function OzonDeliveryPicker({ phone, onPhoneChange, onQuote, packingReady = true }: { phone: string; onPhoneChange: (value: string) => void; onQuote: (value: DeliveryQuoteView | null) => void; packingReady?: boolean }) {
+export function OzonDeliveryPicker({ phone, onPhoneChange, onQuote, packingReady = true, verificationRevision = 0 }: { phone: string; onPhoneChange: (value: string) => void; onQuote: (value: DeliveryQuoteView | null) => void; packingReady?: boolean; verificationRevision?: number }) {
   const [consent, setConsent] = useState(false);
   const [points, setPoints] = useState<PickupPoint[]>([]);
   const [point, setPoint] = useState("");
@@ -20,6 +20,8 @@ export function OzonDeliveryPicker({ phone, onPhoneChange, onQuote, packingReady
   const [truncated, setTruncated] = useState(false);
   const [message, setMessage] = useState("");
   const [quote, setQuote] = useState<(DeliveryQuoteView & { phone: string }) | null>(null);
+  const [lastVerificationRevision, setLastVerificationRevision] = useState(verificationRevision);
+  if (lastVerificationRevision !== verificationRevision) { setLastVerificationRevision(verificationRevision); setQuote(null); }
   const [lastPhone, setLastPhone] = useState(phone);
   if (lastPhone !== phone) { setLastPhone(phone); setQuote(null); setMessage(""); }
   const phoneRef = useRef(phone);

@@ -15,32 +15,46 @@ export function normalizeCatalogParams(input: Record<string, unknown>): CatalogP
 export const getCatalog = unstable_cache(async (params: CatalogParams) => {
   const requestedPage = Math.min(10000, Math.max(1, Math.floor(Number(params.page) || 1))), take = 30;
   const min = priceBound(params.min), max = priceBound(params.max);
+  const filters: Prisma.ProductWhereInput[] = (["material", "color", "technology"] as const).flatMap(kind => {
+    const slugs = filterValues(params[kind]);
+    if (!slugs.length) return [];
+    const relation = kind === "material" ? "materials" : kind === "color" ? "colors" : "technologies";
+    return [{ OR: [{ [relation]: { some: { active: true, slug: { in: slugs } } } }, { catalogFacets: { some: { kind, slug: { in: slugs } } } }] }];
+  });
   const where: Prisma.ProductWhereInput = {
     status: "PUBLISHED", type: { in: ["READY", "PARAMETRIC"] },
+    categories: { some: { category: { visible: true } } },
     ...(params.category ? { categories: { some: { category: { slug: params.category, visible: true } } } } : {}),
-    ...(filterValues(params.material).length ? { materials: { some: { active: true, slug: { in: filterValues(params.material) } } } } : {}),
-    ...(filterValues(params.technology).length ? { technologies: { some: { active: true, slug: { in: filterValues(params.technology) } } } } : {}),
-    ...(filterValues(params.color).length ? { colors: { some: { active: true, slug: { in: filterValues(params.color) } } } } : {}),
     ...(params.availability === "stock" ? { stock: { gt: 0 } } : {}),
     ...(min !== undefined || max !== undefined ? { basePrice: { gte: min, lte: max } } : {}),
-    ...(params.q?.trim() ? { AND: searchTerms(params.q).map((terms) => ({ OR: terms.flatMap((term) => [
+    AND: [...filters, ...searchTerms(params.q ?? "").map((terms) => ({ OR: terms.flatMap((term) => [
       { name: { contains: term, mode: "insensitive" as const } }, { sku: { contains: term, mode: "insensitive" as const } },
       { shortDescription: { contains: term, mode: "insensitive" as const } }, { description: { contains: term, mode: "insensitive" as const } },
       { usage: { contains: term, mode: "insensitive" as const } }, { categories: { some: { category: { name: { contains: term, mode: "insensitive" as const } } } } },
-    ]) })) } : {}),
+    ]) }))],
   };
   const orderBy: Prisma.ProductOrderByWithRelationInput[] = [params.sort === "price-asc" ? { basePrice: "asc" } : params.sort === "price-desc" ? { basePrice: "desc" } : params.sort === "new" ? { publishedAt: "desc" } : { stock: "desc" }, { id: "asc" }];
   const count = await prisma.product.count({ where });
   const pages = Math.max(1, Math.ceil(count / take)), page = Math.min(requestedPage, pages);
-  const visibleProducts = { status: "PUBLISHED" as const, type: { in: ["READY" as const, "PARAMETRIC" as const] } };
+  const visibleProducts = { status: "PUBLISHED" as const, type: { in: ["READY" as const, "PARAMETRIC" as const] }, categories: { some: { category: { visible: true, ...(params.category ? { slug: params.category } : {}) } } } };
   const include = { ...productOptionInclude, images: { orderBy: { sortOrder: "asc" as const }, take: 20 }, categories: { include: { category: true } } };
-  const [products, categories, materials, technologies, colors, related] = await Promise.all([
+  const [products, categories, materials, technologies, colors, related, facets] = await Promise.all([
     prisma.product.findMany({ where, include, orderBy, skip: (page - 1) * take, take }),
     prisma.category.findMany({ where: { visible: true }, include: { _count: { select: { products: { where: { product: visibleProducts } } } } }, orderBy: { sortOrder: "asc" } }),
-    prisma.material.findMany({ where: { active: true }, include: { _count: { select: { products: { where: visibleProducts } } } }, orderBy: { name: "asc" } }),
-    prisma.technology.findMany({ where: { active: true }, include: { _count: { select: { products: { where: visibleProducts } } } }, orderBy: { name: "asc" } }),
-    prisma.color.findMany({ where: { active: true }, include: { _count: { select: { products: { where: visibleProducts } } } }, orderBy: { name: "asc" } }),
+    prisma.material.findMany({ where: { active: true }, select: { slug: true, name: true, products: { where: visibleProducts, select: { id: true } } } }),
+    prisma.technology.findMany({ where: { active: true }, select: { slug: true, name: true, products: { where: visibleProducts, select: { id: true } } } }),
+    prisma.color.findMany({ where: { active: true }, select: { slug: true, name: true, products: { where: visibleProducts, select: { id: true } } } }),
     count ? Promise.resolve([]) : prisma.product.findMany({ where: visibleProducts, include, take: 4, orderBy: { stock: "desc" } }),
+    prisma.catalogFacet.findMany({ select: { kind: true, slug: true, name: true, products: { where: visibleProducts, select: { id: true } } } }),
   ]);
-  return { products, count, categories, materials, technologies, colors, related, page, pages, pageSize: take };
-}, ["catalog-v3"], { revalidate: 60, tags: ["catalog"] });
+  const merge = (kind: string, legacy: typeof materials) => {
+    const values = new Map<string, { slug: string; name: string; ids: Set<string> }>();
+    for (const item of [...facets.filter(facet => facet.kind === kind), ...legacy]) {
+      const previous = values.get(item.slug) ?? { slug: item.slug, name: item.name, ids: new Set<string>() };
+      for (const row of item.products) previous.ids.add(row.id);
+      values.set(item.slug, previous);
+    }
+    return [...values.values()].filter(item => item.ids.size || filterValues(params[kind as keyof CatalogParams]).includes(item.slug)).map(item => ({ slug: item.slug, name: item.name, _count: { products: item.ids.size } })).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  };
+  return { products, count, categories, materials: merge("material", materials), technologies: merge("technology", technologies), colors: merge("color", colors), related, page, pages, pageSize: take };
+}, ["catalog-v5"], { revalidate: 60, tags: ["catalog"] });

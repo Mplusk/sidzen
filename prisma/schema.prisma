@@ -301,6 +301,8 @@ model Product {
   usage            String?
   instructions     String?
   specifications   Json?
+  catalogFacets    CatalogFacet[]
+  catalogFacetVersion Int @default(0)
   categoryMode     String              @default("MANUAL")
   categoryAiJob    ProductCategoryAiJob?
   basePrice        Decimal             @db.Decimal(12, 2)
@@ -349,9 +351,19 @@ model Product {
   @@index([groupId])
   @@index([status, publishedAt])
   @@index([basePrice])
+  @@index([catalogFacetVersion, id])
 }
 
 // Presentation only: each member keeps its own identity, inventory and orders.
+model CatalogFacet {
+  id String @id @default(cuid())
+  kind String
+  slug String
+  name String
+  products Product[]
+  @@unique([kind, slug])
+}
+
 model ProductGroup {
   id        String @id @default(cuid())
   name      String

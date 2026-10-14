@@ -1,7 +1,7 @@
 "use server";
 
 import { randomBytes } from "node:crypto";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { getCart } from "@/app/actions/cart";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -19,11 +19,16 @@ import { writeDiagnostic } from "@/lib/diagnostics";
 import { ozonDiagnosticCode, type DiagnosticCode } from "@/lib/diagnostic-events";
 import { ozonCreateBody } from "@/lib/delivery/ozon-worker";
 import { queueTelegramOrder } from "@/lib/telegram/config";
+import type { CheckoutActionState } from "@/lib/checkout-action-state";
 
-export async function createOrderAction(formData: FormData) {
-  if (!await operatorReady()) redirect("/checkout/?error=operator");
+async function submitOrder(formData: FormData, inline: boolean): Promise<CheckoutActionState> {
+  const fail = (error: string, reference?: string, fields?: Record<string, string[]>) => {
+    if (inline) return { error, reference, fields };
+    redirect(`/checkout/?error=${error}${reference ? `&reference=${reference}` : ""}`);
+  };
+  if (!await operatorReady()) return fail("operator");
   const parsed = checkoutSchema.safeParse(Object.fromEntries(["name", "email", "phone", "city", "address", "postalCode", "delivery", "comment", "legal", "expectedTotal", "ozonQuote", "ozonConsent"].map((key) => [key, formData.get(key) ?? ""])));
-  if (!parsed.success) { await writeDiagnostic("checkout.invalid"); redirect("/checkout/?error=invalid"); }
+  if (!parsed.success) { await writeDiagnostic("checkout.invalid"); return fail("invalid", undefined, parsed.error.flatten().fieldErrors); }
   const cart = await getCart();
   if (!cart?.items.length) redirect("/cart/?error=empty");
   if (cart.items.some((item) => !item.available || !item.quote)) redirect("/cart/?error=unavailable");
@@ -53,19 +58,19 @@ export async function createOrderAction(formData: FormData) {
         pointId: ozonQuote?.request.delivery?.delivery_point?.delivery_point_id,
         checkoutFailure: error instanceof OzonDeliveryError ? error.checkoutFailure : undefined,
         expectedParcels: error instanceof OzonDeliveryError ? error.expectedParcels : undefined, receivedParcels: error instanceof OzonDeliveryError ? error.receivedParcels : undefined });
-      redirect(`/checkout/?error=${publicCode}${reference ? `&reference=${reference}` : ""}`);
+      return fail(publicCode, reference ?? undefined);
     }
     if (Math.abs(freshCost - ozonQuote!.cost) > 0.005) {
       const reference = await writeDiagnostic("delivery.price", { stage: "recheck", carrierCostKopecks: Math.round(freshCost * 100), expectedCarrierCostKopecks: Math.round(ozonQuote!.cost * 100) });
-      redirect(`/checkout/?error=ozon-price${reference ? `&reference=${reference}` : ""}`);
+      return fail("ozon-price", reference ?? undefined);
     }
     await writeDiagnostic("delivery.recheck.ok", { stage: "recheck", durationMs: Date.now() - started, attempts });
   }
   const deliveryMethod = isOzon ? { active: true, code: OZON_DELIVERY_CODE, name: "Ozon Доставка · ПВЗ", basePrice: ozonQuote!.cost } : await prisma.deliveryMethod.findFirst({ where: { code: parsed.data.delivery, active: true, deletedAt: null } });
-  if (!deliveryMethod?.active) redirect("/checkout/?error=delivery");
+  if (!deliveryMethod?.active) return fail("delivery");
   const subtotal = cart.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
   const { deliveryPrice, carrierCost, total } = deliveryTotals(subtotal, Number(deliveryMethod.basePrice));
-  if (Math.abs(total - parsed.data.expectedTotal) > 0.005) { await writeDiagnostic("checkout.price"); redirect("/checkout/?error=price"); }
+  if (Math.abs(total - parsed.data.expectedTotal) > 0.005) { await writeDiagnostic("checkout.price"); return fail("price"); }
   const number = `3DP-${new Date().toISOString().slice(2, 10).replace(/-/g, "")}-${randomBytes(4).toString("hex").toUpperCase()}`;
   let order;
   try {
@@ -103,6 +108,7 @@ export async function createOrderAction(formData: FormData) {
     });
   } catch {
     await writeDiagnostic("checkout.changed");
+    if (inline) return fail("changed");
     redirect("/cart/?error=changed");
   }
   await writeDiagnostic("checkout.application");
@@ -112,4 +118,12 @@ export async function createOrderAction(formData: FormData) {
   revalidatePath("/admin", "layout");
   revalidatePath("/account", "layout");
   redirect(`/checkout/success/${order.number}/`);
+}
+
+// Keep the progressive-enhancement/HTTP interface while the hydrated form
+// receives expected failures as state, never as a destructive navigation.
+export async function createOrderAction(formData: FormData) { await submitOrder(formData, false); }
+export async function createOrderWithState(_previous: CheckoutActionState, formData: FormData) {
+  try { return await submitOrder(formData, true); }
+  catch (error) { unstable_rethrow(error); await writeDiagnostic("server.failed"); return { error: "temporary" }; }
 }

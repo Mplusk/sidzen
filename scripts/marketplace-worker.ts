@@ -1,4 +1,5 @@
 import { writeFile } from "node:fs/promises";
+import { backfillCatalogFacets } from "../src/lib/catalog-facets-server";
 import { prisma } from "../src/lib/prisma";
 import { claimRun, processRun } from "../src/lib/marketplaces/sync";
 import { catalogInvalidationToken } from "../src/lib/marketplaces/cache-token";
@@ -43,6 +44,7 @@ async function categoryAiLoop() {
   let dirty = true;
   while (!stopping) {
     try {
+      dirty = await backfillCatalogFacets() || dirty;
       dirty = await processCategoryAiJob() || dirty;
       if (dirty && !stopping) {
         const base = process.env.MARKETPLACE_APP_URL || "http://app:3000";

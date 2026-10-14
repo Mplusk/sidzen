@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => ({ quote: vi.fn(), order: vi.fn() }));
 vi.mock("@/app/actions/ozon-delivery", () => ({ quoteOzonDelivery: m.quote }));
-vi.mock("@/app/actions/checkout", () => ({ createOrderAction: m.order }));
+vi.mock("@/app/actions/checkout", () => ({ createOrderAction: m.order, createOrderWithState: m.order }));
 vi.mock("next/dynamic", () => ({ default: () => ({ points, selected, onSelect }: { points: { id: string }[]; selected: string; onSelect: (id: string) => void }) => createElement("div", null, ...points.map(point => createElement("button", { key: point.id, type: "button", "data-point": point.id, "aria-pressed": selected === point.id, onClick: () => onSelect(point.id) }, selected === point.id ? "✓ ПВЗ выбран" : "Выбрать этот ПВЗ"))) }));
 import { OzonDeliveryPicker } from "./ozon-delivery-picker";
 import { CheckoutForm } from "./checkout-form";
@@ -127,6 +127,34 @@ describe("delivery verification interaction", () => {
     expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
     expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')!.textContent).toBe("Доставка временно недоступна");
     expect(m.quote).not.toHaveBeenCalled();
+  });
+  it("preserves contacts, comment, consent and selected PVZ after a server error and retries in place", async () => {
+    m.order.mockResolvedValue({ error: "ozon-transport" });
+    await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, total: 240 }], methods: [], user: { name: "", email: "", phone: "" }, ozonDelivery: true })));
+    await inputValue(container.querySelector<HTMLInputElement>('[name="name"]')!, "Тестовый покупатель");
+    await inputValue(container.querySelector<HTMLInputElement>('[name="email"]')!, "buyer@example.test");
+    await inputValue(container.querySelector<HTMLInputElement>('[name="phone"]')!, "89991234567");
+    await act(async () => { const textarea = container.querySelector<HTMLTextAreaElement>('[name="comment"]')!; Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(textarea, "Позвоните вечером"); textarea.dispatchEvent(new Event("input", { bubbles: true })); });
+    await act(async () => container.querySelector<HTMLInputElement>('[name="legal"]')!.click());
+    await choosePoint(); await consent(); await click("Проверить доставку");
+    await act(async () => container.querySelector<HTMLFormElement>('.checkout-form')!.requestSubmit());
+    expect(m.order).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("Введённые данные остались");
+    expect(container.querySelector<HTMLInputElement>('[name="name"]')!.value).toBe("Тестовый покупатель");
+    expect(container.querySelector<HTMLInputElement>('[name="email"]')!.value).toBe("buyer@example.test");
+    expect(container.querySelector<HTMLTextAreaElement>('[name="comment"]')!.value).toBe("Позвоните вечером");
+    expect(container.querySelector<HTMLInputElement>('[name="legal"]')!.checked).toBe(true);
+    expect(container.querySelector<HTMLInputElement>('[name="ozonConsent"]')!.checked).toBe(true);
+    expect(container.querySelector('select')!.value).toBe("42");
+    m.order.mockResolvedValueOnce({ error: "ozon-expired" });
+    await act(async () => container.querySelector<HTMLFormElement>('.checkout-form')!.requestSubmit());
+    expect(m.order).toHaveBeenCalledTimes(2);
+    expect(container.querySelector<HTMLInputElement>('[name="ozonQuote"]')!.value).toBe("");
+    expect(container.querySelector('select')!.value).toBe("42");
+    expect(container.querySelector<HTMLInputElement>('[name="ozonConsent"]')!.checked).toBe(true);
+    expect(container.querySelector<HTMLInputElement>('[name="name"]')!.value).toBe("Тестовый покупатель");
+    await click("Проверить доставку");
+    expect(container.querySelector<HTMLInputElement>('[name="ozonQuote"]')!.value).toBe(result.token);
   });
   it("does not send data without separate consent or valid packaging", async () => {
     phone = "+7 (999) 123-45-67"; await render(); await choosePoint(); await click("Проверить доставку");

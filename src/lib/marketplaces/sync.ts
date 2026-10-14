@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { refreshCatalogFacets } from "@/lib/catalog-facets-server";
 import { Prisma, type MarketplaceSyncRun } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { writeDiagnostic } from "@/lib/diagnostics";
@@ -102,6 +103,7 @@ export async function applySnapshot(tx: Tx, provider: Provider, accountId: strin
   if (!conflict && productId) {
     for (const key of keys) await tx.marketplaceIdentity.upsert({ where: { key }, create: { key, productId }, update: {} });
     await reconcileProduct(tx, productId, policy.primary);
+    await refreshCatalogFacets(tx, productId);
     if (created) {
       const product = await tx.product.findUniqueOrThrow({ where: { id: productId } });
       await queueCategoryAi(tx, productId, product.categoryMode);

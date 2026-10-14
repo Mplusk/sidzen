@@ -4,7 +4,9 @@ import { expect, it } from "vitest";
 it("keeps the header focused on catalog, search, account and cart", () => {
   const header = readFileSync(new URL("./header.tsx", import.meta.url), "utf8");
   for (const removed of ["/delivery/", "/contacts/", "mailto:", "getStoreContacts"]) expect(header).not.toContain(removed);
-  for (const retained of ["header-search", "/catalog/", "/account/", "/cart/"]) expect(header).toContain(retained);
+  for (const retained of ["CatalogSearchInput", "/account/", "/cart/"]) expect(header).toContain(retained);
+  const search = readFileSync(new URL("./catalog-search-input.tsx", import.meta.url), "utf8");
+  expect(search).toContain('className="header-search"'); expect(search).toContain('action="/catalog/"');
 });
 
 it("removes documents and personal data from both desktop and mobile account navigation", () => {

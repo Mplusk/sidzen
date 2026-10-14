@@ -206,6 +206,8 @@ export async function createProductAction(formData: FormData) {
       categories: { create: data.categoryRows }, images: { create: data.images }, materials: { connect: data.materialLinks }, colors: { connect: data.colorLinks }, technologies: { connect: data.technologyLinks }, qualityProfiles: { connect: data.qualityLinks }, postProcesses: { connect: data.postProcessLinks },
       shippingWeightG: data.shippingWeightG, shippingLengthMm: data.shippingLengthMm, shippingWidthMm: data.shippingWidthMm, shippingHeightMm: data.shippingHeightMm,
       } });
+      const { refreshCatalogFacets } = await import("@/lib/catalog-facets-server");
+      await refreshCatalogFacets(tx, created.id);
       await queueCategoryAi(tx, created.id, data.categoryMode);
       return created;
     });
@@ -253,6 +255,8 @@ export async function updateProductAction(formData: FormData) {
       categories: { deleteMany: {}, create: data.categoryRows }, images: { deleteMany: {}, create: data.images }, materials: { set: data.materialLinks }, colors: { set: data.colorLinks }, technologies: { set: data.technologyLinks }, qualityProfiles: { set: data.qualityLinks }, postProcesses: { set: data.postProcessLinks },
       shippingWeightG: data.shippingWeightG, shippingLengthMm: data.shippingLengthMm, shippingWidthMm: data.shippingWidthMm, shippingHeightMm: data.shippingHeightMm,
       } });
+      const { refreshCatalogFacets } = await import("@/lib/catalog-facets-server");
+      await refreshCatalogFacets(tx, id);
       await queueCategoryAi(tx, id, data.categoryMode);
       return updated;
     });

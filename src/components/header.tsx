@@ -1,5 +1,6 @@
 import { Logo } from "@/components/logo";
-import { CartIcon, UserIcon, SearchIcon } from "@/components/icons";
+import { CartIcon, UserIcon } from "@/components/icons";
+import { CatalogSearchInput } from "@/components/catalog-search-input";
 import { NavLink } from "@/components/nav-link";
 import { CatalogMenu } from "@/components/catalog-menu";
 import { getCatalogMenuCategories } from "@/lib/catalog";
@@ -13,13 +14,7 @@ export async function Header() {
           <span>Формы природы. Предметы для дома. Доставка по России.</span>
         </div>
       </div>
-      <CatalogMenu categories={categories} logo={<Logo />} search={
-        <form className="header-search" action="/catalog/" method="get" role="search">
-          <label className="visually-hidden" htmlFor="shop-search">Поиск товаров</label>
-          <input id="shop-search" name="q" type="search" placeholder="Найти предмет для дома" maxLength={160} />
-          <button type="submit" aria-label="Найти товары"><SearchIcon aria-hidden="true" /></button>
-        </form>
-      } actions={
+      <CatalogMenu categories={categories} logo={<Logo />} search={<CatalogSearchInput />} actions={
         <nav className="header-actions" aria-label="Основная навигация">
           <NavLink href="/account/" aria-label="Личный кабинет" exact={false}><UserIcon aria-hidden="true" /><span>Кабинет</span></NavLink>
           <NavLink href="/cart/" aria-label="Корзина"><CartIcon aria-hidden="true" /><span>Корзина</span></NavLink>

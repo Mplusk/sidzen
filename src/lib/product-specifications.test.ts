@@ -5,6 +5,14 @@ import { isAdminOnlySpecification } from "./product-specification-visibility";
 
 const product: SpecificationProduct = { specifications: { "Материал": "PLA пластик", "Цвет товара": "черный", "Вес с упаковкой, г": "85" }, widthMm: null, depthMm: null, heightMm: null, weightGrams: null, technologies: [], materials: [], colors: [], stock: 0, madeToOrder: false, leadDays: 3 };
 describe("customer-facing product specifications", () => {
+  it("merges marketplace dimensions with structured mm values without mixing parcel measurements", () => {
+    const rows = productSpecificationRows({ ...product, specifications: { "Высота предмета, см": "4.5", "Ширина предмета, см": "18", "Вес товара без упаковки (г)": "120", "Материал изделия": "PLA", "Высота упаковки, см": "6" }, heightMm: 45, widthMm: 180, weightGrams: 120 });
+    expect(rows.filter(([label]) => label === "Высота")).toEqual([["Высота", "45 мм"]]);
+    expect(rows.filter(([label]) => label === "Вес")).toEqual([["Вес", "120 г"]]);
+    expect(rows).toContainEqual(["Материал", "PLA"]);
+    expect(rows).toContainEqual(["Высота упаковки, см", "6"]);
+    expect(rows).not.toContainEqual(["Высота предмета, см", "4.5"]);
+  });
   it.each(["ТНВЭД", "ТН ВЭД коды ЕАЭС", "Код ТН-ВЭД", "tn_ved_code", "TN VED", "ОКПД 2", "Код ОКПД2", "ОКПД-2", "OKPD 2", "okpd2Code", "ОКПД", "ТН\u200bВЭД", "ＯＫＰＤ２"])("hides administrative classification %s without mutating stored values", (label) => {
     const specifications = { [label]: "3924900009", "Материал": "PLA пластик" };
     expect(isAdminOnlySpecification(label)).toBe(true);

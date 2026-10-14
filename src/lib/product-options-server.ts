@@ -8,7 +8,8 @@ export const productOptionInclude = {
   variants: { where: { active: true } },
 } satisfies Prisma.ProductInclude;
 
-export function productOptions(product: Prisma.ProductGetPayload<{ include: typeof productOptionInclude }>): ProductOptions {
+export type ProductOptionData = Pick<Prisma.ProductGetPayload<{ include: typeof productOptionInclude }>, "id" | "name" | "basePrice" | "weightGrams" | "stock" | "madeToOrder" | "materials" | "colors" | "qualityProfiles" | "variants">;
+export function productOptions(product: ProductOptionData): ProductOptions {
   return { id: product.id, name: product.name, basePrice: Number(product.basePrice), weightGrams: Number(product.weightGrams) || 0, stock: product.stock, madeToOrder: product.madeToOrder,
     materials: product.materials.map(({ id, slug, name, pricePerGram }) => ({ id, slug, name, pricePerGram: Number(pricePerGram) })),
     colors: product.colors.map(({ id, slug, name, hex }) => ({ id, slug, name, hex })),

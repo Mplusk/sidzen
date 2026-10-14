@@ -10,7 +10,7 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { JsonLd } from "@/components/json-ld";
 import { ProductPurchaseForm } from "@/components/product-purchase-form";
 import { productOptionInclude, productOptions } from "@/lib/product-options-server";
-import { pluralRu } from "@/lib/format";
+import { formatPrice, pluralRu } from "@/lib/format";
 import { productSpecificationRows } from "@/lib/product-specifications";
 import { TruckIcon } from "@/components/icons";
 import { ProductReviews } from "@/components/product-reviews";
@@ -86,6 +86,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
           <div className="product-summary">
             <span className="product-summary__sku">Артикул: {product.sku}</span>
             <h1>{product.h1 ?? product.name}</h1>
+            <p className="product-mobile-price">{formatPrice(defaultPrice)}<small>за 1 шт.</small></p>
             <a className="product-rating" href="#reviews-heading">{reviewCount ? `★ ${rating.toFixed(1)} · ${reviewCount} ${pluralRu(reviewCount, ["отзыв", "отзыва", "отзывов"])}` : "Отзывы покупателей"}</a>
             <ProductGroupOptions options={groupOptions} currentId={product.id} />
             {specs.length > 0 && <section className="product-overview" aria-labelledby="product-overview-heading"><div className="product-overview__heading"><h2 id="product-overview-heading">О товаре</h2><a href="#specifications">Все характеристики</a></div><dl>{specs.slice(0, 6).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl></section>}
