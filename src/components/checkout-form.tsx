@@ -45,13 +45,14 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
 }) {
   const [ozonQuote, setOzonQuote] = useState<DeliveryQuoteView | null>(null);
   const [quoteRevision, setQuoteRevision] = useState(0);
-  const [state, formAction, pending] = useActionState(async (previous: CheckoutActionState, data: FormData) => {
-    const result = await createOrderWithState(previous, data);
-    if (result.error && /^ozon-(expired|cart|config|phone|signature|consent|unavailable|price)$/.test(result.error)) {
+  const [state, formAction, pending] = useActionState(createOrderWithState, {} as CheckoutActionState);
+  const [lastActionState, setLastActionState] = useState(state);
+  if (lastActionState !== state) {
+    setLastActionState(state);
+    if (state.error && /^ozon-(expired|cart|config|phone|signature|consent|unavailable|price)$/.test(state.error)) {
       setOzonQuote(null); setQuoteRevision(value => value + 1);
     }
-    return result;
-  }, {} as CheckoutActionState);
+  }
   const [contact, setContact] = useState({ name: user.name, email: user.email, city: "", address: "", postalCode: "", comment: "", legal: false });
   const update = (key: "name" | "email" | "city" | "address" | "postalCode" | "comment", value: string) => setContact(previous => ({ ...previous, [key]: value }));
   const currentError = state.error ?? error, currentReference = state.reference ?? reference;

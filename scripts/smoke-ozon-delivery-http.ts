@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { assertInlineCheckoutError } from "./assert-inline-checkout-error";
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { Prisma } from "@prisma/client";
@@ -21,7 +22,7 @@ function actionForm(html: string, containing: string, alsoContaining?: string) {
   const body = new FormData();
   for (const match of markup.matchAll(/<input\b[^>]*>/g)) {
     const name = match[0].match(/name="([^"]*)"/)?.[1], value = match[0].match(/value="([^"]*)"/)?.[1] || "";
-    if (name && (name.startsWith("$ACTION") || match[0].includes('type="hidden"'))) body.set(name.replace(/&amp;/g, "&"), value.replace(/&amp;/g, "&"));
+    if (name && (name.startsWith("$ACTION") || match[0].includes('type="hidden"'))) body.set(name.replace(/&amp;/g, "&"), value.replace(/&amp;/g, "&").replace(/&quot;/g, '"'));
   }
   return body;
 }
@@ -138,7 +139,7 @@ try {
   const order = actionForm(checkout, 'name="expectedTotal"');
   for (const [key, value] of Object.entries({ name: "QA Buyer", phone: "+79991234567", email: "buyer@example.test", delivery: "ozon-delivery", payment: "manual", legal: "on", expectedTotal: "240", ozonQuote: "" })) order.set(key, value);
   const ordersBefore = await prisma.order.count();
-  assert.equal((await request("/checkout/", order)).headers.get("location"), "/checkout/?error=invalid");
+  await assertInlineCheckoutError(await request("/checkout/", order), "invalid");
   assert.equal(await prisma.order.count(), ordersBefore); assert.equal(await prisma.ozonDeliveryJob.count(), 0);
   config.enabled = false; await save();
   const disabledCheckout = await (await request("/checkout/")).text();
@@ -190,7 +191,7 @@ try {
   assert(await prisma.auditLog.findFirst({ where: { action: "integration.delivery.delete", entityId: carrier.id } }));
   assert(!(await (await request(path)).text()).includes(carrier.id));
   assert(!(await (await request("/delivery/")).text()).includes(carrier.name));
-  assert.equal((await request("/checkout/", manualOrder)).headers.get("location"), "/checkout/?error=delivery");
+  await assertInlineCheckoutError(await request("/checkout/", manualOrder), "delivery");
   for (const [key, value] of Object.entries({ name: carrier.name, description: carrier.description || "", basePrice: String(carrier.basePrice), sortOrder: String(carrier.sortOrder), active: "on" })) staleEdit.set(key, value);
   assert.equal((await request(path, staleEdit)).headers.get("location"), path + "?result=delivery-missing");
   assert.equal((await request(path, removal)).headers.get("location"), path + "?result=delivery-missing");

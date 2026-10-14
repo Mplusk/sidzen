@@ -1,5 +1,6 @@
 // Local synthetic QA only. Never calls a bank, cashbox, email or carrier API.
 import assert from "node:assert/strict";
+import { assertInlineCheckoutError } from "./assert-inline-checkout-error";
 import { createHash, randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
@@ -45,9 +46,9 @@ try {
   const form = actionForm(checkoutHtml, 'name="expectedTotal"');
   for (const [key, value] of Object.entries({ name: "Synthetic buyer", email: owner.email, phone: "+79991234567", delivery: prefix, city: "Москва", address: "QA улица, 1", legal: "on", expectedTotal: "500", payment: "tochka", comment: "QA contact request only" })) form.set(key, value);
   const invalid = new FormData(); for (const [key, value] of form) invalid.append(key, value); invalid.delete("legal");
-  assert.equal((await request("/checkout/", invalid, buyer)).headers.get("location"), "/checkout/?error=invalid");
+  await assertInlineCheckoutError(await request("/checkout/", invalid, buyer), "invalid");
   const forged = new FormData(); for (const [key, value] of form) forged.append(key, value); forged.set("expectedTotal", "1");
-  assert.equal((await request("/checkout/", forged, buyer)).headers.get("location"), "/checkout/?error=price");
+  await assertInlineCheckoutError(await request("/checkout/", forged, buyer), "price");
   assert((await request("/checkout/", form, buyer, "https://foreign.invalid")).status >= 400);
   const responses = await Promise.all([request("/checkout/", form, buyer), request("/checkout/", form, buyer)]);
   const success = responses.find(response => response.headers.get("location")?.includes("/checkout/success/")); assert(success);
