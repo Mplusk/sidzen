@@ -16,6 +16,9 @@ esac
 
 umask 077
 mkdir -p "$destination"
+# Rotate even if creating today's backup later fails. Never let a failed dump
+# silently extend the lifetime of older personal-data copies.
+find "$backup_dir" -mindepth 1 -maxdepth 1 -type d -name '20??????T??????Z' -mtime "+${retention_days}" -exec rm -rf -- {} +
 cd "$project_dir"
 
 docker compose --project-name 3dprinta --env-file .env.production exec -T db pg_dump -U 3dprinta -d 3dprinta --format=custom < /dev/null > "${destination}/database.dump"
@@ -24,5 +27,4 @@ docker run --rm -v 3dprinta_product-images:/source:ro -v "${destination}:/backup
 docker run --rm -v 3dprinta_privacy-ledger:/source:ro -v "${destination}:/backup" alpine:3.20 tar -czf /backup/privacy-ledger.tar.gz -C /source .
 sha256sum "${destination}/database.dump" "${destination}/model-files.tar.gz" "${destination}/product-images.tar.gz" "${destination}/privacy-ledger.tar.gz" > "${destination}/SHA256SUMS"
 
-find "$backup_dir" -mindepth 1 -maxdepth 1 -type d -name '20??????T??????Z' -mtime "+${retention_days}" -exec rm -rf -- {} +
 printf 'Backup created: %s\n' "$destination"
