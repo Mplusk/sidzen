@@ -7,8 +7,21 @@ export type ProductOptions = {
 };
 export type ProductSelection = { material: string; color: string; quality: string; quantity: number };
 
+const optionOrder = (a: { slug: string; id: string }, b: { slug: string; id: string }) => a.slug.localeCompare(b.slug, "ru") || a.id.localeCompare(b.id);
 export function defaultSelection(product: ProductOptions): ProductSelection {
-  return { material: [...product.materials].sort((a, b) => a.pricePerGram - b.pricePerGram)[0]?.slug ?? "", color: product.colors[0]?.slug ?? "", quality: (product.qualities.find((item) => item.slug === "standard") ?? product.qualities[0])?.slug ?? "", quantity: 1 };
+  return {
+    material: [...product.materials].sort((a, b) => a.pricePerGram - b.pricePerGram || optionOrder(a, b))[0]?.slug ?? "",
+    color: [...product.colors].sort((a, b) => a.name.localeCompare(b.name, "ru") || optionOrder(a, b))[0]?.slug ?? "",
+    quality: (product.qualities.find(item => item.slug === "standard") ?? [...product.qualities].sort((a, b) => b.layerHeightMm - a.layerHeightMm || optionOrder(a, b))[0])?.slug ?? "",
+    quantity: 1,
+  };
+}
+
+// Public listings quote exactly the configuration initially selected on the
+// product page. Keep variant overrides, quality multipliers and rounding in
+// priceProduct, rather than maintaining a second pricing formula.
+export function defaultProductPrice(product: ProductOptions): number {
+  return priceProduct(product, defaultSelection(product)).unitPrice;
 }
 
 export function priceProduct(product: ProductOptions, selection: ProductSelection) {

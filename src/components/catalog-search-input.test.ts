@@ -2,8 +2,8 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ push: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: m.push }) }));
+const m = vi.hoisted(() => ({ push: vi.fn(), pathname: "/catalog/", search: "" }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: m.push }), usePathname: () => m.pathname, useSearchParams: () => new URLSearchParams(m.search) }));
 vi.mock("next/image", () => ({ default: ({ src, alt }: { src: string; alt: string }) => createElement("img", { src, alt }) }));
 vi.mock("next/link", () => ({ default: (props: Record<string, unknown>) => createElement("a", props) }));
 import { CatalogSearchInput } from "./catalog-search-input";
@@ -11,11 +11,30 @@ let root: Root, container: HTMLDivElement;
 const item = { id: "p", name: "Чаша коралл", href: "/catalog/decor/coral/", price: 649, image: "/generated/product-organizer.webp" };
 async function type(value: string) { await act(async () => { const input = container.querySelector("input")!; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); }); }
 beforeEach(async () => {
+  m.pathname = "/catalog/"; m.search = "";
   vi.clearAllMocks(); vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] }); vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ products: [item] })));
   Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
   container = document.createElement("div"); document.body.append(container); root = createRoot(container);
   await act(async () => root.render(createElement(CatalogSearchInput)));
+});
+it("restores URL queries on navigation, reload-like remount, Back/Forward and clearing without overwriting typing", async () => {
+  const navigate = async (search: string, pathname = "/catalog/") => {
+    m.search = search; m.pathname = pathname;
+    await act(async () => root.render(createElement(CatalogSearchInput)));
+  };
+  const input = () => container.querySelector("input")!;
+  await navigate("q=%D1%87%D0%B0%D1%88%D0%B0"); expect(input().value).toBe("чаша");
+  expect(input().getAttribute("aria-expanded")).toBe("false");
+  await type("чаша розовая");
+  await act(async () => root.render(createElement(CatalogSearchInput)));
+  expect(input().value).toBe("чаша розовая");
+  await navigate("q=лампа"); expect(input().value).toBe("лампа");
+  await navigate("q=чаша"); expect(input().value).toBe("чаша"); // Back
+  await navigate("q=лампа"); expect(input().value).toBe("лампа"); // Forward
+  await navigate("q=лампа&sort=price-asc"); expect(input().value).toBe("лампа");
+  await navigate(""); expect(input().value).toBe("");
+  await navigate("q=unrelated", "/account/"); expect(input().value).toBe("");
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); vi.useRealTimers(); Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView"); });
 it("debounces queries, shows photo/price, selects with arrows and opens with Enter submission", async () => {

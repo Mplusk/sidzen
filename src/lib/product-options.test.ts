@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultSelection, priceProduct, configurationText, type ProductOptions } from "./product-options";
+import { defaultSelection, defaultProductPrice, priceProduct, configurationText, type ProductOptions } from "./product-options";
 const product: ProductOptions = {
   id: "p1", name: "Товар", basePrice: 1000, weightGrams: 100, stock: 10, madeToOrder: true,
   materials: [{ id: "m1", slug: "pla", name: "PLA", pricePerGram: 3 }, { id: "m2", slug: "petg", name: "PETG", pricePerGram: 5 }],
@@ -8,6 +8,21 @@ const product: ProductOptions = {
   variants: [],
 };
 describe("shared product pricing", () => {
+  it("quotes public prices through the same default configuration including rounding and overrides", () => {
+    expect(defaultProductPrice({ ...product, basePrice: 149.99 })).toBe(150);
+    expect(defaultProductPrice({ ...product, qualities: [{ ...product.qualities[0], priceMultiplier: 1.25 }] })).toBe(1250);
+    expect(defaultProductPrice({ ...product, variants: [{ id: "v", materialId: "m1", colorId: "c1", qualityProfileId: "q1", price: 123.45 }] })).toBe(123.45);
+  });
+  it("chooses the same default regardless of relation ordering or equal material costs", () => {
+    const tied = { ...product, materials: product.materials.map(m => ({ ...m, pricePerGram: 3 })),
+      colors: [...product.colors, { id: "c2", slug: "white", name: "Белый", hex: "#fff" }],
+      qualities: product.qualities.map(q => ({ ...q, slug: q.slug === "standard" ? "normal" : q.slug })),
+    };
+    const reversed = { ...tied, materials: [...tied.materials].reverse(), colors: [...tied.colors].reverse(), qualities: [...tied.qualities].reverse() };
+    expect(defaultSelection(tied)).toEqual(defaultSelection(reversed));
+    expect(defaultProductPrice(tied)).toBe(defaultProductPrice(reversed));
+    expect(defaultSelection(tied)).toMatchObject({ material: "petg", color: "white", quality: "normal" });
+  });
   it("selects the baseline and snapshots readable option names", () => {
     const quote = priceProduct(product, defaultSelection(product));
     expect(quote.unitPrice).toBe(1000);

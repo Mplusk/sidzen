@@ -2,14 +2,22 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { SearchIcon } from "./icons";
 import { formatPrice } from "@/lib/format";
 type Suggestion = { id: string; name: string; price: number; image: string | null; href: string };
 export function CatalogSearchInput() {
+  const pathname = usePathname(), params = useSearchParams();
+  // The shared header survives navigation. Remount only its search control when
+  // the URL changes, so reload, clear, category changes and Back/Forward all
+  // restore the committed query without overwriting typing during a render.
+  const initialQuery = pathname === "/catalog" || pathname.startsWith("/catalog/") ? params.get("q")?.slice(0, 120) ?? "" : "";
+  return <CatalogSearchControl key={`${pathname}?${params.toString()}`} initialQuery={initialQuery} />;
+}
+function CatalogSearchControl({ initialQuery }: { initialQuery: string }) {
   const id = useId(), router = useRouter();
-  const [query, setQuery] = useState(""), [items, setItems] = useState<Suggestion[]>([]);
-  const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [failed, setFailed] = useState(false), [active, setActive] = useState(-1);
+  const [query, setQuery] = useState(initialQuery), [items, setItems] = useState<Suggestion[]>([]);
+  const [open, setOpen] = useState(false), [busy, setBusy] = useState(initialQuery.trim().length >= 2), [failed, setFailed] = useState(false), [active, setActive] = useState(-1);
   const cache = useRef(new Map<string, Suggestion[]>()), list = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const value = query.trim();

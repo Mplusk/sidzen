@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ProductCard } from "@/components/product-card";
-import { defaultSelection, priceProduct } from "@/lib/product-options";
+import { defaultProductPrice } from "@/lib/product-options";
 import { ProductGallery } from "@/components/product-gallery";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -50,7 +50,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
   if (!product || product.status !== "PUBLISHED" || (product.type !== "READY" && product.type !== "PARAMETRIC")) notFound();
   const category = product.categories.find((item) => item.category.slug === categorySlug)?.category ?? product.categories.find((item) => item.isPrimary)?.category ?? product.categories[0]?.category;
   if (!category || !category.visible || !product.categories.some((item) => item.category.slug === categorySlug)) notFound();
-  const related = await prisma.product.findMany({ where: { status: "PUBLISHED", type: { in: ["READY", "PARAMETRIC"] }, id: { not: product.id }, categories: { some: { categoryId: category.id } } }, include: { images: { orderBy: { sortOrder: "asc" } }, categories: { include: { category: true } } }, take: 4 });
+  const related = await prisma.product.findMany({ where: { status: "PUBLISHED", type: { in: ["READY", "PARAMETRIC"] }, id: { not: product.id }, categories: { some: { categoryId: category.id } } }, include: { ...productOptionInclude, images: { orderBy: { sortOrder: "asc" } }, categories: { include: { category: true } } }, take: 4 });
   const members = product.groupId ? await prisma.product.findMany({
     where: { groupId: product.groupId, status: "PUBLISHED", type: { in: ["READY", "PARAMETRIC"] }, categories: { some: { category: { visible: true } } } },
     select: { id: true, name: true, sku: true, slug: true, groupLabel: true, images: { orderBy: { sortOrder: "asc" }, take: 1, select: { path: true } }, categories: { where: { category: { visible: true } }, orderBy: { isPrimary: "desc" }, take: 1, select: { category: { select: { slug: true } } } } },
@@ -58,7 +58,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
   }) : [];
   const groupOptions: GroupOption[] = members.map(member => ({ id: member.id, name: member.name, label: member.groupLabel || member.sku, image: member.images[0]?.path ?? null, href: `/catalog/${member.categories[0].category.slug}/${member.slug}/` }));
   const options = productOptions(product);
-  const defaultPrice = priceProduct(options, defaultSelection(options)).unitPrice;
+  const defaultPrice = defaultProductPrice(options);
   const publicReviewWhere = await requestPublicReviewWhere();
   const aggregate = await prisma.review.aggregate({ where: { productId: product.id, ...publicReviewWhere }, _avg: { rating: true }, _count: { _all: true } });
   const reviewCount = aggregate._count._all, rating = aggregate._avg.rating ?? 0;
