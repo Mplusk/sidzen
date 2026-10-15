@@ -73,6 +73,18 @@ const reviews = communicationLoop(async () => {
   }
 });
 const telegram = communicationLoop(processTelegramOrder);
+// Retention/file failures must not prevent carrier cancellations or imports.
+async function privacyRetentionLoop() {
+  let next = 0;
+  while (!stopping) {
+    if (Date.now() >= next) {
+      try { await prunePersonalDataRetention(); next = Date.now() + 3600000; }
+      catch { next = Date.now() + 60000; await writeDiagnostic("worker.failed"); }
+    }
+    if (!stopping) await new Promise(resolve => setTimeout(resolve, 5000));
+  }
+}
+const retention = privacyRetentionLoop();
 console.log("Marketplace, delivery and independent financial queues ready.");
 try {
   while (!stopping) {
@@ -83,7 +95,6 @@ try {
       }
       if (Date.now() >= nextPrivacyCleanup) {
         await pruneTransientPersonalData();
-        await prunePersonalDataRetention();
         await pruneDiagnosticLogs();
         await pruneMonitoring();
         await pruneOrphanReviewPhotos();
@@ -110,4 +121,4 @@ try {
       await new Promise((resolve) => setTimeout(resolve, 5000));
     }
   }
-} finally { stopping = true; clearInterval(pulse); await Promise.all([finances, categories, reviews, telegram]); await prisma.$disconnect(); }
+} finally { stopping = true; clearInterval(pulse); await Promise.all([finances, categories, reviews, telegram, retention]); await prisma.$disconnect(); }
