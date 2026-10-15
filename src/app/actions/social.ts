@@ -14,9 +14,11 @@ import { authorizationUrl } from "@/lib/social/client";
 import { configSchema, getSocialConfig, providerSchema, safeSocialReturn, settingKey, socialReady, siteOrigin } from "@/lib/social/config";
 import { socialLoginHandoff } from "@/lib/storefront-domains";
 import { hash, pendingProfile, randomToken, registerSocial, SOCIAL_COOKIE, socialConsentText, SOCIAL_CONSENT_VERSION, socialCookieOptions } from "@/lib/social/flow";
+import { socialLoginEnabled } from "@/lib/social/config";
 
 function fail(code: string): never { redirect(`/login/?error=${code}`); }
 export async function startSocialLogin(form: FormData) {
+  if (!socialLoginEnabled()) fail("social-unavailable");
   const requestHeaders = await headers();
   const handoff = socialLoginHandoff(requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"), siteOrigin(), safeSocialReturn(form.get("returnTo")), form.get("intent") === "link");
   if (handoff) redirect(handoff);
@@ -51,6 +53,7 @@ export async function startSocialLogin(form: FormData) {
   redirect(authorizationUrl(provider.data, config, state, verifier, nonce));
 }
 export async function completeSocialRegistration(form: FormData) {
+  if (!socialLoginEnabled()) fail("social-unavailable");
   if (await getCurrentUser()) redirect("/account/");
   if (!await operatorReady()) fail("social-operator");
   const provider = providerSchema.safeParse(form.get("provider"));

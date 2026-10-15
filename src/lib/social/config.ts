@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { decryptSecret } from "@/lib/integration-secrets";
 
 export const providers = ["google", "vk", "yandex"] as const;
+// Retired storefront feature; archived bindings remain until lawful erasure.
+export function socialLoginEnabled() { return false; }
 export const providerSchema = z.enum(providers);
 export type SocialProvider = z.infer<typeof providerSchema>;
 export const providerNames = { google: "Google", vk: "ВКонтакте", yandex: "Яндекс" };

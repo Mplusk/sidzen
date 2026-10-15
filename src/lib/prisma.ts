@@ -9,7 +9,9 @@ export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
     ...(databaseUrl ? { datasources: { db: { url: databaseUrl.toString() } } } : {}),
-    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
+    // Raw Prisma errors can include SQL arguments containing customer data.
+    // Record bounded application diagnostics, never automatic query dumps.
+    log: process.env.NODE_ENV === "development" ? ["warn"] : [],
   });
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;

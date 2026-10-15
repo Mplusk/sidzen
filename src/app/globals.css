@@ -462,6 +462,7 @@ html:has(.admin-shell) { scroll-padding-top: 1rem; }
 .catalog-create-form .button { justify-self: start; }
 .admin-delete-link { border: 0; padding: 0; color: #b52f32; background: transparent; cursor: pointer; font-size: .84rem; }
 .admin-delete-link:disabled { color: var(--muted); cursor: not-allowed; font-weight: 500; }
+.client-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 
 .empty-state { padding: 60px 24px; border: 1px dashed #b8bdc2; border-radius: var(--radius); text-align: center; color: var(--muted); }
 .error-page { min-height: 520px; display: grid; place-items: center; text-align: center; }

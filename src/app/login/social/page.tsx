@@ -8,8 +8,10 @@ import { getCurrentUser } from "@/lib/auth";
 import { pendingProfile, SOCIAL_COOKIE } from "@/lib/social/flow";
 import { providerNames, providerSchema } from "@/lib/social/config";
 import { AccountPrivacyConsent } from "@/components/account-privacy-consent";
+import { socialLoginEnabled } from "@/lib/social/config";
 export const metadata: Metadata = { title: "Завершение регистрации", robots: { index: false, follow: false } };
 export default async function SocialRegistration({ searchParams }: { searchParams: Promise<{ provider?: string; error?: string }> }) {
+  if (!socialLoginEnabled()) redirect("/login/?error=social-unavailable");
   if (await getCurrentUser()) redirect("/account/");
   const params = await searchParams, provider = providerSchema.safeParse(params.provider);
   if (!provider.success) redirect("/login/?error=social-expired");

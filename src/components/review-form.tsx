@@ -10,7 +10,7 @@ function SubmitReview() {
   const { pending } = useFormStatus();
   return <button className="button button--small" type="submit" disabled={pending} aria-busy={pending}>{pending ? "Загружаем отзыв и фото…" : "Отправить отзыв"}</button>;
 }
-export function ReviewForm({ productId }: { productId: string }) {
+export function ReviewForm({ productId, allowAi = false }: { productId: string; allowAi?: boolean }) {
   const [rating, setRating] = useState(0), [previews, setPreviews] = useState<string[]>([]), [error, setError] = useState("");
   useEffect(() => () => previews.forEach(url => URL.revokeObjectURL(url)), [previews]);
   return <form action={createReviewAction} className="review-form">
@@ -26,8 +26,8 @@ export function ReviewForm({ productId }: { productId: string }) {
     {error && <p className="notice notice--danger" role="alert">{error}</p>}
     {!!previews.length && <div className="review-photos">{previews.map((url, index) => <Image src={url} unoptimized key={url} width={88} height={88} alt={`Выбранное фото ${index + 1}`} />)}</div>}
     <label className="checkbox-row"><input type="checkbox" name="consent" required /> <span>Даю отдельное <Link className="text-link" href="/legal/consent/?purpose=review" target="_blank" rel="noopener">согласие на публикацию имени, отзыва и фото</Link>. Не публикую чужие персональные данные.</span></label>
-    <label className="checkbox-row"><input type="checkbox" name="aiConsent" /> <span>Разрешаю <Link className="text-link" href="/legal/consent/?purpose=review-ai" target="_blank" rel="noopener">проверить текст отзыва через DeepSeek</Link> (внешний сервис, Китай). Необязательно: без согласия проверит администратор.</span></label>
-    <small className="muted">После проверки отзыв появится в карточке. ИИ проверяет только текст; фотографии и спорные отзывы проверяет администратор. Оценка не влияет на решение о публикации. Статус и удаление доступны в «Мои отзывы».</small>
+    {allowAi && <label className="checkbox-row"><input type="checkbox" name="aiConsent" /> <span>Разрешаю <Link className="text-link" href="/legal/consent/?purpose=review-ai" target="_blank" rel="noopener">проверить текст отзыва через DeepSeek</Link> (внешний сервис, Китай). Необязательно: без согласия проверит администратор.</span></label>}
+    <small className="muted">{allowAi ? "Текст может проверить ИИ с вашего отдельного согласия; фотографии и спорные отзывы проверяет администратор." : "Отзыв и фотографии проверит администратор. Текст в DeepSeek не отправляется."} Оценка не влияет на решение о публикации. Статус и удаление доступны в «Мои отзывы».</small>
     <SubmitReview />
   </form>;
 }

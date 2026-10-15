@@ -18,7 +18,7 @@ const directory = Prisma.sql`
     SELECT o."id", o."userId", o."customerName", o."customerEmail", o."customerPhone", o."createdAt",
       lower(trim(o."customerEmail")) AS email_key,
       regexp_replace(o."customerPhone", '[^0-9]', '', 'g') AS digits
-    FROM "Order" o WHERE o."deletedAt" IS NULL
+    FROM "Order" o WHERE o."deletedAt" IS NULL AND o."personalDataErasedAt" IS NULL
   ), contacts AS (
     SELECT *, CASE WHEN length(digits) = 11 AND left(digits, 1) = '8' THEN '7' || substr(digits, 2) ELSE digits END AS phone_key
     FROM order_contacts
@@ -46,6 +46,23 @@ const directory = Prisma.sql`
     ) g
   )
 `;
+
+/** Resolves the same full-pair guest grouping as the directory; never email alone. */
+export async function clientErasureTarget(tx: Prisma.TransactionClient, key: string) {
+  const [client] = await tx.$queryRaw<ClientRow[]>(Prisma.sql`${directory} SELECT id, name, phone, email, "createdAt", source FROM clients WHERE id = ${key} LIMIT 1`);
+  if (!client) return null;
+  const userId = key.startsWith("account:") ? key.slice(8) : null;
+  const guestOrders = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`${directory}, erasure_contacts AS (
+    SELECT o."id", o."userId", lower(trim(o."customerEmail")) AS email_key,
+      CASE WHEN length(regexp_replace(o."customerPhone", '[^0-9]', '', 'g')) = 11 AND left(regexp_replace(o."customerPhone", '[^0-9]', '', 'g'), 1) = '8'
+      THEN '7' || substr(regexp_replace(o."customerPhone", '[^0-9]', '', 'g'), 2) ELSE regexp_replace(o."customerPhone", '[^0-9]', '', 'g') END AS phone_key
+    FROM "Order" o WHERE o."personalDataErasedAt" IS NULL
+  ) SELECT c."id" FROM erasure_contacts c WHERE c."userId" IS NULL AND (
+      ${userId === null} AND 'order:' || encode(sha256(convert_to(CASE WHEN c.email_key <> '' AND c.phone_key <> '' THEN json_build_array(c.email_key, c.phone_key)::text ELSE c."id" END, 'UTF8')), 'hex') = ${key}
+      OR ${userId !== null} AND EXISTS (SELECT 1 FROM account_contacts a WHERE a."id" = ${userId} AND a.email_key <> '' AND a.phone_key <> '' AND a.email_key = c.email_key AND a.phone_key = c.phone_key)
+    )`);
+  return { userId, guestOrderIds: guestOrders.map(row => row.id) };
+}
 
 /** Call only AFTER checking customers.read. Each page reads one consistent snapshot. */
 export async function getClientsPage(requested = 1, archived = false) {

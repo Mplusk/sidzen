@@ -57,6 +57,9 @@ export const getCurrentUser = cache(async () => {
     },
   });
   if (!session || session.expiresAt < new Date() || !session.user.isActive) return null;
+  if (session.user.lastActiveAt && session.user.lastActiveAt.getTime() < Date.now() - 86400000) {
+    await prisma.user.updateMany({ where: { id: session.user.id, lastActiveAt: { lt: new Date(Date.now() - 86400000) } }, data: { lastActiveAt: new Date() } });
+  }
   const roles = session.user.roles.map(({ role }) => role.code);
   const permissions = new Set(
     session.user.roles.flatMap(({ role }) => role.permissions.map(({ permission }) => permission.code)),

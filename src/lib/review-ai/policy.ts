@@ -1,6 +1,7 @@
-export const REVIEW_AI_CONSENT_VERSION = "2026-10-11-review-ai-v2";
-export const REVIEW_AI_CONSENT_VERSIONS = [REVIEW_AI_CONSENT_VERSION, "2026-10-09-review-ai-v1"];
-export const REVIEW_AI_CONSENT_TEXT = "Отдельно разрешаю передать текст моего отзыва и оценку внешнему сервису DeepSeek (deepseek.com, DeepSeek, Китай) для автоматической проверки соответствия товару, спама и запрещённого содержания. Передача может быть трансграничной. Публичное имя, данные профиля и заказа, фотографии, телефон, email и адрес не передаются. Не указываю персональные или конфиденциальные данные в тексте. Согласие добровольное: без него отзыв проверяет администратор, возможность публикации и оценка не меняются. Согласие действует до завершения проверки или отзыва по контактам оператора или удаления отзыва. Автоматическое решение можно оспорить, связавшись с магазином.";
+export const REVIEW_AI_CONSENT_VERSION = "2026-10-15-review-ai-v3";
+// Older consent receipts do not authorize the revised transfer conditions.
+export const REVIEW_AI_CONSENT_VERSIONS = [REVIEW_AI_CONSENT_VERSION];
+export const REVIEW_AI_CONSENT_TEXT = "Отдельно разрешаю передать текст моего отзыва и оценку внешнему сервису DeepSeek (deepseek.com, DeepSeek, Китай) для автоматической проверки соответствия товару, спама и запрещённого содержания, только если оператор предварительно выполнил применимые требования к такой передаче и разрешил её на сервере. Передача может быть трансграничной. Отдельные поля публичного имени, профиля, заказа, фотографии, телефон, email и адрес в запрос не включаются. Не указываю персональные или конфиденциальные данные в тексте: предварительный фильтр не гарантирует обезличивания произвольного текста. Согласие добровольное: без него отзыв проверяет администратор, возможность публикации и оценка не меняются. Согласие действует до завершения проверки, отзыва по контактам оператора или удаления отзыва. Автоматическое решение можно оспорить, связавшись с магазином.";
 export const reviewAiReasons: Record<string, string> = {
   approved: "DeepSeek: содержание соответствует правилам",
   queued: "Ожидает проверки DeepSeek", processing: "DeepSeek проверяет текст",
@@ -10,6 +11,7 @@ export const reviewAiReasons: Record<string, string> = {
   personal: "Возможные персональные данные", photos: "Фотографии требуют проверки человеком",
   consent: "Нет отдельного действующего согласия на проверку DeepSeek",
   disabled: "Автоматическая проверка не настроена / выключена",
+  legal: "Передача текста в DeepSeek заблокирована на сервере; нужна ручная проверка",
   unavailable: "DeepSeek недоступен после повторов", response: "Не удалось безопасно разобрать ответ ИИ",
   changed: "Данные или решение изменились во время проверки", manual: "Решение администратора",
 };
@@ -22,6 +24,9 @@ export function reviewTextGate(text: string): string | null {
   if (/(?:https?:|ftp:|www\.|tg:|t\.me|mailto:|[\p{L}\d-]+\.(?:ru|com|net|org|shop|рф|io|me|xyz)(?:\/|$|[^\p{L}]))/iu.test(compact) || /[\p{L}\d-]+\.[\p{L}]{2,24}\//iu.test(compact) || /[\p{L}\d-]+\.[a-z]{2,24}(?:\b|\/)/iu.test(value)) return "links";
   if (/(?:^|[^\p{L}])(?:бля\p{L}*|[её]б(?:а|у|н)\p{L}*|хуй\p{L}*|пизд\p{L}*|fuck\p{L}*|shit)(?:$|[^\p{L}])/iu.test(value)) return "profanity";
   if (/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(value) || /(?:\+?\d[\s().-]*){10,}/.test(value)) return "personal";
+  // Defense in depth, NOT an anonymizer. Names/prose addresses cannot be
+  // exhaustively recognized; the independent server transfer gate is mandatory.
+  if (/(?:меня зовут|получатель|проживаю|живу|мой адрес|паспорт|снилс|инн|улиц[аые]|квартир[аые]|дом\s+\d|ул\.|кв\.)/iu.test(value)) return "personal";
   if (/(?:ignore|disregard|forget|override).{0,60}(?:instructions|prompt|system)|(?:игнорируй|забудь|переопредели|не выполняй).{0,60}(?:инструкц|правил|промпт)|(?:system|assistant|developer)\s*:|<\/?(?:system|assistant|script)|\[inst\]|(?:выполни|execute).{0,30}(?:запрос|код|команд)|(?:напиши|write|сгенерируй|generate).{0,30}(?:код|code|essay|сочинение|стих)|(?:base64|jailbreak|prompt.?injection)|"(?:approve|safe|relevant)"\s*:/iu.test(value)) return "instructions";
   return null;
 }

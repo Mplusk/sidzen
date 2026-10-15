@@ -1,7 +1,16 @@
-import { expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { reviewTextGate } from "./policy";
 import { checkReviewText, ReviewAiError } from "./client";
 const config = { enabled: true, apiKey: "secret-fixture", model: "deepseek-flash" as const, allowCreate: true, revision: "qa", checkedAt: "2030" };
+beforeEach(() => { vi.stubEnv("REVIEW_AI_TRANSFER_LEGAL_APPROVED", "true"); });
+afterEach(() => { vi.unstubAllEnvs(); });
+it("never calls DeepSeek without the independent server approval, even with plausible prose", async () => {
+  vi.stubEnv("REVIEW_AI_TRANSFER_LEGAL_APPROVED", "false");
+  const transport = vi.fn();
+  expect(await checkReviewText(config, product, "Красивая лампа, получатель Анна Тестовая, улица Примерная", 5, transport)).toBe("legal");
+  expect(transport).not.toHaveBeenCalled();
+  expect(reviewTextGate("Получатель Анна Тестовая, улица Примерная, дом пять")).toBe("personal");
+});
 const product = { name: "Салфетница", shortDescription: "Подставка для салфеток" };
 const safe = { relevant: true, links: false, profanity: false, politics: false, instructions: false, personal: false, confident: true };
 const answer = (content: unknown, finish = "stop") => new Response(JSON.stringify({ choices: [{ finish_reason: finish, message: { content: typeof content === "string" ? content : JSON.stringify(content) } }] }));

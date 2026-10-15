@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCategoryAiConfig } from "@/lib/category-ai/config";
 import { purchasedProductWhere } from "@/lib/reviews";
 import { writeDiagnostic } from "@/lib/diagnostics";
-import { getReviewAiConfig } from "./config";
+import { getReviewAiConfig, reviewTransferApproved } from "./config";
 import { checkReviewText, ReviewAiError } from "./client";
 import { REVIEW_AI_CONSENT_VERSIONS, reviewTextGate } from "./policy";
 const lock = async (tx: Prisma.TransactionClient) => { await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412032)`; };
@@ -34,6 +34,7 @@ export async function finishReviewAiJob(job: ReviewAiJob, reason: string, finger
     if (!review || review.status !== "PENDING" || review.approved) outcome = "changed";
     else if (signature(review) !== fingerprint || config.revision !== revision) outcome = "changed";
     else if (!review.consent || review.consent.revokedAt || !validAiConsent(current.consent, review.userId)) outcome = "consent";
+    else if (!reviewTransferApproved()) outcome = "legal";
     else if (!config.enabled || !config.operatorReviewed) outcome = "disabled";
     else if (review.images.length) outcome = "photos";
     else if (!review.userId || !await tx.order.findFirst({ where: purchasedProductWhere(review.userId, review.productId), select: { id: true } })) outcome = "changed";
@@ -55,6 +56,7 @@ export async function processReviewAiJob(transport: typeof fetch = fetch) {
     const consent = job.consentId ? await prisma.privacyConsent.findUnique({ where: { id: job.consentId } }) : null;
     let reason = row.status !== "PENDING" || row.approved ? "changed" : !validAiConsent(consent, row.userId) || !row.consent || row.consent.revokedAt ? "consent" : reviewTextGate(row.text);
     if (!reason) reason = reviewTextGate(row.author);
+    if (!reason && !reviewTransferApproved()) reason = "legal";
     if (!reason && row.images.length) reason = "photos";
     if (!reason && (!settings.enabled || !settings.operatorReviewed)) reason = "disabled";
     if (!reason) {

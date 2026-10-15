@@ -62,7 +62,7 @@ try {
   assert.match((await request(path, telegram.body)).headers.get("location") ?? "", /communications-changed/);
   const review = await form(path, 'Включить автоматическую модерацию DeepSeek');
   review.body.set("enabled", "on"); review.body.delete("operatorReviewed");
-  assert.match((await request(path, review.body)).headers.get("location") ?? "", /review-ai-incomplete/);
+  assert.match((await request(path, review.body)).headers.get("location") ?? "", /review-ai-legal|review-ai-incomplete/);
   review.body.delete("enabled"); assert.match((await request(path, review.body)).headers.get("location") ?? "", /review-ai-saved/);
   const alertLogin = (await request("/admin/order-alert/nonexistent/", undefined, false)).headers.get("location");
   assert(alertLogin && new URL(alertLogin, base).pathname.startsWith('/login'));

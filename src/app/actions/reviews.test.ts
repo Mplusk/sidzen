@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+afterEach(() => { vi.unstubAllEnvs(); });
 const m = vi.hoisted(() => ({ user: vi.fn(), permission: vi.fn(), ready: vi.fn(), rate: vi.fn(), purchase: vi.fn(), find: vi.fn(), create: vi.fn(), consent: vi.fn(), revoke: vi.fn(), remove: vi.fn(), update: vi.fn(), audit: vi.fn(), unique: vi.fn(), tx: vi.fn(), photos: vi.fn(), store: vi.fn(), cleanup: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ requireUser: m.user, requirePermission: m.permission }));
 vi.mock("@/lib/prisma", () => ({ prisma: { order: { findFirst: m.purchase }, review: { findFirst: m.find }, $transaction: m.tx } }));
@@ -18,6 +19,7 @@ describe("review actions server-side authorization", () => {
   it("does not trust submitted user/order IDs and accepts a negative rating", async () => { await expect(createReviewAction(form())).rejects.toThrow("sent=1"); expect(m.purchase.mock.calls[0][0].where).toMatchObject({ userId: "buyer", status: "DELIVERED", items: { some: { productId: "product" } } }); expect(m.create.mock.calls[0][0].data).toMatchObject({ userId: "buyer", productId: "product", rating: 1, verifiedPurchase: true, buyerKey: "buyer:product", consentId: "consent" }); expect(m.create.mock.calls[0][0].data).not.toHaveProperty("orderId"); expect(m.create.mock.calls[0][0].data).not.toHaveProperty("approved"); });
   it("blocks nonbuyers and duplicates before storing photos", async () => { m.purchase.mockResolvedValue(null); await expect(createReviewAction(form())).rejects.toThrow("error=purchase"); expect(m.store).not.toHaveBeenCalled(); m.purchase.mockResolvedValue({ id: "order" }); m.find.mockResolvedValue({ id: "existing" }); await expect(createReviewAction(form())).rejects.toThrow("error=duplicate"); expect(m.store).not.toHaveBeenCalled(); });
   it("keeps AI consent separate and queues only an explicitly opted-in review", async () => {
+    vi.stubEnv("REVIEW_AI_TRANSFER_LEGAL_APPROVED", "true");
     await expect(createReviewAction(form())).rejects.toThrow("sent=1");
     expect(m.create.mock.calls[0][0].data.aiJob.create).toMatchObject({ status: "MANUAL", reason: "consent" });
     expect(m.create.mock.calls[0][0].data.aiJob.create).not.toHaveProperty("consentId");
@@ -30,6 +32,13 @@ describe("review actions server-side authorization", () => {
     expect(m.consent.mock.calls[1][0].data).toMatchObject({ userId: "buyer", purpose: "review-ai" });
     expect(m.create.mock.calls[0][0].data).toMatchObject({ status: "PENDING", consentId: "publication", aiJob: { create: { status: "PENDING", reason: "queued", consentId: "ai-consent" } } });
     expect(m.create.mock.calls[0][0].data).not.toHaveProperty("approved");
+  });
+  it("ignores a forged AI opt-in while the server transfer gate is closed", async () => {
+    vi.stubEnv("REVIEW_AI_TRANSFER_LEGAL_APPROVED", "false");
+    const data = form(); data.set("aiConsent", "on");
+    await expect(createReviewAction(data)).rejects.toThrow("sent=1");
+    expect(m.consent).toHaveBeenCalledTimes(1);
+    expect(m.create.mock.calls[0][0].data.aiJob.create.status).toBe("MANUAL");
   });
   it("checks purchase again inside the write transaction and cleans uploaded files on failure", async () => { m.purchase.mockResolvedValueOnce({ id: "order" }).mockResolvedValue(null); await expect(createReviewAction(form())).rejects.toThrow("error=purchase"); expect(m.cleanup).toHaveBeenCalledWith(["photo.webp"]); expect(m.create).not.toHaveBeenCalled(); });
   it("rejects missing publication consent and malformed images", async () => { const data = form(); data.delete("consent"); await expect(createReviewAction(data)).rejects.toThrow("error=invalid"); expect(m.store).not.toHaveBeenCalled(); m.photos.mockImplementation(() => { throw new Error("images"); }); await expect(createReviewAction(form())).rejects.toThrow("error=images"); expect(m.create).not.toHaveBeenCalled(); });

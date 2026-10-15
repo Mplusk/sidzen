@@ -42,7 +42,7 @@ describe("order deletion", () => {
 
   it("deletes the exact order and records an audit in the same transaction", async () => {
     await expect(deleteOrderAction(form("3DP-123"))).rejects.toThrow("redirect:/admin/orders/?deleted=3DP-123");
-    expect(mocks.update).toHaveBeenCalledWith({ where: { id: "order-1" }, data: { deletedAt: expect.any(Date) } });
+    expect(mocks.update).toHaveBeenCalledWith({ where: { id: "order-1" }, data: { deletedAt: expect.any(Date), privacyClosedAt: expect.any(Date) } });
     expect(mocks.remove).not.toHaveBeenCalled();
     expect(mocks.audit).toHaveBeenCalledWith({ data: expect.objectContaining({ actorId: "admin-1", action: "order.delete", entityId: "order-1", before: { number: "3DP-123", status: "NEW", total: "1200" } }) });
     expect(mocks.revalidate).toHaveBeenCalledWith("/account", "layout");

@@ -74,6 +74,7 @@ model User {
   emailVerified DateTime?
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
+  lastActiveAt  DateTime            @default(now())
   roles         UserRole[]
   sessions      Session[]
   addresses     Address[]
@@ -610,6 +611,10 @@ model Order {
   status          OrderStatus         @default(NEW)
   kind            String              @default("ORDER")
   deletedAt       DateTime?
+  personalDataErasedAt DateTime?
+  privacyClosedAt DateTime?
+  retentionHoldUntil DateTime?
+  retentionHoldReason String?
   purchaseConfirmedAt DateTime?
   customerName    String
   customerEmail   String
@@ -636,6 +641,21 @@ model Order {
   @@index([status, createdAt])
   @@index([userId, createdAt])
   @@index([deletedAt, status, createdAt])
+  @@index([privacyClosedAt])
+}
+
+// Restricted technical evidence, not a substitute for the operator's signed act.
+// Plans contain existing record IDs/managed filenames, never contact values.
+model PrivacyErasure {
+  id String @id @default(uuid())
+  subjectHash String
+  reason String
+  plan Json
+  retainedUntil DateTime?
+  filesRemovedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([createdAt])
+  @@index([filesRemovedAt])
 }
 
 model OrderItem {

@@ -10,6 +10,7 @@ import { consentDocument, operatorReady, privacySubject } from "@/lib/privacy";
 import { purchasedProductWhere, parseReview, REVIEW_CONSENT_TEXT, REVIEW_CONSENT_VERSION } from "@/lib/reviews";
 import { reviewPhotoFiles, storeReviewPhotos, removeReviewPhotos } from "@/lib/review-images";
 import { REVIEW_AI_CONSENT_TEXT, REVIEW_AI_CONSENT_VERSION } from "@/lib/review-ai/policy";
+import { reviewTransferApproved } from "@/lib/review-ai/config";
 
 function refreshReviews() {
   revalidatePath("/catalog", "layout"); revalidatePath("/about/");
@@ -36,7 +37,7 @@ export async function createReviewAction(form: FormData) {
       if (!await tx.order.findFirst({ where: purchasedProductWhere(user.id, input.productId), select: { id: true } })) throw new Error("purchase");
       if (await tx.review.findFirst({ where: { userId: user.id, productId: input.productId }, select: { id: true } })) throw new Error("duplicate");
       const consent = await tx.privacyConsent.create({ data: { userId: user.id, purpose: "review", subjectHash: privacySubject(user.id), version: REVIEW_CONSENT_VERSION, document } });
-      const aiConsent = form.get("aiConsent") === "on" ? await tx.privacyConsent.create({ data: { userId: user.id, purpose: "review-ai", subjectHash: privacySubject(user.id), version: REVIEW_AI_CONSENT_VERSION, document: { ...document, purpose: "review-ai", version: REVIEW_AI_CONSENT_VERSION, text: REVIEW_AI_CONSENT_TEXT, url: "/legal/consent/?purpose=review-ai" } } }) : null;
+      const aiConsent = reviewTransferApproved() && form.get("aiConsent") === "on" ? await tx.privacyConsent.create({ data: { userId: user.id, purpose: "review-ai", subjectHash: privacySubject(user.id), version: REVIEW_AI_CONSENT_VERSION, document: { ...document, purpose: "review-ai", version: REVIEW_AI_CONSENT_VERSION, text: REVIEW_AI_CONSENT_TEXT, url: "/legal/consent/?purpose=review-ai" } } }) : null;
       await tx.review.create({ data: { productId: input.productId, userId: user.id, buyerKey: `${user.id}:${input.productId}`, author: input.author, text: input.text, rating: input.rating, status: "PENDING", verifiedPurchase: true, consentId: consent.id, images: { create: images }, aiJob: { create: { ...(aiConsent ? { status: "PENDING", reason: "queued", consentId: aiConsent.id } : { status: "MANUAL", reason: "consent" }) } } } });
     });
   } catch (error) {

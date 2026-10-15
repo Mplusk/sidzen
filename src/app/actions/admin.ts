@@ -18,6 +18,7 @@ import { queueDerivedReceipt } from "@/lib/cloudkassir/lifecycle";
 import { categoryAiReady, getCategoryAiConfig, queueCategoryAi } from "@/lib/category-ai/config";
 
 import { applicationStatuses, orderStatuses } from "@/lib/order-status";
+import { terminalOrderStatuses } from "@/lib/privacy-retention-policy";
 
 export async function updateOrderStatusAction(formData: FormData) {
   const user = await requirePermission(PERMISSIONS.ordersWrite);
@@ -28,7 +29,7 @@ export async function updateOrderStatusAction(formData: FormData) {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412026)`;
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412032)`;
     const before = await tx.order.findUnique({ where: { id: parsed.data.orderId }, include: { payment: true, fiscalReceipts: true } });
-    if (!before || before.deletedAt) { statusError = "missing"; return null; }
+    if (!before || before.deletedAt || before.personalDataErasedAt) { statusError = "missing"; return null; }
     if (before.kind === "APPLICATION") {
       statusError = "application-status";
       if (!applicationStatuses.some(status => status === parsed.data.status)) return null;
@@ -43,7 +44,7 @@ export async function updateOrderStatusAction(formData: FormData) {
       if (status === "DELIVERED" && (formData.get("deliveryConfirmed") !== "on" || before.payment?.status !== "PAID" || before.payment.refundReviewRequired)) return null;
       if (status === "DELIVERED") await queueDerivedReceipt(tx, before.id, "SETTLEMENT");
     }
-    const updated = await tx.order.update({ where: { id: before.id }, data: { status: parsed.data.status, internalNote: parsed.data.note || null, ...(before.kind === "APPLICATION" ? { purchaseConfirmedAt: parsed.data.status === "DELIVERED" ? before.purchaseConfirmedAt ?? new Date() : null } : {}) } });
+    const updated = await tx.order.update({ where: { id: before.id }, data: { status: parsed.data.status, internalNote: parsed.data.note || null, privacyClosedAt: terminalOrderStatuses.some(status => status === parsed.data.status) ? before.status === parsed.data.status ? before.privacyClosedAt ?? new Date() : new Date() : null, ...(before.kind === "APPLICATION" ? { purchaseConfirmedAt: parsed.data.status === "DELIVERED" ? before.purchaseConfirmedAt ?? new Date() : null } : {}) } });
     await tx.auditLog.create({ data: { actorId: user.id, action: "order.status.update", entityType: "Order", entityId: before.id, before: { status: before.status }, after: { status: updated.status, deliveryConfirmed: formData.get("deliveryConfirmed") === "on", purchaseConfirmed: Boolean(updated.purchaseConfirmedAt) } } });
     return updated;
   });
@@ -61,7 +62,7 @@ export async function updateTrackingAction(formData: FormData) {
   const shipment = await prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412026)`;
     const order = await tx.order.findUnique({ where: { id: orderId } });
-    if (!order || order.deletedAt) return null;
+    if (!order || order.deletedAt || order.personalDataErasedAt) return null;
     return tx.shipment.update({ where: { orderId }, data: { tracking, shippedAt: tracking ? new Date() : undefined } });
   });
   if (!shipment) redirect("/admin/orders/?error=missing");

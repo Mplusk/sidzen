@@ -24,7 +24,7 @@ export async function deleteOrderAction(formData: FormData) {
       // Commit cancellation intent with archival. Do not clear an active lease:
       // an in-flight create must save its remote identifiers for cancellation.
       if (order.shipment?.ozonJob) await tx.ozonDeliveryJob.update({ where: { id: order.shipment.ozonJob.id }, data: { cancelRequestedAt: new Date(), cancelError: null, nextAttemptAt: new Date() } });
-      await tx.order.update({ where: { id: order.id }, data: { deletedAt: new Date() } });
+      await tx.order.update({ where: { id: order.id }, data: { deletedAt: new Date(), privacyClosedAt: new Date() } });
       await tx.auditLog.create({ data: { actorId: user.id, action: "order.delete", entityType: "Order", entityId: order.id, ip, before: { number: order.number, status: order.status, total: String(order.total) }, after: { archived: true } } });
       return order.number;
     });

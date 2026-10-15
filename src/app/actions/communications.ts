@@ -8,7 +8,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { encryptSecret } from "@/lib/integration-secrets";
 import { TELEGRAM_KEY, getTelegramConfig, telegramConfigSchema } from "@/lib/telegram/config";
 import { verifyTelegram, sendTelegram } from "@/lib/telegram/client";
-import { REVIEW_AI_KEY, getReviewAiConfig } from "@/lib/review-ai/config";
+import { REVIEW_AI_KEY, getReviewAiConfig, reviewTransferApproved } from "@/lib/review-ai/config";
 import { getCategoryAiConfig } from "@/lib/category-ai/config";
 const result = (code: string): never => redirect(`/account/integrations/?result=${code}#communications`);
 export async function saveTelegramSettings(form: FormData) {
@@ -47,6 +47,7 @@ export async function saveReviewAiSettings(form: FormData) {
   const actor = await requirePermission("settings.write");
   if (!rateLimit(`review-ai-settings:${actor.id}`, 5, 60000).allowed) result("communications-rate");
   const enabled = form.get("enabled") === "on", operatorReviewed = form.get("operatorReviewed") === "on";
+  if (enabled && !reviewTransferApproved()) result("review-ai-legal");
   if (enabled) { const ai = await getCategoryAiConfig(); if (!operatorReviewed || !ai.apiKey || !ai.checkedAt) result("review-ai-incomplete"); }
   const saved = await prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412032)`;

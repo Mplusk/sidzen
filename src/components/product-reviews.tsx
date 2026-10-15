@@ -6,6 +6,7 @@ import { purchasedProductWhere, reviewPage, reviewStatusLabel } from "@/lib/revi
 import { requestPublicReviewWhere } from "@/lib/review-visibility";
 import { ReviewCard } from "@/components/review-card";
 import { ReviewForm } from "@/components/review-form";
+import { reviewTransferApproved } from "@/lib/review-ai/config";
 
 export async function ProductReviews({ productId, path, total, rating, requestedPage }: { productId: string; path: string; total: number; rating: number; requestedPage?: string }) {
   const publicReviewWhere = await requestPublicReviewWhere();
@@ -22,7 +23,7 @@ export async function ProductReviews({ productId, path, total, rating, requested
       : own ? <p className="notice">Ваш отзыв: {reviewStatusLabel(own.status).toLowerCase()}. <Link className="text-link" href="/account/reviews/">Открыть мои отзывы</Link></p>
       : !purchase ? <p className="notice">Оставить отзыв можно после оплаты и получения этого товара в заказе вашего аккаунта. Читать отзывы можно без покупки.</p>
       : !ready ? <p className="notice">Приём отзывов временно недоступен: магазин ещё не настроил обработку данных.</p>
-      : <details className="review-compose"><summary>Написать отзыв о купленном товаре</summary><ReviewForm productId={productId} /></details>}
+      : <details className="review-compose"><summary>Написать отзыв о купленном товаре</summary><ReviewForm productId={productId} allowAi={reviewTransferApproved()} /></details>}
     {reviews.length ? reviews.map(review => <ReviewCard key={review.id} review={review} />) : <p className="muted">Опубликованных отзывов пока нет. Поделитесь впечатлениями после получения товара.</p>}
     {pages > 1 && <nav className="pagination" aria-label="Страницы отзывов">{page > 1 && <Link href={`${path}?reviewsPage=${page - 1}#reviews-heading`}>← Предыдущие отзывы</Link>}<span>{page} из {pages}</span>{page < pages && <Link href={`${path}?reviewsPage=${page + 1}#reviews-heading`}>Следующие отзывы →</Link>}</nav>}
   </section>;

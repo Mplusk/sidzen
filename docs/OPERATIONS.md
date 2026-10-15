@@ -87,20 +87,25 @@ DNS `sidzen.shop` и `www.sidzen.shop` должен указывать на се
 
 Проверка после выкладки: `readlink /usr/local/sbin/3dprinta-backup` должен вернуть `/opt/3dprinta/current/scripts/backup.sh`; `test -x /usr/local/sbin/3dprinta-backup` должен завершиться успешно. Саму резервную копию проверяйте отдельным запуском скрипта и сверкой `SHA256SUMS`.
 
-По умолчанию копии лежат в `/var/backups/3dprinta` 14 дней. Минимум раз в месяц копируйте их на отдельный сервер или объектное хранилище.
+Копии лежат в `/var/backups/3dprinta` не более 14 дней при ежедневном выполнении cron. Скрипт использует порог 12 дней и запас на суточную ротацию; увеличить его через переменную окружения нельзя. Контролируйте выполнение cron: ошибка копирования или остановленный сервер не доказывают удаление копий. Отдельные копии разрешены только в проверенном российском хранилище с той же ротацией. Не создавайте бессрочных копий с данными клиентов. Инвентаризацию и очистку ранее созданных ручных/offsite-копий выполняет оператор отдельно.
+
+`privacy-ledger` — отдельный закрытый volume с зашифрованными техническими планами удаления (идентификаторы записей/файлов, без контактных значений). Он не откатывается вместе с базой. Скрипт сохраняет его резервную копию отдельно; для восстановления нужен **самый актуальный** журнал, а не журнал из старой восстанавливаемой копии. Ключ шифрования сохраняйте отдельно; при его ротации нужно перешифровать и журнал. Оператор оформляет подписанный акт уничтожения по приказу РКН № 179; JSON-выгрузка в админке — техническое приложение, не подписанный акт.
 
 ## Восстановление
 
-Остановите приём новых заказов, затем:
+Остановите публичный доступ, приложение и worker. Сохраните актуальный независимый `privacy-ledger` вне восстанавливаемой копии. Не откатывайте этот volume. Затем:
 
 ```bash
 cd /opt/3dprinta/current
+docker compose --project-name 3dprinta --env-file .env.production stop proxy app marketplace-worker
 docker compose --project-name 3dprinta --env-file .env.production exec -T db pg_restore --clean --if-exists --no-owner -U 3dprinta -d 3dprinta < /var/backups/3dprinta/<timestamp>/database.dump
 docker run --rm -v 3dprinta_model-files:/target -v /var/backups/3dprinta/<timestamp>:/backup:ro alpine:3.20 sh -c 'cd /target && tar -xzf /backup/model-files.tar.gz'
 docker run --rm -v 3dprinta_product-images:/target -v /var/backups/3dprinta/<timestamp>:/backup:ro alpine:3.20 sh -c 'cd /target && tar -xzf /backup/product-images.tar.gz'
+docker compose --project-name 3dprinta --env-file .env.production run --rm --no-deps migrate pnpm prisma migrate deploy
+docker compose --project-name 3dprinta --env-file .env.production run --rm --no-deps marketplace-worker ./node_modules/.bin/tsx scripts/replay-privacy-erasures.ts --confirm-offline-restore
 ```
 
-После восстановления проверьте `/api/health/`, вход администратора, каталог и доступ к файлам заказа.
+До запуска app/worker/proxy проверьте успешное применение журнала и удаление файлов. Повторный запуск безопасен: планы относятся только к исходным идентификаторам и не удаляют новые регистрации с тем же email. Если актуальный журнал утрачен или replay остановлен из-за обязательств/спора, **не открывайте публичный доступ**: восстановите журнал и сверяйте обращения вручную. Не загружайте вслепую старый `privacy-ledger.tar.gz` поверх нового volume. После проверки запустите сервисы и проверьте `/api/health/`, вход администратора, каталог и доступ к файлам заказа. Это обязательный этап восстановления, а не гарантия, обеспечиваемая самим `pg_restore`.
 
 ## Диагностика
 

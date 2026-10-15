@@ -1,11 +1,13 @@
 import { z } from "zod";
 import type { CategoryAiConfig } from "@/lib/category-ai/config";
 import { publicCatalogText } from "@/lib/category-ai/client";
+import { reviewTransferApproved } from "./config";
 export class ReviewAiError extends Error {
   constructor(readonly retryable: boolean) { super("review-ai-unavailable"); }
 }
 const decisionSchema = z.object({ relevant: z.boolean(), links: z.boolean(), profanity: z.boolean(), politics: z.boolean(), instructions: z.boolean(), personal: z.boolean(), confident: z.boolean() }).strict();
 export async function checkReviewText(config: CategoryAiConfig, product: { name: string; shortDescription: string | null }, text: string, rating: number, transport: typeof fetch = fetch) {
+  if (!reviewTransferApproved()) return "legal";
   let response: Response;
   try {
     response = await transport("https://api.deepseek.com/chat/completions", { method: "POST", headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },

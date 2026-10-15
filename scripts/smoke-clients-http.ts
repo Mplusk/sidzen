@@ -52,7 +52,7 @@ try {
   assert.equal(seen.size, 56); assert.equal(await prisma.user.count(), before);
   const last = (await (await request(`${path}?page=999999`, token)).text()).replace(/<!--[\s\S]*?-->/g, "");
   assert(last.includes(`Страница ${pages} из ${pages}`));
-  assert(!(await (await request(path, token)).text()).includes("Да, удалить клиента"), "Read-only staff cannot remove clients");
+  assert(!(await (await request(path, token)).text()).includes("Да, архивировать"), "Read-only staff cannot archive clients");
   async function order(email: string, phone: string, name: string, data = {}) {
     const value = await prisma.order.create({ data: { number: `${prefix}-${orderIds.length}`, customerName: name, customerEmail: email, customerPhone: phone, subtotal: 1, total: 1, kind: "APPLICATION", ...data } }); orderIds.push(value.id); return value;
   }
@@ -80,7 +80,7 @@ try {
   const oldAudits = (await prisma.auditLog.findMany({ where: { actorId: actor.id }, select: { id: true } })).map(row => row.id);
   const guestPage = Math.floor(all.findIndex(row => row.id === guest.id) / 50) + 1;
   const guestHtml = await (await request(`${path}?page=${guestPage}`, token)).text();
-  assert(guestHtml.includes("Покупатель без регистрации") && guestHtml.includes("Да, удалить клиента") && guestHtml.includes("Заказы, документы"));
+  assert(guestHtml.includes("Покупатель без регистрации") && guestHtml.includes("Да, архивировать") && guestHtml.includes("Заказы, документы"));
   const removal = actionForm(guestHtml, guest.id);
   assert.match((await submit(removal, token)).headers.get("location") || "", /confirmation/);
   removal.set("confirmation", "archive");

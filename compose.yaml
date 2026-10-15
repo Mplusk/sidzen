@@ -67,6 +67,7 @@ services:
       - model-files:/app/private-uploads
       - product-images:/app/public/uploads/products
       - image-cache:/app/.next/cache/images
+      - privacy-ledger:/app/privacy-ledger
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 15s
@@ -95,6 +96,7 @@ services:
     volumes:
       - product-images:/app/public/uploads/products
       - model-files:/app/private-uploads
+      - privacy-ledger:/app/privacy-ledger
     healthcheck:
       test: ["CMD", "node", "-e", "const fs=require('fs');if(Date.now()-Number(fs.readFileSync('/tmp/3dprinta-marketplace-heartbeat','utf8'))>60000)process.exit(1)"]
       interval: 20s
@@ -114,3 +116,4 @@ volumes:
   model-files:
   product-images:
   image-cache:
+  privacy-ledger:

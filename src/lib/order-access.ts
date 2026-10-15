@@ -9,7 +9,8 @@ function signature(number: string) {
 export async function grantOrderAccess(number: string) {
   (await cookies()).set(`3dp_order_${number}`, signature(number), { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 30 });
 }
-export async function canAccessOrder(order: { number: string; userId: string | null }) {
+export async function canAccessOrder(order: { number: string; userId: string | null; personalDataErasedAt?: Date | null }) {
+  if (order.personalDataErasedAt) return false;
   const user = await getCurrentUser();
   if (user && user.id === order.userId) return true;
   const value = (await cookies()).get(`3dp_order_${order.number}`)?.value ?? "";

@@ -61,6 +61,7 @@ jobs:
           pnpm exec tsx scripts/smoke-tochka.ts
           pnpm exec tsx scripts/smoke-cloudkassir.ts
           pnpm exec tsx scripts/smoke-social.ts
+          pnpm exec tsx scripts/smoke-privacy-retention.ts
           pnpm exec tsx scripts/smoke-ozon-applications.ts
       - run: pnpm build
       - name: Verify administrator marketplace controls over HTTP
@@ -86,6 +87,7 @@ jobs:
           pnpm exec tsx scripts/smoke-category-ai-http.ts
           pnpm exec tsx scripts/smoke-communications-http.ts
           pnpm exec tsx scripts/smoke-clients-http.ts
+          pnpm exec tsx scripts/smoke-privacy-http.ts
           pnpm exec tsx scripts/smoke-ozon-delivery-http.ts
           pnpm exec tsx scripts/smoke-integrations.mjs
           pnpm exec tsx scripts/smoke-cloudkassir-http.ts

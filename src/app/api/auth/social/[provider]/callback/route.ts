@@ -8,10 +8,12 @@ import { getSocialConfig, providerSchema, siteOrigin, socialReady, safeSocialRet
 import { exchangeProfile } from "@/lib/social/client";
 import { claimCallback, resolveIdentity, SOCIAL_COOKIE } from "@/lib/social/flow";
 import { writeDiagnostic } from "@/lib/diagnostics";
+import { socialLoginEnabled } from "@/lib/social/config";
 
 export const runtime = "nodejs";
 function go(path: string) { return new Response(null, { status: 303, headers: { Location: new URL(path, siteOrigin()).toString(), "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer" } }); }
 export async function GET(request: Request, context: { params: Promise<{ provider: string }> }) {
+  if (!socialLoginEnabled()) return go("/login/?error=social-unavailable");
   const parsed = providerSchema.safeParse((await context.params).provider);
   if (!parsed.success) return go("/login/?error=social-unavailable");
   const provider = parsed.data, store = await cookies();

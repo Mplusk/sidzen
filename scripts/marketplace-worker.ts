@@ -5,6 +5,7 @@ import { claimRun, processRun } from "../src/lib/marketplaces/sync";
 import { catalogInvalidationToken } from "../src/lib/marketplaces/cache-token";
 import { cancelOzonJob, processOzonJob, refreshOzonJob, syncOzonPointsPage } from "../src/lib/delivery/ozon-worker";
 import { pruneTransientPersonalData } from "../src/lib/privacy-maintenance";
+import { prunePersonalDataRetention } from "../src/lib/privacy-retention";
 import { reconcileTochkaPayments } from "../src/lib/payments";
 import { processFiscalReceipt } from "../src/lib/cloudkassir/worker";
 import { pruneDiagnosticLogs, writeDiagnostic } from "../src/lib/diagnostics";
@@ -82,6 +83,7 @@ try {
       }
       if (Date.now() >= nextPrivacyCleanup) {
         await pruneTransientPersonalData();
+        await prunePersonalDataRetention();
         await pruneDiagnosticLogs();
         await pruneMonitoring();
         await pruneOrphanReviewPhotos();
