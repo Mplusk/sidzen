@@ -21,7 +21,8 @@ const decode = (value: string) => value.replace(/&amp;/g, "&").replace(/&quot;/g
 async function request(path: string, body?: FormData, jar = buyerJar) {
   const response = await fetch(new URL(path, base), {
     method: body ? "POST" : "GET", redirect: "manual", body,
-    headers: { Cookie: [...jar].map(([key, value]) => `${key}=${value}`).join("; "), ...(body ? { Origin: base.origin } : {}) },
+    // Isolate this fixture's login bucket from the other sequential HTTP suites.
+    headers: { "x-forwarded-for": "198.51.100.78", Cookie: [...jar].map(([key, value]) => `${key}=${value}`).join("; "), ...(body ? { Origin: base.origin } : {}) },
   });
   for (const cookie of response.headers.getSetCookie()) {
     const pair = cookie.split(";")[0], at = pair.indexOf("=");
