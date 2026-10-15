@@ -7,7 +7,6 @@ import { getTochkaConfig } from "@/lib/tochka/config";
 import { saveDeliveryMethod, savePaymentIntegration } from "@/app/actions/integrations";
 import { OzonDeliverySettings } from "@/components/ozon-delivery-settings";
 import { AdminDeleteDelivery } from "@/components/admin-delete-delivery";
-import { SocialSettings } from "@/components/social-settings";
 import { CloudKassirSettings } from "@/components/cloudkassir-settings";
 import { CategoryAiSettings } from "@/components/category-ai-settings";
 import { CommunicationsSettings } from "@/components/communications-settings";
@@ -34,9 +33,6 @@ const messages: Record<string, string> = {
   "cloud-connection": "CloudKassir не подтвердил рабочую кассу. Проверьте ключи, ИНН, кассу и ФН: касса должна быть фискализирована, доступна, без блокировки, с действующим ФН и местом расчётов sidzen.shop. Настройки не изменены.",
   "cloud-pending": "Есть незавершённые чеки или оплаченные заказы CloudKassir, либо настройки изменились параллельно. Сменить терминал / ИНН сейчас нельзя. Секрет того же терминала можно обновить.",
   "cloud-rate": "Слишком много проверок. Повторите через минуту.",
-  "social-saved": "Настройки входа сохранены. Ключи и адрес возврата проверяются при настоящем входе в сервис.",
-  "social-incomplete": "Для включения нужны корректный ID, секрет (Google / Яндекс), проверка оператором условий обработки и заполненные реквизиты магазина. Для Google также нужно подтверждение при настройке сервера.",
-  "social-invalid": "Проверьте ID и секрет приложения.", "social-rate": "Слишком много изменений. Повторите через минуту.", "social-changed": "Настройки изменились параллельно. Обновите страницу и повторите.",
   saved: "Настройки сохранены.", verified: "Настройки сохранены. Доступ к компании и эквайрингу Точки проверен без списания денег.",
   invalid: "Проверьте заполнение полей и тариф (до двух знаков после запятой).",
   incomplete: "Для включения нужны рабочий JWT-ключ, customerCode, merchantId, хотя бы один способ оплаты и настройки чеков. Для внешней кассы подтвердите самостоятельную выдачу чеков.",
@@ -98,7 +94,6 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
     <CloudKassirSettings />
     </details>
     <OzonDeliverySettings />
-    <SocialSettings />
     <CategoryAiSettings />
     <CommunicationsSettings />
     <h2>Другие способы доставки</h2><p className="muted">Управляйте способами с фиксированными тарифами. Эти способы не используют API перевозчика. Ozon Delivery API подключается отдельно выше. Способ можно отключить или удалить с подтверждением — старые заказы не меняются.</p>

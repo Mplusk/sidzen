@@ -19,7 +19,7 @@ it("retires the self-service portal without removing profile, reviews or store c
   const profile = readFileSync(new URL("../app/account/profile/page.tsx", import.meta.url), "utf8");
   expect(profile).not.toContain("/account/privacy/");
   expect(profile).toContain("updateProfileAction");
-  expect(profile).toContain("disconnectSocialAccount");
+  expect(profile).toContain("setSocialPassword");
   const portal = readFileSync(new URL("../app/account/privacy/page.tsx", import.meta.url), "utf8");
   expect(portal).toContain('redirect("/contacts/")');
   expect(portal).not.toContain("prisma");
@@ -29,6 +29,21 @@ it("retires the self-service portal without removing profile, reviews or store c
   expect(actions).not.toContain("privacyRequest.create");
   const footer = readFileSync(new URL("./footer.tsx", import.meta.url), "utf8");
   for (const retained of ["/delivery/", "/contacts/"]) expect(footer).toContain(retained);
+});
+
+it("removes social sign-in controls from authorization and account settings without removing password setup", () => {
+  const login = readFileSync(new URL("../app/login/page.tsx", import.meta.url), "utf8");
+  const profile = readFileSync(new URL("../app/account/profile/page.tsx", import.meta.url), "utf8");
+  const integrations = readFileSync(new URL("../app/account/integrations/page.tsx", import.meta.url), "utf8");
+  expect(login).not.toContain("SocialLogin");
+  expect(login).toContain("loginAction");
+  expect(login).toContain("/register/");
+  expect(login).toContain("/forgot-password/");
+  for (const removed of ["SocialLogin", "disconnectSocialAccount", "Способы входа", "socialAccount.findMany"]) expect(profile).not.toContain(removed);
+  expect(profile).toContain('user.passwordHash === "!social-only"');
+  expect(profile).toContain("Пароль для входа");
+  expect(integrations).not.toContain("SocialSettings");
+  for (const retained of ["OzonDeliverySettings", "CategoryAiSettings", "CommunicationsSettings"]) expect(integrations).toContain(retained);
 });
 
 it("no longer advertises the retired portal in current legal and consent documents", () => {
