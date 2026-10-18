@@ -20,7 +20,7 @@ export async function Footer() {
       <nav className="footer-legal" aria-label="Правовая информация">
         <Link href="/legal/privacy/">Политика конфиденциальности</Link>
         <Link href="/legal/offer/">Публичная оферта</Link>
-        <Link href="/legal/cookies/">Cookies</Link>
+        <Link href="/legal/cookies/">Технические cookies</Link>
       </nav>
     </div>
   </footer>;

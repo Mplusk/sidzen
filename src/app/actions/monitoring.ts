@@ -13,9 +13,8 @@ export async function clearMonitoring(form: FormData) {
   if (!rateLimit(`monitoring-clear:${user.id}`, 3, 60000).allowed) redirect("/account/monitoring/?result=rate");
   await prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${MONITORING_LOCK})`;
-    const deleted = await tx.monitoringVisit.deleteMany({});
-    await tx.monitoringConsent.deleteMany({});
-    await tx.auditLog.create({ data: { actorId: user.id, action: "monitoring.clear", entityType: "MonitoringVisit", after: { deletedCount: deleted.count } } });
+    const deleted = await tx.monitoringCounter.deleteMany({});
+    await tx.auditLog.create({ data: { actorId: user.id, action: "monitoring.clear", entityType: "MonitoringCounter", after: { deletedCount: deleted.count } } });
   });
   revalidatePath("/account/monitoring/");
   redirect("/account/monitoring/?result=cleared");

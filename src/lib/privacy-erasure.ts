@@ -64,10 +64,6 @@ async function applyPlan(tx: Prisma.TransactionClient, plan: ErasurePlan, actorI
   await tx.clientArchive.deleteMany({ where: { key: { in: clientKeys } } });
   await tx.auditLog.deleteMany({ where: { entityType: "Client", entityId: { in: clientKeys.map(key => createHash("sha256").update(key).digest("hex")) } } });
   if (plan.userId) {
-    const visits = await tx.monitoringVisit.findMany({ where: { userId: plan.userId }, select: { visitorHash: true } });
-    const visitorHashes = visits.map(visit => visit.visitorHash);
-    await tx.monitoringVisit.deleteMany({ where: { OR: [{ userId: plan.userId }, { visitorHash: { in: visitorHashes } }] } });
-    await tx.monitoringConsent.deleteMany({ where: { visitorHash: { in: visitorHashes } } });
     // Revoke/delete reviews and queues before deleting their consents/account.
     await tx.review.deleteMany({ where: { userId: plan.userId } });
     await tx.privacyConsent.deleteMany({ where: { userId: plan.userId } });
