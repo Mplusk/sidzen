@@ -12,22 +12,9 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # This runner includes PostgreSQL 16; no registry pull/quota is required.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
-    services:
-      postgres:
-        # Docker Official Images mirror: avoid shared-runner Docker Hub pull limits.
-        image: public.ecr.aws/docker/library/postgres:16-alpine
-        env:
-          POSTGRES_PASSWORD: ci-qa-only
-          POSTGRES_DB: shop_qa
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d shop_qa"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
     env:
       DATABASE_URL: postgresql://build:build@127.0.0.1:5432/build
       AUTH_SECRET: build-only-secret
@@ -36,6 +23,12 @@ jobs:
       NEXT_PUBLIC_SITE_URL: https://sidzen.shop
     steps:
       - uses: actions/checkout@v4
+      - name: Start preinstalled PostgreSQL for isolated QA
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql --set ON_ERROR_STOP=1 --command "ALTER USER postgres PASSWORD 'ci-qa-only'"
+          sudo -u postgres createdb shop_qa
+          PGPASSWORD=ci-qa-only psql -h 127.0.0.1 -U postgres -d shop_qa --set ON_ERROR_STOP=1 --command "SELECT version()"
       - uses: pnpm/action-setup@v4
         with:
           version: 10.26.2
@@ -119,9 +112,14 @@ jobs:
         env:
           NODE_BASE_IMAGE: public.ecr.aws/docker/library/node:22-bookworm-slim
         run: |
-          docker build --build-arg NODE_BASE_IMAGE="${NODE_BASE_IMAGE}" --target runner -t "3dprinta-app:${GITHUB_SHA}" .
-          docker build --build-arg NODE_BASE_IMAGE="${NODE_BASE_IMAGE}" --target migrator -t "3dprinta-migrate:${GITHUB_SHA}" .
-          docker build --build-arg NODE_BASE_IMAGE="${NODE_BASE_IMAGE}" --target marketplace-worker -t "3dprinta-marketplace-worker:${GITHUB_SHA}" .
+          node_base_image="${NODE_BASE_IMAGE}"
+          if ! docker pull "$node_base_image"; then
+            node_base_image="node:22-bookworm-slim"
+            docker pull "$node_base_image"
+          fi
+          docker build --build-arg NODE_BASE_IMAGE="$node_base_image" --target runner -t "3dprinta-app:${GITHUB_SHA}" .
+          docker build --build-arg NODE_BASE_IMAGE="$node_base_image" --target migrator -t "3dprinta-migrate:${GITHUB_SHA}" .
+          docker build --build-arg NODE_BASE_IMAGE="$node_base_image" --target marketplace-worker -t "3dprinta-marketplace-worker:${GITHUB_SHA}" .
           docker image save "3dprinta-app:${GITHUB_SHA}" "3dprinta-migrate:${GITHUB_SHA}" "3dprinta-marketplace-worker:${GITHUB_SHA}" | gzip -1 > "${RUNNER_TEMP}/3dprinta-${GITHUB_SHA}.images.tar.gz"
 
       - name: Configure deploy SSH key
