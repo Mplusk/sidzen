@@ -43,8 +43,6 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
       categories: { include: { category: true } },
       materials: { where: { active: true }, orderBy: { name: "asc" } },
       colors: { where: { active: true }, orderBy: { name: "asc" } },
-      technologies: { where: { active: true } },
-      qualityProfiles: { where: { active: true }, orderBy: { layerHeightMm: "desc" } },
     },
   });
   if (!product || product.status !== "PUBLISHED" || (product.type !== "READY" && product.type !== "PARAMETRIC")) notFound();

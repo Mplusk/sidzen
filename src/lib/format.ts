@@ -1,3 +1,4 @@
+import { isRetiredProductSpecification } from "./retired-product-options";
 import { isAdminOnlySpecification } from "./product-specification-visibility";
 
 export function formatPrice(value: number | string | { toString(): string }) {
@@ -23,10 +24,10 @@ export function pluralRu(value: number, forms: [string, string, string]) {
 }
 
 export function translatedSpecifications(value: unknown) {
-  const labels: Record<string, string> = { layer: "Высота слоя", tolerance: "Допуск", weight: "Вес", dimensions: "Габариты", material: "Материал", color: "Цвет", technology: "Технология", infill: "Заполнение", "Цвет товара": "Цвет" };
+  const labels: Record<string, string> = { tolerance: "Допуск", weight: "Вес", dimensions: "Габариты", material: "Материал", color: "Цвет", infill: "Заполнение", "Цвет товара": "Цвет" };
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return Object.fromEntries(Object.entries(value).flatMap(([key, item]) => {
-    if (isAdminOnlySpecification(key) || /^Ozon\s*[·.]\s*\d+$/i.test(key) || !key.trim() || item == null || typeof item === "object") return [];
+    if (isRetiredProductSpecification(key) || isAdminOnlySpecification(key) || /^Ozon\s*[·.]\s*\d+$/i.test(key) || !key.trim() || item == null || typeof item === "object") return [];
     const text = typeof item === "boolean" ? item ? "Да" : "Нет" : String(item).trim();
     return text ? [[labels[key] ?? key.trim(), text]] : [];
   }));

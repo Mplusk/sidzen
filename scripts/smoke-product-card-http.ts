@@ -10,6 +10,7 @@ assert(["localhost", "127.0.0.1"].includes(base.hostname) && ["localhost", "127.
 const jar = new Map<string, string>();
 let productId: string | undefined, cartId: string | undefined, categoryId: string | undefined, sessionId: string | undefined;
 let imageFixture: string | undefined;
+let legacyQualityId: string | undefined;
 const adminCodes = { "ТН ВЭД коды ЕАЭС": "0012345678", "Код ОКПД 2": "22.29.23.199", tn_ved_code: "0098765432", okpd2: "27.40.22.190" };
 async function request(path: string, body?: FormData) {
   const response = await fetch(new URL(path, base), { method: body ? "POST" : "GET", redirect: "manual", headers: { Cookie: [...jar].map(([key, value]) => `${key}=${value}`).join("; "), ...(body ? { Origin: base.origin } : {}) }, body, signal: AbortSignal.timeout(15000) });
@@ -32,6 +33,13 @@ try {
   categoryId = category.id;
   const product = await prisma.product.create({ data: { name: "QA Салфетница Вершина", sku: prefix, slug: prefix, type: "READY", status: "PUBLISHED", publishedAt: new Date(), basePrice: 240, oldPrice: 300, stock: 0, madeToOrder: false, shortDescription: "QA description must not crowd the catalog card", description: "Первый абзац.\n\nВторой абзац.", specifications: { ...adminCodes, "Материал": "PLA пластик", "Цвет товара": "черный", "Вес с упаковкой, г": "85", "Ozon · 22232": "legacy technical", "Пустая строка": "" }, categories: { create: { categoryId: category.id, isPrimary: true } }, images: { create: [{ path: "/generated/product-organizer.webp", alt: "Фото 1", sortOrder: 0 }, { path: "/generated/product-mount.webp", alt: "Фото 2", sortOrder: 1 }] } } });
   productId = product.id;
+  const legacyQuality = await prisma.qualityProfile.create({ data: { slug: `${prefix}-fine`, name: "QA retired fine", layerHeightMm: ".12", priceMultiplier: 20 } });
+  legacyQualityId = legacyQuality.id;
+  await prisma.product.update({ where: { id: productId }, data: {
+    qualityProfiles: { connect: { id: legacyQuality.id } },
+    variants: { create: { sku: `${prefix}-fine`, price: 9999, qualityProfileId: legacyQuality.id } },
+    specifications: { ...product.specifications as Record<string, string>, technology: "QA retired technology", "Качество печати": "QA retired quality", "Постобработка": "QA retired finishing" },
+  } });
   const catalog = await request(`/catalog/${category.slug}/?q=${prefix}`); assert.equal(catalog.status, 200);
   const catalogHtml = await catalog.text();
   const card = catalogHtml.match(/<article class="product-card">[\s\S]*?<\/article>/)?.[0]?.replace(/<!--[\s\S]*?-->/g, "");
@@ -71,6 +79,7 @@ try {
   const path = `/catalog/${category.slug}/${product.slug}/`;
   const response = await request(path); assert.equal(response.status, 200);
   let html = await response.text();
+  for (const retired of ['name="quality"', "QA retired", "Высота слоя"]) assert(!html.includes(retired), `Retired choice leaked: ${retired}`);
   assert(!html.includes('aria-label="Хлебные крошки"') && !html.includes('class="container product-breadcrumbs"'));
   assert(html.includes('"@type":"BreadcrumbList"'), "Retain breadcrumb structured data without visible navigation");
   for (const text of [...Object.keys(adminCodes), ...Object.values(adminCodes)]) assert(!html.includes(text), `Administrative classification leaked into public HTML/RSC: ${text}`);
@@ -91,10 +100,14 @@ try {
   const available = actionForm(html, 'name="productId"'); available.set("quantity", "3");
   assert.equal((await request(path, available)).headers.get("location"), "/cart/?error=stock");
   available.set("quantity", "1");
+  available.set("quality", legacyQuality.slug); available.set("technology", "sla"); available.set("postProcess", "painting");
   assert.equal((await request(path, available)).headers.get("location"), "/cart/");
   let item = await prisma.cartItem.findFirstOrThrow({ where: { productId } }); cartId = item.cartId;
   assert.equal(item.quantity, 1); assert.equal(Number(item.unitPrice), 240);
+  assert.equal(item.variantId, null); assert(!Object.hasOwn(item.config as object, "quality"));
+  await prisma.cartItem.update({ where: { id: item.id }, data: { unitPrice: 9999, config: { quality: legacyQuality.slug, qualityName: "QA retired quality", technology: "sla", postProcesses: ["painting"] } } });
   html = await (await request("/cart/")).text(); assert(html.includes(product.name));
+  assert(!html.includes("QA retired") && !html.includes('name="quality"'));
   assert.equal((await request("/cart/", actionForm(html, ">Удалить</button>"))).headers.get("location"), "/cart/");
   assert.equal(await prisma.cartItem.count({ where: { productId } }), 0);
   await prisma.product.update({ where: { id: productId }, data: { stock: 0, madeToOrder: true } });
@@ -113,20 +126,30 @@ try {
   jar.set("3dp_session", token);
   const editor = await request(editorPath); assert.equal(editor.status, 200);
   const editorHtml = await editor.text();
+  for (const retired of ['name="qualityProfileIds"', 'name="technologyIds"', 'name="postProcessIds"', "QA retired"]) assert(!editorHtml.includes(retired), `Retired editor choice leaked: ${retired}`);
+  assert(editorHtml.includes("Материалы и цвета"));
+  const dictionariesHtml = await (await request("/admin/catalog/")).text();
+  for (const retired of ['value="quality"', 'value="technology"', 'value="postProcess"', 'id="quality"', 'id="technology"', 'id="postProcess"']) assert(!dictionariesHtml.includes(retired));
+  const staleDictionary = actionForm(dictionariesHtml, 'name="kind"'); staleDictionary.set("kind", "quality"); staleDictionary.set("name", "Legacy");
+  assert.equal((await request("/admin/catalog/", staleDictionary)).headers.get("location"), "/admin/catalog/?error=invalid");
+  for (const oldPath of ["/technologies/", "/technologies/fdm/"]) assert.equal((await request(oldPath)).headers.get("location"), "/catalog/");
   const specificationsEditor = editorHtml.match(/<textarea\b[^>]*name="specificationsText"[^>]*>[\s\S]*?<\/textarea>/)?.[0];
   assert(specificationsEditor);
   for (const text of [...Object.keys(adminCodes), ...Object.values(adminCodes)]) assert(specificationsEditor.includes(text), `Administrator lost classification: ${text}`);
   const signedInPublicHtml = await (await request(path)).text();
   for (const text of [...Object.keys(adminCodes), ...Object.values(adminCodes)]) assert(!signedInPublicHtml.includes(text));
-  assert.deepEqual((await prisma.product.findUniqueOrThrow({ where: { id: productId }, select: { specifications: true } })).specifications, product.specifications);
+  const storedSpecs = (await prisma.product.findUniqueOrThrow({ where: { id: productId }, select: { specifications: true } })).specifications as Record<string, unknown>;
+  for (const [key, value] of Object.entries(adminCodes)) assert.equal(storedSpecs[key], value);
   console.log("PASS: dense catalog cards, price before title, real discount/availability, photo dots, header search, product HTML, readable specifications, absent empty/legacy rows, description paragraphs, two-photo gallery controls, out-of-stock purchase rejection, in-stock cart addition/removal, quantity limit, made-to-order purchase. Isolated QA data only; no orders or payments.");
   console.log("PASS: TN VED / OKPD 2 absent from public HTML/RSC for guests and signed-in administrators, retained verbatim in protected administrator editor and database.");
   console.log("PASS: one initial photo per card, eager/high priority on the first card, preserved native swipe slots, immutable public uploads, long optimized-image TTL, uncached errors and private account responses.");
+  console.log("PASS: retired manufacturing controls absent from product/admin/dictionaries/cart; forged/stale choices do not affect price; retired dictionary writes rejected and old technology routes redirected.");
 } finally {
   if (imageFixture) await unlink(imageFixture);
   if (sessionId) await prisma.session.deleteMany({ where: { id: sessionId } });
   if (cartId) await prisma.cart.deleteMany({ where: { id: cartId } });
   if (productId) await prisma.product.deleteMany({ where: { id: productId } });
+  if (legacyQualityId) await prisma.qualityProfile.deleteMany({ where: { id: legacyQualityId } });
   if (categoryId) await prisma.category.deleteMany({ where: { id: categoryId } });
   await prisma.$disconnect();
 }

@@ -5,7 +5,7 @@ export type SpecificationProduct = {
   specifications: unknown;
   widthMm: Measurement; depthMm: Measurement; heightMm: Measurement; weightGrams: Measurement;
   shippingWeightG?: number | null; shippingLengthMm?: number | null; shippingWidthMm?: number | null; shippingHeightMm?: number | null;
-  technologies: { name: string }[]; materials: { name: string }[]; colors: { name: string }[];
+  materials: { name: string }[]; colors: { name: string }[];
   stock: number; madeToOrder: boolean; leadDays: number;
 };
 export function productSpecificationRows(product: SpecificationProduct) {
@@ -34,10 +34,9 @@ export function productSpecificationRows(product: SpecificationProduct) {
     }
     if (/^материал(?: изделия| товара)?$/i.test(rawKey)) key = "Материал";
     if (/^цвет(?: изделия| товара)?$/i.test(rawKey)) key = "Цвет";
-    if (/^технология(?: производства| печати)?$/i.test(rawKey)) key = "Технология";
     rows.set(key, value);
   }
-  for (const [label, options] of [["Технология", product.technologies], ["Материал", product.materials], ["Цвет", product.colors]] as const) {
+  for (const [label, options] of [["Материал", product.materials], ["Цвет", product.colors]] as const) {
     const text = [...new Set(options.map(option => option.name.trim()).filter(Boolean))].join(", ");
     if (text) rows.set(label, text);
   }

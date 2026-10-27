@@ -33,7 +33,6 @@ function refreshCatalogPages() {
   updateTag("catalog");
   revalidatePath("/catalog/");
   revalidatePath("/materials/");
-  revalidatePath("/technologies/");
 }
 
 export async function createCatalogOptionAction(formData: FormData) {
@@ -73,28 +72,6 @@ export async function createCatalogOptionAction(formData: FormData) {
         } });
         entityType = "Color";
         break;
-      case "technology":
-        created = await prisma.technology.create({ data: {
-          name: data.name, slug: data.slug, description: data.description || null,
-          accuracy: data.accuracy || null, applications: data.applications || null,
-        } });
-        entityType = "Technology";
-        break;
-      case "quality":
-        created = await prisma.qualityProfile.create({ data: {
-          name: data.name, slug: data.slug, description: data.description || null,
-          layerHeightMm: data.layerHeightMm, speedMultiplier: data.speedMultiplier,
-          priceMultiplier: data.priceMultiplier,
-        } });
-        entityType = "QualityProfile";
-        break;
-      case "postProcess":
-        created = await prisma.postProcessOption.create({ data: {
-          name: data.name, slug: data.slug, description: data.description || null,
-          price: data.price, leadDays: data.leadDays,
-        } });
-        entityType = "PostProcessOption";
-        break;
     }
   } catch (error) {
     redirect(`/admin/catalog/?error=${catalogErrorCode(error, "create")}`);
@@ -129,27 +106,6 @@ async function deleteUnusedOption(kind: CatalogKind, id: string) {
         if (catalogOptionInUse(item._count)) throw new CatalogActionError("inuse");
         await tx.color.delete({ where: { id } });
         return { entityType: "Color", name: item.name, slug: item.slug };
-      }
-      case "technology": {
-        const item = await tx.technology.findUnique({ where: { id }, select: { id: true, name: true, slug: true, _count: { select: { products: true, orderItems: true } } } });
-        if (!item) throw new CatalogActionError("missing");
-        if (catalogOptionInUse(item._count)) throw new CatalogActionError("inuse");
-        await tx.technology.delete({ where: { id } });
-        return { entityType: "Technology", name: item.name, slug: item.slug };
-      }
-      case "quality": {
-        const item = await tx.qualityProfile.findUnique({ where: { id }, select: { id: true, name: true, slug: true, _count: { select: { products: true, variants: true, orderItems: true } } } });
-        if (!item) throw new CatalogActionError("missing");
-        if (catalogOptionInUse(item._count)) throw new CatalogActionError("inuse");
-        await tx.qualityProfile.delete({ where: { id } });
-        return { entityType: "QualityProfile", name: item.name, slug: item.slug };
-      }
-      case "postProcess": {
-        const item = await tx.postProcessOption.findUnique({ where: { id }, select: { id: true, name: true, slug: true, _count: { select: { products: true } } } });
-        if (!item) throw new CatalogActionError("missing");
-        if (catalogOptionInUse(item._count)) throw new CatalogActionError("inuse");
-        await tx.postProcessOption.delete({ where: { id } });
-        return { entityType: "PostProcessOption", name: item.name, slug: item.slug };
       }
     }
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });

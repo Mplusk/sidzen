@@ -3,7 +3,7 @@ import { productSpecificationRows, type SpecificationProduct } from "./product-s
 import { translatedSpecifications } from "./format";
 import { isAdminOnlySpecification } from "./product-specification-visibility";
 
-const product: SpecificationProduct = { specifications: { "Материал": "PLA пластик", "Цвет товара": "черный", "Вес с упаковкой, г": "85" }, widthMm: null, depthMm: null, heightMm: null, weightGrams: null, technologies: [], materials: [], colors: [], stock: 0, madeToOrder: false, leadDays: 3 };
+const product: SpecificationProduct = { specifications: { "Материал": "PLA пластик", "Цвет товара": "черный", "Вес с упаковкой, г": "85" }, widthMm: null, depthMm: null, heightMm: null, weightGrams: null, materials: [], colors: [], stock: 0, madeToOrder: false, leadDays: 3 };
 describe("customer-facing product specifications", () => {
   it("merges marketplace dimensions with structured mm values without mixing parcel measurements", () => {
     const rows = productSpecificationRows({ ...product, specifications: { "Высота предмета, см": "4.5", "Ширина предмета, см": "18", "Вес товара без упаковки (г)": "120", "Материал изделия": "PLA", "Высота упаковки, см": "6" }, heightMm: 45, widthMm: 180, weightGrams: 120 });
@@ -30,7 +30,7 @@ describe("customer-facing product specifications", () => {
     expect(productSpecificationRows({ ...product, specifications: null, widthMm: 0, depthMm: "0", heightMm: null })).toEqual([]);
   });
   it("shows known measurements, formats decimals and avoids duplicate rows", () => {
-    expect(Object.fromEntries(productSpecificationRows({ ...product, specifications: { technology: "FDM", dimensions: "old" }, technologies: [{ name: "SLA" }], widthMm: "80.5", depthMm: 30, heightMm: 120, weightGrams: "52.5", stock: 2 }))).toEqual({ "Технология": "SLA", "Габариты": "80,5 × 30 × 120 мм", "Вес": "52,5 г", "Отправка": "На следующий рабочий день" });
+    expect(Object.fromEntries(productSpecificationRows({ ...product, specifications: { technology: "FDM", dimensions: "old" }, widthMm: "80.5", depthMm: 30, heightMm: 120, weightGrams: "52.5", stock: 2 }))).toEqual({ "Габариты": "80,5 × 30 × 120 мм", "Вес": "52,5 г", "Отправка": "На следующий рабочий день" });
     expect(Object.fromEntries(productSpecificationRows({ ...product, specifications: null, widthMm: 80, depthMm: 0 }))).toEqual({ "Ширина": "80 мм" });
   });
   it("uses a production lead time only for products actually available to order", () => {
@@ -40,6 +40,6 @@ describe("customer-facing product specifications", () => {
     expect(Object.fromEntries(productSpecificationRows({ ...product, shippingWeightG: 85, shippingLengthMm: 190, shippingWidthMm: 55, shippingHeightMm: 70 }))).toEqual({ "Материал": "PLA пластик", "Цвет": "черный", "Вес с упаковкой, г": "85", "Габариты упаковки (Д × Ш × В)": "190 × 55 × 70 мм" });
   });
   it("hides unresolved old Ozon IDs, nulls, objects and empty rows, without hiding valid false/zero values", () => {
-    expect(translatedSpecifications({ "Ozon · 85": "Нет бренда", " ": "blank", "Пусто": "", "Нет данных": null, "Объект": {}, "Число": 0, "Флаг": false, technology: "FDM" })).toEqual({ "Число": "0", "Флаг": "Нет", "Технология": "FDM" });
+    expect(translatedSpecifications({ "Ozon · 85": "Нет бренда", " ": "blank", "Пусто": "", "Нет данных": null, "Объект": {}, "Число": 0, "Флаг": false, technology: "FDM" })).toEqual({ "Число": "0", "Флаг": "Нет" });
   });
 });

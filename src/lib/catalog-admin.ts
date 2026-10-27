@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { slugify } from "@/lib/format";
 
-export const CATALOG_KINDS = ["category", "material", "color", "technology", "quality", "postProcess"] as const;
+export const CATALOG_KINDS = ["category", "material", "color"] as const;
 export type CatalogKind = (typeof CATALOG_KINDS)[number];
 
 const name = z.string().trim().min(2).max(180);
@@ -16,9 +16,6 @@ const createSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("category"), name, slug, description, parentId: z.string().trim().max(100).optional() }),
   z.object({ kind: z.literal("material"), name, slug, description, type: z.string().trim().min(2).max(80), density: decimal(0.001, 100), pricePerGram: decimal(0, 999_999) }),
   z.object({ kind: z.literal("color"), name, slug, hex: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/) }),
-  z.object({ kind: z.literal("technology"), name, slug, description, accuracy: z.string().trim().max(180), applications: z.string().trim().max(2_000) }),
-  z.object({ kind: z.literal("quality"), name, slug, description, layerHeightMm: decimal(0.001, 10), speedMultiplier: decimal(0.001, 100), priceMultiplier: decimal(0.001, 100) }),
-  z.object({ kind: z.literal("postProcess"), name, slug, description, price: decimal(0, 999_999), leadDays: decimal(0, 3_650).pipe(z.number().int()) }),
 ]);
 
 const deleteSchema = z.object({ kind: z.enum(CATALOG_KINDS), id: z.string().trim().min(1).max(100) });
@@ -38,13 +35,6 @@ export function parseCatalogCreate(formData: FormData) {
     density: formData.get("density"),
     pricePerGram: formData.get("pricePerGram"),
     hex: formText(formData, "hex"),
-    accuracy: formText(formData, "accuracy"),
-    applications: formText(formData, "applications"),
-    layerHeightMm: formData.get("layerHeightMm"),
-    speedMultiplier: formData.get("speedMultiplier"),
-    priceMultiplier: formData.get("priceMultiplier"),
-    price: formData.get("price"),
-    leadDays: formData.get("leadDays"),
   });
   if (!result.success) return { success: false as const, error: "invalid" as const };
 

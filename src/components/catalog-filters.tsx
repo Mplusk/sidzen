@@ -5,12 +5,12 @@ import { useRouter } from "next/navigation";
 import type { CatalogParams } from "@/lib/catalog";
 import { filterValues } from "@/lib/catalog-search";
 type Option = { slug: string; name: string; count: number };
-export function CatalogFilters({ base, params, groups, count }: { base: string; params: CatalogParams; groups: Array<{ key: "material" | "technology" | "color"; label: string; options: Option[] }>; count: number }) {
+export function CatalogFilters({ base, params, groups, count }: { base: string; params: CatalogParams; groups: Array<{ key: "material" | "color"; label: string; options: Option[] }>; count: number }) {
   const router = useRouter(), [pending, startTransition] = useTransition();
   const dialog = useRef<HTMLDialogElement>(null), form = useRef<HTMLFormElement>(null);
   function apply() {
     const data = new FormData(form.current!), query = new URLSearchParams();
-    for (const key of ["material", "technology", "color"]) { const values = data.getAll(key).map(String); if (values.length) query.set(key, values.join(",")); }
+    for (const key of ["material", "color"]) { const values = data.getAll(key).map(String); if (values.length) query.set(key, values.join(",")); }
     for (const key of ["min", "max", "q", "sort", "availability"]) { const value = String(data.get(key) ?? "").trim(); if (value && value !== "popular") query.set(key, value); }
     startTransition(() => router.push(base + (query.size ? "?" + query : ""), { scroll: false }));
   }

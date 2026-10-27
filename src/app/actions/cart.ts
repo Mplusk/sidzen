@@ -24,7 +24,7 @@ export async function getOrCreateCart() {
 
 
 function selectionFromForm(form: FormData): ProductSelection {
-  return { material: String(form.get("material") ?? ""), color: String(form.get("color") ?? ""), quality: String(form.get("quality") ?? ""), quantity: Number(form.get("quantity")) };
+  return { material: String(form.get("material") ?? ""), color: String(form.get("color") ?? ""), quantity: Number(form.get("quantity")) };
 }
 
 async function saveProduct(formData: FormData, editing: boolean) {
@@ -65,8 +65,8 @@ export async function getCart() {
   return { ...cart, items: cart.items.map((item) => {
     const options = item.product ? productOptions(item.product) : null;
     const config = (item.config ?? {}) as Record<string, unknown>;
-    const defaults = options ? defaultSelection(options) : { material: "", color: "", quality: "", quantity: 1 };
-    const selection = { material: String(config.material ?? defaults.material), color: String(config.color ?? defaults.color), quality: String(config.quality ?? defaults.quality), quantity: item.quantity };
+    const defaults = options ? defaultSelection(options) : { material: "", color: "", quantity: 1 };
+    const selection = { material: String(config.material ?? defaults.material), color: String(config.color ?? defaults.color), quantity: item.quantity };
     try {
       if (!options || item.product?.status !== "PUBLISHED") throw new Error("unavailable");
       const quote = priceProduct(options, selection);

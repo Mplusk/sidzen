@@ -10,7 +10,7 @@ export async function CatalogView({ category, searchParams }: { category?: { slu
   const data = await getCatalog({ ...params, category: category?.slug });
   const base = category ? `/catalog/${category.slug}/` : "/catalog/";
   const makeUrl = (patch: Record<string, string | undefined>) => { const query = new URLSearchParams(); for (const [key, value] of Object.entries({ ...params, ...patch })) if (value) query.set(key, value); return base + (query.size ? "?" + query : ""); };
-  const groups = ([ ["material", "Материал", data.materials], ["color", "Цвет", data.colors], ["technology", "Технология", data.technologies] ] as const).map(([key, label, options]) => ({ key, label, options: options.map((item) => ({ slug: item.slug, name: item.name, count: item._count.products })) }));
+  const groups = ([ ["material", "Материал", data.materials], ["color", "Цвет", data.colors] ] as const).map(([key, label, options]) => ({ key, label, options: options.map((item) => ({ slug: item.slug, name: item.name, count: item._count.products })) }));
   const chips = groups.flatMap((group) => filterValues(params[group.key]).map((slug) => ({ label: group.options.find((option) => option.slug === slug)?.name ?? slug, href: makeUrl({ [group.key]: filterValues(params[group.key]).filter((value) => value !== slug).join(","), page: undefined }) })));
   for (const [key, label] of [["q", "Поиск"], ["min", "Цена от"], ["max", "Цена до"], ["availability", "Наличие"]] as const) if (params[key]) chips.push({ label: label + ": " + (key === "availability" ? "в наличии" : params[key]), href: makeUrl({ [key]: undefined, page: undefined }) });
   return <>

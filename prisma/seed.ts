@@ -70,9 +70,7 @@ async function seedCatalog() {
   // Existing catalogs belong to administrators. Mark them as initialized rather
   // than recreating removed defaults or overwriting edited lookup entries.
   const catalogCounts = await Promise.all([
-    prisma.category.count(), prisma.material.count(), prisma.color.count(),
-    prisma.technology.count(), prisma.qualityProfile.count(),
-    prisma.postProcessOption.count(), prisma.product.count(),
+    prisma.category.count(), prisma.material.count(), prisma.color.count(), prisma.product.count(),
   ]);
   if (catalogCounts.some((count) => count > 0)) {
     await prisma.siteSetting.create({ data: { key: markerKey, value: true, group: "system", label: "Каталог инициализирован" } });
@@ -114,26 +112,6 @@ async function seedCatalog() {
     await prisma.material.update({ where: { slug: materialSlug }, data: { colors: { set: colors.map(({ slug }) => ({ slug })) } } });
   }
 
-  const technologies = [
-    { slug: "fdm", name: "FDM/FFF", accuracy: "от ±0,2 мм", applications: "корпуса, крепления, прототипы, декор", description: "Послойное наплавление пластика — быстрый и экономичный способ получить функциональную деталь." },
-    { slug: "sla", name: "SLA/MSLA", accuracy: "от ±0,05 мм", applications: "миниатюры, мастер-модели, мелкая механика", description: "Фотополимерная печать для высокой детализации и гладкой поверхности." },
-  ];
-  for (const technology of technologies) await prisma.technology.upsert({ where: { slug: technology.slug }, update: technology, create: technology });
-
-  const qualityProfiles = [
-    { slug: "draft", name: "Draft", layerHeightMm: 0.28, speedMultiplier: 0.75, priceMultiplier: 0.9, description: "Быстрый прототип и проверка габаритов" },
-    { slug: "standard", name: "Standard", layerHeightMm: 0.2, speedMultiplier: 1, priceMultiplier: 1, description: "Баланс качества, прочности и цены" },
-    { slug: "fine", name: "Fine", layerHeightMm: 0.12, speedMultiplier: 1.65, priceMultiplier: 1.45, description: "Тонкий слой для видимых деталей" },
-  ];
-  for (const profile of qualityProfiles) await prisma.qualityProfile.upsert({ where: { slug: profile.slug }, update: profile, create: profile });
-
-  const postProcesses = [
-    { slug: "support-removal", name: "Снятие поддержек", price: 0, leadDays: 0, description: "Включено в базовую подготовку" },
-    { slug: "sanding", name: "Шлифовка", price: 450, leadDays: 1, description: "Ручная обработка видимых поверхностей" },
-    { slug: "painting", name: "Покраска", price: 1200, leadDays: 3, description: "Грунт и окраска в согласованный цвет" },
-  ];
-  for (const option of postProcesses) await prisma.postProcessOption.upsert({ where: { slug: option.slug }, update: option, create: option });
-
   const products = [
     { slug: "modular-desk-organizer", sku: "ORG-MOD-01", name: "Модульный органайзер Axis", category: "organizers", type: ProductType.READY, basePrice: 1290, oldPrice: 1490, stock: 18, badge: "Хит", image: "/generated/product-organizer.webp", shortDescription: "Система лотков, которую можно наращивать под рабочее место.", dimensions: [180, 105, 42], material: "pla" },
     { slug: "headphone-stand-arc", sku: "ORG-ARC-02", name: "Подставка для наушников Arc", category: "organizers", type: ProductType.READY, basePrice: 1890, stock: 7, badge: "Новинка", image: "/generated/product-headphone-stand.webp", shortDescription: "Устойчивая геометрия и скрытый канал для кабеля.", dimensions: [145, 110, 255], material: "petg" },
@@ -156,7 +134,7 @@ async function seedCatalog() {
         description: `${item.shortDescription} Изделие печатается с контролем геометрии и качества каждого слоя. Параметры можно согласовать перед производством.`,
         usage: "Для дома, мастерской, офиса и малосерийного производства.",
         instructions: "Не размещать рядом с открытым огнём. Уход — мягкая влажная ткань.",
-        specifications: { technology: "FDM", layer: "0,2 мм", tolerance: "±0,3 мм" },
+        specifications: { tolerance: "±0,3 мм" },
         basePrice: item.basePrice,
         oldPrice: item.oldPrice,
         stock: item.stock,
@@ -184,9 +162,6 @@ async function seedCatalog() {
       data: {
         materials: { set: [{ slug: item.material }, { slug: "pla" }, { slug: "petg" }] },
         colors: { set: colors.map(({ slug }) => ({ slug })) },
-        technologies: { set: [{ slug: "fdm" }] },
-        qualityProfiles: { set: qualityProfiles.map(({ slug }) => ({ slug })) },
-        postProcesses: { set: postProcesses.map(({ slug }) => ({ slug })) },
       },
     });
   }

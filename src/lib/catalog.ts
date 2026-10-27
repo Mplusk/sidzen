@@ -5,21 +5,21 @@ import { filterValues, priceBound, searchTerms } from "@/lib/catalog-search";
 import { productOptionInclude } from "@/lib/product-options-server";
 import { getCatalogPricePage } from "@/lib/catalog-price-page";
 
-export type CatalogParams = { category?: string; material?: string; technology?: string; color?: string; min?: string; max?: string; availability?: string; sort?: string; page?: string; q?: string };
+export type CatalogParams = { category?: string; material?: string; color?: string; min?: string; max?: string; availability?: string; sort?: string; page?: string; q?: string };
 export const getCatalogMenuCategories = unstable_cache(() => prisma.category.findMany({
   where: { visible: true, products: { some: { product: { status: "PUBLISHED", type: { in: ["READY", "PARAMETRIC"] } } } } },
   select: { slug: true, name: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
 }), ["catalog-menu-v1"], { revalidate: 60, tags: ["catalog"] });
 export function normalizeCatalogParams(input: Record<string, unknown>): CatalogParams {
-  return Object.fromEntries(["category", "material", "technology", "color", "min", "max", "availability", "sort", "page", "q"].flatMap((key) => typeof input[key] === "string" ? [[key, (input[key] as string).slice(0, 160)]] : []));
+  return Object.fromEntries(["category", "material", "color", "min", "max", "availability", "sort", "page", "q"].flatMap((key) => typeof input[key] === "string" ? [[key, (input[key] as string).slice(0, 160)]] : []));
 }
 export const getCatalog = unstable_cache(async (params: CatalogParams) => {
   const requestedPage = Math.min(10000, Math.max(1, Math.floor(Number(params.page) || 1))), take = 30;
   const min = priceBound(params.min), max = priceBound(params.max);
-  const filters: Prisma.ProductWhereInput[] = (["material", "color", "technology"] as const).flatMap(kind => {
+  const filters: Prisma.ProductWhereInput[] = (["material", "color"] as const).flatMap(kind => {
     const slugs = filterValues(params[kind]);
     if (!slugs.length) return [];
-    const relation = kind === "material" ? "materials" : kind === "color" ? "colors" : "technologies";
+    const relation = kind === "material" ? "materials" : "colors";
     return [{ OR: [{ [relation]: { some: { active: true, slug: { in: slugs } } } }, { catalogFacets: { some: { kind, slug: { in: slugs } } } }] }];
   });
   const where: Prisma.ProductWhereInput = {
@@ -41,11 +41,10 @@ export const getCatalog = unstable_cache(async (params: CatalogParams) => {
   const pages = Math.max(1, Math.ceil(count / take)), page = Math.min(requestedPage, pages);
   const visibleProducts = { status: "PUBLISHED" as const, type: { in: ["READY" as const, "PARAMETRIC" as const] }, categories: { some: { category: { visible: true, ...(params.category ? { slug: params.category } : {}) } } } };
   const include = { ...productOptionInclude, images: { orderBy: { sortOrder: "asc" as const }, take: 20 }, categories: { include: { category: true } } };
-  const [rows, categories, materials, technologies, colors, related, facets] = await Promise.all([
+  const [rows, categories, materials, colors, related, facets] = await Promise.all([
     prisma.product.findMany({ where: pricePage ? { AND: [where, { id: { in: pricePage.ids } }] } : where, include, ...(pricePage ? {} : { orderBy, skip: (page - 1) * take, take }) }),
     prisma.category.findMany({ where: { visible: true }, include: { _count: { select: { products: { where: { product: visibleProducts } } } } }, orderBy: { sortOrder: "asc" } }),
     prisma.material.findMany({ where: { active: true }, select: { slug: true, name: true, products: { where: visibleProducts, select: { id: true } } } }),
-    prisma.technology.findMany({ where: { active: true }, select: { slug: true, name: true, products: { where: visibleProducts, select: { id: true } } } }),
     prisma.color.findMany({ where: { active: true }, select: { slug: true, name: true, products: { where: visibleProducts, select: { id: true } } } }),
     count ? Promise.resolve([]) : prisma.product.findMany({ where: visibleProducts, include, take: 4, orderBy: { stock: "desc" } }),
     prisma.catalogFacet.findMany({ select: { kind: true, slug: true, name: true, products: { where: visibleProducts, select: { id: true } } } }),
@@ -61,5 +60,5 @@ export const getCatalog = unstable_cache(async (params: CatalogParams) => {
     }
     return [...values.values()].filter(item => item.ids.size || filterValues(params[kind as keyof CatalogParams]).includes(item.slug)).map(item => ({ slug: item.slug, name: item.name, _count: { products: item.ids.size } })).sort((a, b) => a.name.localeCompare(b.name, "ru"));
   };
-  return { products, count, categories, materials: merge("material", materials), technologies: merge("technology", technologies), colors: merge("color", colors), related, page, pages, pageSize: take };
-}, ["catalog-v6"], { revalidate: 60, tags: ["catalog"] });
+  return { products, count, categories, materials: merge("material", materials), colors: merge("color", colors), related, page, pages, pageSize: take };
+}, ["catalog-v7"], { revalidate: 60, tags: ["catalog"] });

@@ -51,10 +51,10 @@ try {
   const ascending = cards(asc);
   assert.equal(ascending.length, 3);
   assert(ascending[0].includes(`${prefix}-variant`) && ascending[0].includes(`<strong>${formatPrice(99.25)}</strong>`));
-  assert(ascending[1].includes(`${prefix}-published`) && ascending[1].includes(`<strong>${formatPrice(150)}</strong>`));
-  assert(ascending[2].includes(`${prefix}-quality`) && ascending[2].includes(`<strong>${formatPrice(175)}</strong>`));
+  assert(ascending[2].includes(`${prefix}-published`) && ascending[2].includes(`<strong>${formatPrice(150)}</strong>`));
+  assert(ascending[1].includes(`${prefix}-quality`) && ascending[1].includes(`<strong>${formatPrice(100)}</strong>`), "Retired quality must not increase the price");
   const desc = cards(await (await fetch(`${base}/catalog/${prefix}/?sort=price-desc`)).text());
-  assert(desc[0].includes(`${prefix}-quality`) && desc[2].includes(`${prefix}-variant`));
+  assert(desc[0].includes(`${prefix}-published`) && desc[2].includes(`${prefix}-variant`));
   const exact = cards(await (await fetch(`${base}/catalog/${prefix}/?min=99.25&max=99.25`)).text());
   assert.equal(exact.length, 1); assert(exact[0].includes(`${prefix}-variant`));
   const rounded = cards(await (await fetch(`${base}/catalog/${prefix}/?min=150&max=150`)).text());
@@ -75,7 +75,7 @@ try {
   await prisma.productCategory.createMany({ data: bulkIds.map(productId => ({ productId, categoryId: category.id, isPrimary: true })) });
   const secondPage = cards(await (await fetch(`${base}/catalog/${prefix}/?sort=price-asc&min=5000&max=5200&page=2`)).text());
   assert.equal(secondPage.length, 30); assert(secondPage[0].includes(`${prefix}-page-30/`) && secondPage[29].includes(`${prefix}-page-59/`));
-  console.log("PASS: catalog facets, public-only suggestions, shared variant/quality/rounded prices, sorting, price bounds, persistent search and hidden empty groups.");
+  console.log("PASS: catalog facets, public-only suggestions, shared variant/rounded prices without quality surcharges, sorting, price bounds, persistent search and hidden empty groups.");
   if (process.env.QA_KEEP_FIXTURES === "true") console.log(`QA page: ${base}/catalog/${prefix}/${prefix}-published/`);
 } finally {
   if (process.env.QA_KEEP_FIXTURES !== "true") {

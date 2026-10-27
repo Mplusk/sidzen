@@ -17,6 +17,17 @@ function validForm() {
 }
 
 describe("product admin form", () => {
+  it("ignores retired associations from stale forms and strips their specification keys", () => {
+    const form = validForm();
+    for (const key of ["technologyIds", "qualityProfileIds", "postProcessIds"]) form.append(key, "legacy");
+    form.set("specificationsText", JSON.stringify({ technology: "FDM", "Качество печати": "Fine", "Постобработка": "Покраска", Материал: "PLA" }));
+    const parsed = parseProductForm(form);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      for (const key of ["technologyIds", "qualityProfileIds", "postProcessIds"]) expect(parsed.data).not.toHaveProperty(key);
+      expect(parsed.data.specifications).toEqual({ Материал: "PLA" });
+    }
+  });
   it("allows an AI draft without a category but requires a real selection before publication/manual mode", () => {
     const form = validForm(); form.set("categoryMode", "AI"); form.set("primaryCategoryId", "");
     expect(parseProductForm(form)).toMatchObject({ success: true, data: { categoryMode: "AI", categoryIds: [] } });
@@ -34,13 +45,13 @@ describe("product admin form", () => {
     const form = validForm();
     form.append("categoryIds", "category-2");
     form.append("categoryIds", "category-1");
-    form.set("specificationsText", "{\"Слой\":\"0,2 мм\"}");
+    form.set("specificationsText", "{\"Материал\":\"PLA\"}");
     form.set("imagesText", "/generated/item.webp | Изделие | Главный вид");
     const result = parseProductForm(form);
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.categoryIds).toEqual(["category-1", "category-2"]);
-      expect(result.data.specifications).toEqual({ "Слой": "0,2 мм" });
+      expect(result.data.specifications).toEqual({ "Материал": "PLA" });
       expect(result.data.images[0]).toMatchObject({ path: "/generated/item.webp", alt: "Изделие", caption: "Главный вид" });
     }
   });

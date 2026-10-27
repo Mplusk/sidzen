@@ -299,6 +299,7 @@ model Product {
   variants         ProductVariant[]
   materials        Material[]
   colors           Color[]
+  // Retired manufacturing relations: retained only for legacy data compatibility.
   technologies     Technology[]
   qualityProfiles  QualityProfile[]
   postProcesses    PostProcessOption[]
@@ -446,6 +447,8 @@ model Color {
   orderItems OrderItem[]
 }
 
+// Retired dictionaries. No current UI, catalog actions or purchase pricing uses them.
+// Preserve referenced historical orders rather than dropping their foreign keys.
 model Technology {
   id              String      @id @default(cuid())
   name            String

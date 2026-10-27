@@ -16,4 +16,4 @@ export const getCatalogSuggestions = unstable_cache(async (query: string) => {
     orderBy: [{ stock: "desc" }, { id: "asc" }], take: 6,
   });
   return rows.map(row => ({ id: row.id, name: row.name, price: defaultProductPrice(productOptions(row)), image: row.images[0]?.path ?? null, href: `/catalog/${row.categories[0].category.slug}/${row.slug}/` }));
-}, ["catalog-suggestions-v3"], { revalidate: 60, tags: ["catalog"] });
+}, ["catalog-suggestions-v4"], { revalidate: 60, tags: ["catalog"] });

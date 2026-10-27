@@ -6,7 +6,6 @@ import { CatalogFilters } from "./catalog-filters";
 
 it("hides all empty attribute groups but keeps real options and the price filter", () => {
   const html = renderToStaticMarkup(createElement(CatalogFilters, { base: "/catalog/", params: {}, count: 8, groups: [
-    { key: "technology", label: "Технология", options: [] },
     { key: "color", label: "Цвет", options: [] },
     { key: "material", label: "Материал", options: [{ name: "PLA", slug: "pla", count: 8 }] },
   ] }));
@@ -16,8 +15,8 @@ it("hides all empty attribute groups but keeps real options and the price filter
 });
 
 it("does not hide an existing selected option with zero matches", () => {
-  const html = renderToStaticMarkup(createElement(CatalogFilters, { base: "/catalog/", params: { technology: "fdm" }, count: 0, groups: [
-    { key: "technology", label: "Технология", options: [{ name: "FDM", slug: "fdm", count: 0 }] },
+  const html = renderToStaticMarkup(createElement(CatalogFilters, { base: "/catalog/", params: { material: "pla" }, count: 0, groups: [
+    { key: "material", label: "Материал", options: [{ name: "PLA", slug: "pla", count: 0 }] },
   ] }));
-  expect(html).toContain("Технология"); expect(html).toContain('checked=""'); expect(html).toContain("FDM");
+  expect(html).toContain("Материал"); expect(html).toContain('checked=""'); expect(html).toContain("PLA");
 });

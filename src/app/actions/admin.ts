@@ -172,9 +172,6 @@ function productMutationData(input: Extract<ReturnType<typeof parseProductForm>,
     images,
     materialLinks: input.materialIds.map((id) => ({ id })),
     colorLinks: input.colorIds.map((id) => ({ id })),
-    technologyLinks: input.technologyIds.map((id) => ({ id })),
-    qualityLinks: input.qualityProfileIds.map((id) => ({ id })),
-    postProcessLinks: input.postProcessIds.map((id) => ({ id })),
   };
 }
 
@@ -204,7 +201,7 @@ export async function createProductAction(formData: FormData) {
       const created = await tx.product.create({ data: {
       categoryMode: data.categoryMode,
       name: data.name, slug: data.slug, sku: data.sku, type: data.type, status: data.status, badge: data.badge, shortDescription: data.shortDescription, description: data.description, usage: data.usage, instructions: data.instructions, specifications: data.specifications, basePrice: data.basePrice, oldPrice: data.oldPrice, costPrice: data.costPrice, stock: data.stock, madeToOrder: data.madeToOrder, leadDays: data.leadDays, weightGrams: data.weightGrams, widthMm: data.widthMm, depthMm: data.depthMm, heightMm: data.heightMm, modelAsset: data.modelAsset, title: data.title, h1: data.h1, metaDescription: data.metaDescription, canonical: data.canonical, robots: data.robots, publishedAt: data.publishedAt,
-      categories: { create: data.categoryRows }, images: { create: data.images }, materials: { connect: data.materialLinks }, colors: { connect: data.colorLinks }, technologies: { connect: data.technologyLinks }, qualityProfiles: { connect: data.qualityLinks }, postProcesses: { connect: data.postProcessLinks },
+      categories: { create: data.categoryRows }, images: { create: data.images }, materials: { connect: data.materialLinks }, colors: { connect: data.colorLinks },
       shippingWeightG: data.shippingWeightG, shippingLengthMm: data.shippingLengthMm, shippingWidthMm: data.shippingWidthMm, shippingHeightMm: data.shippingHeightMm,
       } });
       const { refreshCatalogFacets } = await import("@/lib/catalog-facets-server");
@@ -253,7 +250,7 @@ export async function updateProductAction(formData: FormData) {
       categoryMode: data.categoryMode,
       ...(linked ? { marketplaceMode: "SITE" } : {}),
       name: data.name, slug: data.slug, sku: data.sku, type: data.type, status: data.status, badge: data.badge, shortDescription: data.shortDescription, description: data.description, usage: data.usage, instructions: data.instructions, specifications: data.specifications, basePrice: data.basePrice, oldPrice: data.oldPrice, costPrice: data.costPrice, stock: data.stock, madeToOrder: data.madeToOrder, leadDays: data.leadDays, weightGrams: data.weightGrams, widthMm: data.widthMm, depthMm: data.depthMm, heightMm: data.heightMm, modelAsset: data.modelAsset, title: data.title, h1: data.h1, metaDescription: data.metaDescription, canonical: data.canonical, robots: data.robots, publishedAt: data.publishedAt,
-      categories: { deleteMany: {}, create: data.categoryRows }, images: { deleteMany: {}, create: data.images }, materials: { set: data.materialLinks }, colors: { set: data.colorLinks }, technologies: { set: data.technologyLinks }, qualityProfiles: { set: data.qualityLinks }, postProcesses: { set: data.postProcessLinks },
+      categories: { deleteMany: {}, create: data.categoryRows }, images: { deleteMany: {}, create: data.images }, materials: { set: data.materialLinks }, colors: { set: data.colorLinks },
       shippingWeightG: data.shippingWeightG, shippingLengthMm: data.shippingLengthMm, shippingWidthMm: data.shippingWidthMm, shippingHeightMm: data.shippingHeightMm,
       } });
       const { refreshCatalogFacets } = await import("@/lib/catalog-facets-server");

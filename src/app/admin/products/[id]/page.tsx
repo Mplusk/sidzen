@@ -16,14 +16,11 @@ export const metadata: Metadata = { title: "Редактирование тов�
 export default async function AdminProductPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; created?: string; error?: string; groupError?: string }> }) {
   const user = await requirePermission(PERMISSIONS.productsWrite);
   const [{ id }, query] = await Promise.all([params, searchParams]);
-  const [product, categories, materials, colors, technologies, qualityProfiles, postProcesses] = await Promise.all([
-    prisma.product.findUnique({ where: { id }, include: { categories: { orderBy: { isPrimary: "desc" }, include: { category: { select: { slug: true } } } }, images: { orderBy: { sortOrder: "asc" } }, materials: { select: { id: true } }, colors: { select: { id: true } }, technologies: { select: { id: true } }, qualityProfiles: { select: { id: true } }, postProcesses: { select: { id: true } } } }),
+  const [product, categories, materials, colors] = await Promise.all([
+    prisma.product.findUnique({ where: { id }, include: { categories: { orderBy: { isPrimary: "desc" }, include: { category: { select: { slug: true } } } }, images: { orderBy: { sortOrder: "asc" } }, materials: { select: { id: true } }, colors: { select: { id: true } } } }),
     prisma.category.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.material.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.color.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, hex: true } }),
-    prisma.technology.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    prisma.qualityProfile.findMany({ orderBy: { layerHeightMm: "desc" }, select: { id: true, name: true, layerHeightMm: true } }),
-    prisma.postProcessOption.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, price: true } }),
   ]);
   if (!product || (product.type !== "READY" && product.type !== "PARAMETRIC")) notFound();
   if (product.status === "PUBLISHED") await requirePermission(PERMISSIONS.productsPublish);
@@ -32,9 +29,6 @@ export default async function AdminProductPage({ params, searchParams }: { param
     categories,
     materials,
     colors,
-    technologies,
-    qualityProfiles: qualityProfiles.map((item) => ({ ...item, layerHeightMm: Number(item.layerHeightMm) })),
-    postProcesses: postProcesses.map((item) => ({ ...item, price: Number(item.price) })),
   };
   const primaryCategory = product.categories.find((item) => item.isPrimary) ?? product.categories[0];
   const value: ProductFormValue = {
@@ -52,9 +46,6 @@ export default async function AdminProductPage({ params, searchParams }: { param
     categoryIds: product.categories.map((item) => item.categoryId),
     materialIds: product.materials.map((item) => item.id),
     colorIds: product.colors.map((item) => item.id),
-    technologyIds: product.technologies.map((item) => item.id),
-    qualityProfileIds: product.qualityProfiles.map((item) => item.id),
-    postProcessIds: product.postProcesses.map((item) => item.id),
   };
   const publicHref = primaryCategory && product.status === "PUBLISHED" ? `/catalog/${primaryCategory.category.slug}/${product.slug}/` : null;
   const canGroup = user.permissions.has(PERMISSIONS.productsPublish) || user.roles.includes("superadmin");

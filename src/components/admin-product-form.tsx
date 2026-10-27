@@ -5,6 +5,8 @@ import { ProductCategoryControl } from "@/components/product-category-control";
 import { createProductAction, updateProductAction } from "@/app/actions/admin";
 import { PRODUCT_STATUSES, PRODUCT_TYPES, ROBOTS_VALUES } from "@/lib/product-admin";
 
+import { currentProductSpecifications } from "@/lib/retired-product-options";
+
 type Option = { id: string; name: string };
 type ColorOption = Option & { hex: string };
 
@@ -12,9 +14,6 @@ export type ProductFormOptions = {
   categories: Option[];
   materials: Option[];
   colors: ColorOption[];
-  technologies: Option[];
-  qualityProfiles: Array<Option & { layerHeightMm: number }>;
-  postProcesses: Array<Option & { price: number }>;
 };
 
 export type ProductFormValue = {
@@ -56,9 +55,6 @@ export type ProductFormValue = {
   categoryMode?: string;
   materialIds: string[];
   colorIds: string[];
-  technologyIds: string[];
-  qualityProfileIds: string[];
-  postProcessIds: string[];
   images: Array<{ path: string; alt: string; caption?: string | null }>;
 };
 
@@ -90,7 +86,7 @@ function CheckboxGroup({ name, options, selected, renderDetail }: { name: string
 export function AdminProductForm({ options, product, error, canPublish = true, aiReady = false, aiMessage }: { options: ProductFormOptions; product?: ProductFormValue; error?: string; canPublish?: boolean; aiReady?: boolean; aiMessage?: string }) {
   const isEdit = Boolean(product);
   const firstCategory = product ? product.primaryCategoryId : (aiReady ? "" : options.categories[0]?.id) || "";
-  const specificationsText = product?.specifications ? JSON.stringify(product.specifications, null, 2) : "";
+  const specificationsText = product?.specifications ? JSON.stringify(currentProductSpecifications(product.specifications), null, 2) : "";
   const errorMessage = error === "marketplace-busy" ? "Сейчас идёт синхронизация маркетплейсов. Дождитесь завершения или остановите её в ЛК → Маркетплейсы, затем сохраните товар." : error === "duplicate" ? "Slug или артикул уже используются другим товаром, в том числе в привязках маркетплейсов." : error === "images" ? "Проверьте список изображений и формат загружаемых файлов." : error === "specifications" ? "Характеристики должны быть корректным JSON-объектом." : error ? "Проверьте заполнение полей товара." : null;
 
   return <>
@@ -145,14 +141,11 @@ export function AdminProductForm({ options, product, error, canPublish = true, a
         <label className="field field--full"><span>Путь к файлу модели</span><input name="modelAsset" defaultValue={product?.modelAsset ?? ""} maxLength={500} placeholder="/private/..." /></label>
       </div></section>
 
-      <section className="admin-card"><h2>Характеристики</h2><label className="field"><span>JSON-объект</span><textarea className="admin-code-field" name="specificationsText" defaultValue={specificationsText} placeholder={'{\n  "Слой": "0,2 мм",\n  "Допуск": "±0,3 мм"\n}'} /><small>Заполненные характеристики появятся в карточке покупателя. ТН ВЭД и ОКПД 2 сохраняются только для администратора и на витрине не показываются.</small></label></section>
+      <section className="admin-card"><h2>Характеристики</h2><label className="field"><span>JSON-объект</span><textarea className="admin-code-field" name="specificationsText" defaultValue={specificationsText} placeholder={'{\n  "Материал": "PLA",\n  "Допуск": "±0,3 мм"\n}'} /><small>Заполненные характеристики появятся в карточке покупателя. ТН ВЭД и ОКПД 2 сохраняются только для администратора и на витрине не показываются.</small></label></section>
 
-      <section className="admin-card admin-card--wide"><div className="catalog-section-heading"><h2>Материалы, цвета и производство</h2><Link className="text-link" href="/admin/catalog/#material">Управлять справочниками</Link></div><div className="admin-relations">
+      <section className="admin-card admin-card--wide"><div className="catalog-section-heading"><h2>Материалы и цвета</h2><Link className="text-link" href="/admin/catalog/#material">Управлять справочниками</Link></div><div className="admin-relations">
         <div><h3>Материалы</h3><CheckboxGroup name="materialIds" options={options.materials} selected={product?.materialIds} /></div>
         <div><h3>Цвета</h3><CheckboxGroup name="colorIds" options={options.colors} selected={product?.colorIds} renderDetail={(option) => <small className="admin-option-detail"><i className="color-dot" style={{ "--dot": (option as ColorOption).hex } as React.CSSProperties} /></small>} /></div>
-        <div><h3>Технологии</h3><CheckboxGroup name="technologyIds" options={options.technologies} selected={product?.technologyIds} /></div>
-        <div><h3>Качество печати</h3><CheckboxGroup name="qualityProfileIds" options={options.qualityProfiles} selected={product?.qualityProfileIds} renderDetail={(option) => <small>{(option as ProductFormOptions["qualityProfiles"][number]).layerHeightMm} мм</small>} /></div>
-        <div><h3>Постобработка</h3><CheckboxGroup name="postProcessIds" options={options.postProcesses} selected={product?.postProcessIds} renderDetail={(option) => <small>{(option as ProductFormOptions["postProcesses"][number]).price} ₽</small>} /></div>
       </div></section>
 
       <section className="admin-card admin-card--wide"><h2>Фотографии товара</h2><AdminProductImages key={JSON.stringify(product?.images ?? [])} initialImages={product?.images ?? []} /></section>

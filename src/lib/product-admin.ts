@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { currentProductSpecifications } from "./retired-product-options";
 
 export const PRODUCT_STATUSES = ["DRAFT", "REVIEW", "PUBLISHED", "HIDDEN", "ARCHIVED"] as const;
 export const PRODUCT_TYPES = ["READY", "PARAMETRIC"] as const;
@@ -48,9 +49,6 @@ const productSchema = z.object({
   categoryIds: z.array(z.string().trim().min(1)).max(100),
   materialIds: z.array(z.string().trim().min(1)).max(100),
   colorIds: z.array(z.string().trim().min(1)).max(100),
-  technologyIds: z.array(z.string().trim().min(1)).max(100),
-  qualityProfileIds: z.array(z.string().trim().min(1)).max(100),
-  postProcessIds: z.array(z.string().trim().min(1)).max(100),
   specificationsText: z.string().trim().max(30_000),
   imagesText: z.string().trim().max(30_000),
   imageLayout: z.string().max(30_000),
@@ -75,7 +73,7 @@ export function parseSpecifications(value: string) {
   if (!value.trim()) return null;
   const parsed: unknown = JSON.parse(value);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("specifications");
-  return parsed as Record<string, unknown>;
+  return currentProductSpecifications(parsed);
 }
 
 export function parseGallery(value: string, fallbackAlt: string): ProductGalleryEntry[] {
@@ -160,9 +158,6 @@ export function parseProductForm(formData: FormData) {
     categoryIds: selectedValues(formData, "categoryIds"),
     materialIds: selectedValues(formData, "materialIds"),
     colorIds: selectedValues(formData, "colorIds"),
-    technologyIds: selectedValues(formData, "technologyIds"),
-    qualityProfileIds: selectedValues(formData, "qualityProfileIds"),
-    postProcessIds: selectedValues(formData, "postProcessIds"),
     specificationsText: stringValue(formData, "specificationsText"),
     imagesText: stringValue(formData, "imagesText"),
     imageLayout: stringValue(formData, "imageLayout"),
