@@ -1,0 +1,30 @@
+[Unit]
+Description=SIDZEN restricted Telegram TLS tunnel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+ExecStart=/usr/bin/python3 /opt/sidzen-telegram-relay/relay.py
+Environment=SHOP_SOURCE_IP=92.63.101.127
+Environment=RELAY_LISTEN_IP=185.196.41.131
+Environment=RELAY_PORT=18443
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+CapabilityBoundingSet=
+MemoryMax=64M
+TasksMax=32
+LimitNOFILE=128
+
+[Install]
+WantedBy=multi-user.target

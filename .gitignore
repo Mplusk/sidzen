@@ -16,3 +16,4 @@ backups/*
 tsconfig.tsbuildinfo
 privacy-ledger/
 .compose-proxy-networks.yaml
+__pycache__/

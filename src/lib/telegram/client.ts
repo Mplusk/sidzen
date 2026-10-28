@@ -1,4 +1,5 @@
 import type { TelegramConfig } from "./config";
+import { telegramFetch } from "./transport";
 export class TelegramError extends Error {
   constructor(readonly code: "credentials" | "recipient" | "rate" | "provider" | "uncertain" | "response", readonly retryable = false, readonly delay = 30000) { super(code); }
 }
@@ -19,7 +20,7 @@ async function telegramApi(config: Pick<TelegramConfig, "token">, method: "getMe
     return data.result;
   } catch (error) { if (error instanceof TelegramError) throw error; throw new TelegramError(method === "sendMessage" ? "uncertain" : "response"); }
 }
-export async function verifyTelegram(config: TelegramConfig, transport: typeof fetch = fetch) {
+export async function verifyTelegram(config: TelegramConfig, transport: typeof fetch = telegramFetch) {
   await telegramApi(config, "getMe", {}, transport);
   const chat = await telegramApi(config, "getChat", { chat_id: config.chatId }, transport) as { id?: number; type?: string } | null;
   if (!chat || String(chat.id) !== config.chatId || !["private", "group", "supergroup", "channel"].includes(chat.type ?? "")) throw new TelegramError("recipient");
@@ -31,6 +32,6 @@ export function telegramOrderText(orderId: string, baseUrl: string) {
   // The opaque internal reference opens an authenticated admin-only page.
   return `SIDZEN · новая заявка\nОткройте заказ в кабинете администратора:\n${base.origin}/admin/order-alert/${encodeURIComponent(orderId)}/`;
 }
-export async function sendTelegram(config: TelegramConfig, text: string, transport: typeof fetch = fetch) {
+export async function sendTelegram(config: TelegramConfig, text: string, transport: typeof fetch = telegramFetch) {
   await telegramApi(config, "sendMessage", { chat_id: config.chatId, text, link_preview_options: { is_disabled: true }, protect_content: true }, transport);
 }

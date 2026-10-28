@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { writeDiagnostic } from "@/lib/diagnostics";
 import { getTelegramConfig } from "./config";
 import { sendTelegram, telegramOrderText, TelegramError } from "./client";
-export async function processTelegramOrder(transport: typeof fetch = fetch) {
+import { telegramFetch } from "./transport";
+export async function processTelegramOrder(transport: typeof fetch = telegramFetch) {
   const job = await prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412041)`;
     // A crash during sending has an unknown outcome: do not resend blindly.
