@@ -12,6 +12,15 @@ TLS is verified end-to-end on the shop VPS. The relay never decrypts or logs bot
 URLs, messages or tokens. Order messages contain only the existing opaque,
 authenticated administrator link, with previews disabled, not buyer data.
 
+For pre-existing images, `preload.mjs` can be mounted read-only alongside a
+separate pinned Undici 7.30.1 installation at
+`/opt/3dprinta/shared/telegram-runtime`. `compose.runtime.yaml` documents the
+current host overlay (including its unchanged ISPmanager ports). Check the
+existing overlay before merging: never overwrite unrelated host settings.
+The preload forwards only Telegram calls lacking an explicit dispatcher; other
+integrations pass through untouched. It remains compatible with the newer
+native transport and does not modify files inside immutable container images.
+
 Deploy the two files to `/opt/sidzen-telegram-relay/relay.py` (0644) and
 `/etc/systemd/system/sidzen-telegram-relay.service` (0644), then run
 `systemd-analyze verify /etc/systemd/system/sidzen-telegram-relay.service`,

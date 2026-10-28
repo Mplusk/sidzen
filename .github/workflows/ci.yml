@@ -97,7 +97,7 @@ jobs:
     needs: verify
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     environment:
       name: production
       url: https://sidzen.shop
@@ -122,7 +122,7 @@ jobs:
           docker build --build-arg NODE_BASE_IMAGE="$node_base_image" --target runner -t "3dprinta-app:${GITHUB_SHA}" .
           docker build --build-arg NODE_BASE_IMAGE="$node_base_image" --target migrator -t "3dprinta-migrate:${GITHUB_SHA}" .
           docker build --build-arg NODE_BASE_IMAGE="$node_base_image" --target marketplace-worker -t "3dprinta-marketplace-worker:${GITHUB_SHA}" .
-          docker image save "3dprinta-app:${GITHUB_SHA}" "3dprinta-migrate:${GITHUB_SHA}" "3dprinta-marketplace-worker:${GITHUB_SHA}" | gzip -1 > "${RUNNER_TEMP}/3dprinta-${GITHUB_SHA}.images.tar.gz"
+          docker image save "3dprinta-app:${GITHUB_SHA}" "3dprinta-migrate:${GITHUB_SHA}" "3dprinta-marketplace-worker:${GITHUB_SHA}" | gzip -9 > "${RUNNER_TEMP}/3dprinta-${GITHUB_SHA}.images.tar.gz"
 
       - name: Configure deploy SSH key
         env:

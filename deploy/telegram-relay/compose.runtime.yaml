@@ -1,0 +1,17 @@
+# Preserve the existing ISPmanager port ownership.
+services:
+  proxy:
+    ports: !override
+      - "127.0.0.1:8080:80"
+      - "443:443"
+      - "443:443/udp"
+  app:
+    environment:
+      NODE_OPTIONS: "--import /opt/sidzen-telegram-runtime/preload.mjs"
+    volumes:
+      - /opt/3dprinta/shared/telegram-runtime:/opt/sidzen-telegram-runtime:ro
+  marketplace-worker:
+    environment:
+      NODE_OPTIONS: "--max-old-space-size=256 --import /opt/sidzen-telegram-runtime/preload.mjs"
+    volumes:
+      - /opt/3dprinta/shared/telegram-runtime:/opt/sidzen-telegram-runtime:ro
