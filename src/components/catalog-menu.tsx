@@ -49,7 +49,7 @@ export function CatalogMenu({ categories, logo, search, actions }: {
   return <div ref={menu} className="container header-catalog-menu" data-open={open}>
     <div className="header-main">
       {logo}
-      <button type="button" className="header-catalog" aria-expanded={open} aria-controls={id}
+      <button type="button" className="header-catalog" aria-label="Каталог" aria-expanded={open} aria-controls={id}
         onPointerDown={() => { scrollBeforeToggle.current = window.scrollY; }}
         onPointerCancel={() => { scrollBeforeToggle.current = null; }}
         onPointerLeave={() => { scrollBeforeToggle.current = null; }}

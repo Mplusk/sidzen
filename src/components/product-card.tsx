@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 import { formatPrice } from "@/lib/format";
 import { productOptionInclude, productOptions } from "@/lib/product-options-server";
 import { defaultProductPrice } from "@/lib/product-options";
+import { FavoriteButton } from "@/components/favorite-button";
 
 type ProductCardData = Prisma.ProductGetPayload<{ include: typeof productOptionInclude & { images: true; categories: { include: { category: true } } } }>;
 
@@ -13,7 +14,7 @@ export function ProductCard({ product, highPriority = false }: { product: Produc
   const discounted = product.oldPrice && Number(product.oldPrice) > price;
   return (
     <article className="product-card">
-      <ProductGallery images={product.images.map(({ path, alt, caption }) => ({ path, alt, caption }))} name={product.name} badge={product.badge} href={`/catalog/${category?.slug ?? "products"}/${product.slug}/`} compact highPriority={highPriority} />
+      <div className="product-card__media"><ProductGallery images={product.images.map(({ path, alt, caption, width, height }) => ({ path, alt, caption, width, height }))} name={product.name} badge={product.badge} href={`/catalog/${category?.slug ?? "products"}/${product.slug}/`} compact highPriority={highPriority} /><FavoriteButton productId={product.id} name={product.name} /></div>
       <div className="product-card__body">
         <div className={"product-card__price" + (discounted ? " product-card__price--sale" : "")}>
           <strong>{formatPrice(price)}</strong>

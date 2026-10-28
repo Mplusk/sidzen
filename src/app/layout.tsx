@@ -5,6 +5,8 @@ import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { PageViewCounter } from "@/components/page-view-counter";
 import { Suspense } from "react";
+import { ShoppingState } from "@/components/shopping-state";
+import { getFavoriteIds, getCartQuantity } from "@/lib/favorites-server";
 import "leaflet/dist/leaflet.css";
 import "@fontsource-variable/inter/opsz.css";
 import "./globals.css";
@@ -25,15 +27,15 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#f8f5ef", colorScheme: "light" };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const contacts = await getStoreContacts();
+  const [contacts, favorites, cartQuantity] = await Promise.all([getStoreContacts(), getFavoriteIds(), getCartQuantity()]);
   return (
     <html lang="ru">
       <body>
         <a className="skip-link" href="#main">К содержимому</a>
         <JsonLd data={{ "@context": "https://schema.org", "@type": "Organization", "@id": "https://sidzen.shop/#organization", name: "SIDZEN", url: "https://sidzen.shop", logo: "https://sidzen.shop/icon-512.png", ...(contacts.legalName ? { legalName: contacts.legalName } : {}), ...(contacts.phone ? { telephone: contacts.phone } : {}), ...(contacts.email ? { email: contacts.email } : {}) }} />
-        <Header />
+        <ShoppingState ids={favorites} cartQuantity={cartQuantity}><Header />
         <main id="main">{children}</main>
-        <Footer />
+        <Footer /></ShoppingState>
         <Suspense fallback={null}><PageViewCounter /></Suspense>
       </body>
     </html>

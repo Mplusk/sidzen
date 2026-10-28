@@ -1,7 +1,6 @@
 import { Logo } from "@/components/logo";
-import { CartIcon, UserIcon } from "@/components/icons";
+import { HeaderShoppingActions } from "@/components/header-shopping-actions";
 import { CatalogSearchInput } from "@/components/catalog-search-input";
-import { NavLink } from "@/components/nav-link";
 import { CatalogMenu } from "@/components/catalog-menu";
 import { getCatalogMenuCategories } from "@/lib/catalog";
 
@@ -15,10 +14,7 @@ export async function Header() {
         </div>
       </div>
       <CatalogMenu categories={categories} logo={<Logo />} search={<CatalogSearchInput />} actions={
-        <nav className="header-actions" aria-label="Основная навигация">
-          <NavLink href="/account/" aria-label="Личный кабинет" exact={false}><UserIcon aria-hidden="true" /><span>Кабинет</span></NavLink>
-          <NavLink href="/cart/" aria-label="Корзина"><CartIcon aria-hidden="true" /><span>Корзина</span></NavLink>
-        </nav>
+        <HeaderShoppingActions />
       } />
     </header>
   );

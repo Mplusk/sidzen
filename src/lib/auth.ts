@@ -3,6 +3,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { mergeGuestFavorites } from "@/lib/favorites-merge";
 
 export const SESSION_COOKIE = "3dp_session";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
@@ -28,6 +29,8 @@ export async function createSession(userId: string) {
     path: "/",
     maxAge: SESSION_MAX_AGE_SECONDS,
   });
+  // A temporary wishlist failure must not prevent a successful sign-in.
+  await mergeGuestFavorites(userId).catch(() => {});
 }
 
 export async function destroySession() {

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ProductCard } from "@/components/product-card";
 import { defaultProductPrice } from "@/lib/product-options";
 import { ProductGallery } from "@/components/product-gallery";
+import { FavoriteButton } from "@/components/favorite-button";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -82,7 +83,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
         <div className="product-detail__grid">
           <ProductGallery key={product.id} images={product.images.map(({ path, alt, caption, width, height }) => ({ path, alt, caption, width, height }))} name={product.name} badge={product.badge} />
           <div className="product-summary">
-            <span className="product-summary__sku">Артикул: {product.sku}</span>
+            <div className="product-summary__tools"><span className="product-summary__sku">Артикул: {product.sku}</span><FavoriteButton productId={product.id} name={product.name} /></div>
             <h1>{product.h1 ?? product.name}</h1>
             <p className="product-mobile-price">{formatPrice(defaultPrice)}<small>за 1 шт.</small></p>
             <a className="product-rating" href="#reviews-heading">{reviewCount ? `★ ${rating.toFixed(1)} · ${reviewCount} ${pluralRu(reviewCount, ["отзыв", "отзыва", "отзывов"])}` : "Отзывы покупателей"}</a>

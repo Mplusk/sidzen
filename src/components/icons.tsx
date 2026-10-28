@@ -12,6 +12,10 @@ export function UserIcon(props: IconProps) {
   return <svg {...base} {...props}><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></svg>;
 }
 
+export function HeartIcon(props: IconProps) {
+  return <svg {...base} {...props}><path d="M20.8 4.8a5.5 5.5 0 0 0-7.8 0L12 5.9l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.4a5.5 5.5 0 0 0 0-7.8Z" /></svg>;
+}
+
 export function SearchIcon(props: IconProps) {
   return <svg {...base} {...props}><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>;
 }

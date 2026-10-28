@@ -117,6 +117,7 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
   await sendOrderConfirmation(order.id).catch(() => undefined);
   revalidatePath("/admin", "layout");
   revalidatePath("/account", "layout");
+  revalidatePath("/", "layout");
   redirect(`/checkout/success/${order.number}/`);
 }
 

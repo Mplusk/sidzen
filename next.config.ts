@@ -20,7 +20,7 @@ const nextConfig: NextConfig = {
     return [
       { source: "/", destination: "/catalog/", permanent: true },
       ...catalogOnlySections.map((section) => ({ source: `/${section}/:path*`, destination: "/catalog/", permanent: true })),
-      { source: "/account/favorites/:path*", destination: "/account/", permanent: true },
+      { source: "/account/favorites/:path*", destination: "/favorites/", permanent: true },
     ];
   },
   async headers() {
@@ -42,7 +42,7 @@ const nextConfig: NextConfig = {
         ]
       },
       {
-        source: "/:section(account|admin|checkout|cart|login|register|api/account|api/auth)/:path*",
+        source: "/:section(account|admin|checkout|cart|favorites|login|register|api/account|api/auth)/:path*",
         headers: [{ key: "Cache-Control", value: "private, no-store, max-age=0" }, { key: "X-Robots-Tag", value: "noindex, nofollow" }]
       }
     ];

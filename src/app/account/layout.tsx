@@ -4,7 +4,7 @@ import { CollapsibleNavigation } from "@/components/collapsible-navigation";
 import { requireUser } from "@/lib/auth";
 import { logoutAction } from "@/app/actions/auth";
 
-const links = [["Обзор", "/account/"], ["Заказы", "/account/orders/"], ["Мои отзывы", "/account/reviews/"], ["Профиль", "/account/profile/"]];
+const links = [["Обзор", "/account/"], ["Заказы", "/account/orders/"], ["Избранное", "/favorites/"], ["Мои отзывы", "/account/reviews/"], ["Профиль", "/account/profile/"]];
 
 export default async function AccountLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();

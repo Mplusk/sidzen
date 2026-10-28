@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from "react";
 import { ArrowIcon } from "@/components/icons";
 
 type GalleryImage = { path: string; alt: string; caption?: string | null; width?: number | null; height?: number | null };
@@ -17,7 +17,7 @@ export function ProductGallery({ images, name, badge, href, compact = false, hig
 }) {
   const [active, setActive] = useState(0);
   const [loadedPaths, setLoadedPaths] = useState<Set<string>>(() => new Set());
-  const [measured, setMeasured] = useState<{ path: string; ratio: number } | null>(null);
+  const [measured, setMeasured] = useState<Record<string, number>>({});
   const viewport = useRef<HTMLDivElement>(null);
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
   const swiped = useRef(false);
@@ -44,7 +44,20 @@ export function ProductGallery({ images, name, badge, href, compact = false, hig
     for (const slide of node.children) observer.observe(slide);
     return () => observer.disconnect();
   }, [images, reveal]);
-  const ratio = first?.width && first.height ? first.width / first.height : measured?.path === first?.path ? measured?.ratio : undefined;
+  const ratio = first?.width && first.height ? first.width / first.height : first ? measured[first.path] : undefined;
+  const measurePhoto = (event: SyntheticEvent<HTMLImageElement>, item: GalleryImage) => {
+    if (item.width && item.height) return;
+    const photo = event.currentTarget;
+    if (photo.naturalWidth > 0 && photo.naturalHeight > 0) {
+      const value = photo.naturalWidth / photo.naturalHeight;
+      setMeasured(previous => previous[item.path] === value ? previous : { ...previous, [item.path]: value });
+    }
+  };
+  const compactPhotoStyle = (item: GalleryImage) => {
+    const aspect = item.width && item.height ? item.width / item.height : measured[item.path] ?? 4 / 5;
+    // Round the bitmap itself, including portrait photos letterboxed in the 4:5 frame.
+    return { width: `${Math.min(100, 100 * aspect / .8)}%`, height: `${Math.min(100, 100 * .8 / aspect)}%` };
+  };
   const select = (index: number) => {
     const node = viewport.current;
     if (!node || !images.length) return;
@@ -85,11 +98,8 @@ export function ProductGallery({ images, name, badge, href, compact = false, hig
         onClickCapture={(event) => { if (swiped.current) { event.preventDefault(); swiped.current = false; } }}>
         {images.length ? images.map((item, index) => <div className="product-gallery__slide" key={`${item.path}-${index}`} data-image-path={item.path} aria-hidden={index !== active}>
           {href ? <Link className="product-gallery__photo" href={href} tabIndex={index === active ? 0 : -1} aria-label={`Открыть товар: ${name}`}>
-            {index === 0 || loadedPaths.has(item.path) ? <Image src={item.path} alt={`${item.alt || name} — фото ${index + 1}`} fill loading={highPriority && index === 0 ? "eager" : "lazy"} fetchPriority={highPriority && index === 0 ? "high" : undefined} sizes="(max-width: 600px) 48vw, (max-width: 900px) 32vw, (max-width: 1200px) 24vw, (max-width: 1600px) 19vw, 250px" /> : <span className="gallery-image-placeholder" aria-hidden="true" />}
-          </Link> : <div className="product-gallery__photo">{index === 0 || loadedPaths.has(item.path) ? <Image src={item.path} alt={`${item.alt || name} — фото ${index + 1}`} fill preload={!compact && index === 0} sizes="(max-width: 700px) 94vw, (max-width: 1200px) 45vw, 480px" onLoad={index === 0 && !compact && !(first?.width && first.height) ? event => {
-            const photo = event.currentTarget;
-            if (photo.naturalWidth > 0 && photo.naturalHeight > 0) setMeasured({ path: item.path, ratio: photo.naturalWidth / photo.naturalHeight });
-          } : undefined} /> : <span className="gallery-image-placeholder" aria-hidden="true" />}</div>}
+            {index === 0 || loadedPaths.has(item.path) ? <Image src={item.path} alt={`${item.alt || name} — фото ${index + 1}`} {...(compact ? { width: item.width || 900, height: item.height || 1200, style: compactPhotoStyle(item) } : { fill: true })} onLoad={event => measurePhoto(event, item)} loading={highPriority && index === 0 ? "eager" : "lazy"} fetchPriority={highPriority && index === 0 ? "high" : undefined} sizes="(max-width: 600px) 48vw, (max-width: 900px) 32vw, (max-width: 1200px) 24vw, (max-width: 1600px) 19vw, 250px" /> : <span className="gallery-image-placeholder" aria-hidden="true" />}
+          </Link> : <div className="product-gallery__photo">{index === 0 || loadedPaths.has(item.path) ? <Image src={item.path} alt={`${item.alt || name} — фото ${index + 1}`} fill preload={!compact && index === 0} sizes="(max-width: 700px) 94vw, (max-width: 1200px) 45vw, 480px" onLoad={event => measurePhoto(event, item)} /> : <span className="gallery-image-placeholder" aria-hidden="true" />}</div>}
         </div>) : href ? <Link className="product-gallery__photo" href={href} aria-label={`Открыть товар: ${name}`}><span className="image-placeholder">3D</span></Link> : <span className="image-placeholder">3D</span>}
       </div>
       {badge && <span className="badge">{badge}</span>}

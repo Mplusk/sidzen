@@ -1,10 +1,12 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 
-it("keeps the header focused on catalog, search, account and cart", () => {
+it("keeps the header focused on catalog, search and shopping actions", () => {
   const header = readFileSync(new URL("./header.tsx", import.meta.url), "utf8");
   for (const removed of ["/delivery/", "/contacts/", "mailto:", "getStoreContacts"]) expect(header).not.toContain(removed);
-  for (const retained of ["CatalogSearchInput", "/account/", "/cart/"]) expect(header).toContain(retained);
+  for (const retained of ["CatalogSearchInput", "HeaderShoppingActions"]) expect(header).toContain(retained);
+  const actions = readFileSync(new URL("./header-shopping-actions.tsx", import.meta.url), "utf8");
+  for (const retained of ["/account/", "/favorites/", "/cart/"]) expect(actions).toContain(retained);
   const search = readFileSync(new URL("./catalog-search-input.tsx", import.meta.url), "utf8");
   expect(search).toContain('className="header-search"'); expect(search).toContain('action="/catalog/"');
 });

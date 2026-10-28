@@ -3,6 +3,7 @@
 import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { defaultSelection, priceProduct, type ProductSelection } from "@/lib/product-options";
@@ -41,6 +42,7 @@ async function saveProduct(formData: FormData, editing: boolean) {
   } else {
     await prisma.cartItem.create({ data: { cartId: cart.id, productId: product.id, ...data } });
   }
+  revalidatePath("/", "layout");
   redirect("/cart/");
 }
 
@@ -50,6 +52,7 @@ export async function updateCartItem(formData: FormData) { return saveProduct(fo
 export async function removeCartItem(formData: FormData) {
   const cart = await getOrCreateCart();
   await prisma.cartItem.deleteMany({ where: { id: String(formData.get("id") ?? ""), cartId: cart.id } });
+  revalidatePath("/", "layout");
   redirect("/cart/");
 }
 
