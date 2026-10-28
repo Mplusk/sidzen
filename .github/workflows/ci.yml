@@ -125,6 +125,24 @@ jobs:
           docker build --build-arg NODE_BASE_IMAGE="$node_base_image" --target marketplace-worker -t "3dprinta-marketplace-worker:${GITHUB_SHA}" .
           docker image save "3dprinta-app:${GITHUB_SHA}" "3dprinta-migrate:${GITHUB_SHA}" "3dprinta-marketplace-worker:${GITHUB_SHA}" | gzip -9 > "${RUNNER_TEMP}/3dprinta-${GITHUB_SHA}.images.tar.gz"
 
+      # Keep the exact verified build recoverable when the runner-to-VPS link stalls.
+      - name: Checksum immutable release files
+        run: |
+          cd "${RUNNER_TEMP}"
+          sha256sum "3dprinta-${GITHUB_SHA}.tar.gz" "3dprinta-${GITHUB_SHA}.images.tar.gz" > "3dprinta-${GITHUB_SHA}.sha256"
+
+      - name: Retain verified release for transfer recovery
+        uses: actions/upload-artifact@v4
+        with:
+          name: sidzen-release-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/3dprinta-${{ github.sha }}.tar.gz
+            ${{ runner.temp }}/3dprinta-${{ github.sha }}.images.tar.gz
+            ${{ runner.temp }}/3dprinta-${{ github.sha }}.sha256
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+
       - name: Configure deploy SSH key
         env:
           DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
