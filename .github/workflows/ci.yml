@@ -43,6 +43,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: python3 -m unittest discover -s deploy/telegram-relay -p 'test_*.py'
+      - run: python3 -m unittest discover -s scripts -p 'test_registry_release_manifest.py'
       - name: Verify marketplace database synchronization with fixture APIs
         env:
           DATABASE_URL: postgresql://postgres:ci-qa-only@127.0.0.1:5432/shop_qa
@@ -93,43 +94,66 @@ jobs:
           pnpm exec tsx scripts/smoke-reviews-http.ts
           pnpm exec tsx scripts/smoke-applications-http.ts
 
-  deploy:
-    name: Deploy production
+  publish:
+    name: Publish verified container images
     needs: verify
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-    environment:
-      name: production
-      url: https://sidzen.shop
-    concurrency:
-      group: production-deploy
-      cancel-in-progress: false
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REGISTRY_PREFIX: ghcr.io/cossomoj/sidzen
     steps:
       - uses: actions/checkout@v4
 
       - name: Create immutable release archive
         run: git archive --format=tar.gz --output="${RUNNER_TEMP}/3dprinta-${GITHUB_SHA}.tar.gz" "${GITHUB_SHA}"
 
-      - name: Build immutable images on the runner, not the small production VPS
+      - name: Build and publish content-addressed images
         env:
           NODE_BASE_IMAGE: public.ecr.aws/docker/library/node:22-bookworm-slim
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           node_base_image="${NODE_BASE_IMAGE}"
           if ! docker pull "$node_base_image"; then
             node_base_image="node:22-bookworm-slim"
             docker pull "$node_base_image"
           fi
-          docker build --build-arg NODE_BASE_IMAGE="$node_base_image" --target runner -t "3dprinta-app:${GITHUB_SHA}" .
-          docker build --build-arg NODE_BASE_IMAGE="$node_base_image" --target migrator -t "3dprinta-migrate:${GITHUB_SHA}" .
-          docker build --build-arg NODE_BASE_IMAGE="$node_base_image" --target marketplace-worker -t "3dprinta-marketplace-worker:${GITHUB_SHA}" .
-          docker image save "3dprinta-app:${GITHUB_SHA}" "3dprinta-migrate:${GITHUB_SHA}" "3dprinta-marketplace-worker:${GITHUB_SHA}" | gzip -9 > "${RUNNER_TEMP}/3dprinta-${GITHUB_SHA}.images.tar.gz"
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          for specification in app:runner migrate:migrator marketplace-worker:marketplace-worker; do
+            component="${specification%%:*}"
+            target="${specification#*:}"
+            docker build --build-arg NODE_BASE_IMAGE="$node_base_image" --target "$target" --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" --label "org.opencontainers.image.revision=${GITHUB_SHA}" -t "${REGISTRY_PREFIX}-${component}:${GITHUB_SHA}" .
+            docker push "${REGISTRY_PREFIX}-${component}:${GITHUB_SHA}"
+          done
+          python_base_image="public.ecr.aws/docker/library/python:3.12-alpine"
+          if ! docker pull "$python_base_image"; then
+            python_base_image="python:3.12-alpine"
+            docker pull "$python_base_image"
+          fi
+          docker build --build-arg PYTHON_BASE_IMAGE="$python_base_image" --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" --label "org.opencontainers.image.revision=${GITHUB_SHA}" -t "${REGISTRY_PREFIX}-telegram-relay:${GITHUB_SHA}" deploy/telegram-relay
+          docker push "${REGISTRY_PREFIX}-telegram-relay:${GITHUB_SHA}"
+          python3 - <<'PY'
+          import hashlib, json, os, subprocess
+          sha, prefix, folder = os.environ['GITHUB_SHA'], os.environ['REGISTRY_PREFIX'], os.environ['RUNNER_TEMP']
+          images = {}
+          for component in ['app', 'migrate', 'marketplace-worker', 'telegram-relay']:
+              name = prefix + '-' + component
+              info = json.loads(subprocess.check_output(['docker', 'image', 'inspect', name + ':' + sha]))[0]
+              images[component] = next(ref for ref in info['RepoDigests'] if ref.startswith(name + '@sha256:'))
+          with open(folder + '/3dprinta-' + sha + '.tar.gz', 'rb') as source:
+              checksum = hashlib.sha256(source.read()).hexdigest()
+          with open(folder + '/3dprinta-' + sha + '.images.json', 'w') as output:
+              json.dump({'version': 1, 'revision': sha, 'sourceSha256': checksum, 'images': images}, output)
+          PY
 
       # Keep the exact verified build recoverable when the runner-to-VPS link stalls.
       - name: Checksum immutable release files
         run: |
           cd "${RUNNER_TEMP}"
-          sha256sum "3dprinta-${GITHUB_SHA}.tar.gz" "3dprinta-${GITHUB_SHA}.images.tar.gz" > "3dprinta-${GITHUB_SHA}.sha256"
+          sha256sum "3dprinta-${GITHUB_SHA}.tar.gz" "3dprinta-${GITHUB_SHA}.images.json" > "3dprinta-${GITHUB_SHA}.sha256"
 
       - name: Retain verified release for transfer recovery
         uses: actions/upload-artifact@v4
@@ -137,12 +161,34 @@ jobs:
           name: sidzen-release-${{ github.sha }}
           path: |
             ${{ runner.temp }}/3dprinta-${{ github.sha }}.tar.gz
-            ${{ runner.temp }}/3dprinta-${{ github.sha }}.images.tar.gz
+            ${{ runner.temp }}/3dprinta-${{ github.sha }}.images.json
             ${{ runner.temp }}/3dprinta-${{ github.sha }}.sha256
           compression-level: 0
           retention-days: 1
           if-no-files-found: error
 
+  deploy:
+    name: Deploy Russian storefront
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    environment:
+      name: production
+      url: https://sidzen.shop
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    env:
+      REGISTRY_PREFIX: ghcr.io/cossomoj/sidzen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: sidzen-release-${{ github.sha }}
+          path: release
       - name: Configure deploy SSH key
         env:
           DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
@@ -154,23 +200,27 @@ jobs:
           chmod 0600 "${HOME}/.ssh/3dprinta_deploy" "${HOME}/.ssh/known_hosts"
           ssh-keygen -y -f "${HOME}/.ssh/3dprinta_deploy" > /dev/null
 
-      - name: Upload release
+      - name: Upload small release manifest and activation scripts
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         run: |
           ssh_options=(-i "${HOME}/.ssh/3dprinta_deploy" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15)
           ssh "${ssh_options[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" "install -d -m 0750 /opt/3dprinta/incoming"
-          scp "${ssh_options[@]}" "${RUNNER_TEMP}/3dprinta-${GITHUB_SHA}.tar.gz" "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/3dprinta/incoming/${GITHUB_SHA}.tar.gz"
-          scp "${ssh_options[@]}" "${RUNNER_TEMP}/3dprinta-${GITHUB_SHA}.images.tar.gz" "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/3dprinta/incoming/${GITHUB_SHA}.images.tar.gz"
+          scp "${ssh_options[@]}" "release/3dprinta-${GITHUB_SHA}.tar.gz" "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/3dprinta/incoming/${GITHUB_SHA}.tar.gz"
+          scp "${ssh_options[@]}" "release/3dprinta-${GITHUB_SHA}.images.json" "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/3dprinta/incoming/${GITHUB_SHA}.images.json"
+          scp "${ssh_options[@]}" scripts/registry-release-manifest.py "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/3dprinta/incoming/${GITHUB_SHA}.manifest-validator.py"
+          scp "${ssh_options[@]}" scripts/deploy-registry-release.sh "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/3dprinta/incoming/${GITHUB_SHA}.registry-deploy.sh"
+          scp "${ssh_options[@]}" scripts/deploy-release.sh "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/3dprinta/incoming/${GITHUB_SHA}.activate.sh"
 
       - name: Activate release and clean previous versions
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ssh_options=(-i "${HOME}/.ssh/3dprinta_deploy" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=20)
-          ssh "${ssh_options[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" "DEPLOY_PREBUILT_IMAGES=true bash -s -- '${GITHUB_SHA}'" < scripts/deploy-release.sh
+          printf '%s\n' "$REGISTRY_TOKEN" | ssh "${ssh_options[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" "bash '/opt/3dprinta/incoming/${GITHUB_SHA}.registry-deploy.sh' '${GITHUB_SHA}' '${REGISTRY_PREFIX}' '${GITHUB_ACTOR}'"
 
       - name: Verify the active release and marketplace worker
         env:
@@ -183,3 +233,50 @@ jobs:
       - name: Remove runner credentials
         if: always()
         run: rm -f -- "${HOME}/.ssh/3dprinta_deploy"
+
+  deploy_telegram:
+    name: Deploy Docker Telegram relay
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+    environment: production
+    concurrency:
+      group: sidzen-telegram-relay-deploy
+      cancel-in-progress: false
+    env:
+      REGISTRY_PREFIX: ghcr.io/cossomoj/sidzen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: sidzen-release-${{ github.sha }}
+          path: release
+      - name: Configure relay SSH identity
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+        run: |
+          install -d -m 0700 "${HOME}/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > "${HOME}/.ssh/relay_deploy"
+          cp deploy/telegram-relay/known_hosts "${HOME}/.ssh/relay_known_hosts"
+          chmod 0600 "${HOME}/.ssh/relay_deploy" "${HOME}/.ssh/relay_known_hosts"
+      - name: Upload only Telegram service sources
+        run: |
+          ssh_options=(-i "${HOME}/.ssh/relay_deploy" -o UserKnownHostsFile="${HOME}/.ssh/relay_known_hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15)
+          relay_root="/opt/sidzen-telegram-relay/releases/${GITHUB_SHA}"
+          tar -czf "${RUNNER_TEMP}/telegram-relay.tar.gz" deploy/telegram-relay/compose.yaml scripts/deploy-telegram-relay.sh scripts/provision-docker-host.sh scripts/registry-release-manifest.py
+          ssh "${ssh_options[@]}" root@185.196.41.131 "install -d -m 0750 '${relay_root}'"
+          scp "${ssh_options[@]}" "${RUNNER_TEMP}/telegram-relay.tar.gz" "root@185.196.41.131:${relay_root}/relay-sources.tar.gz"
+          scp "${ssh_options[@]}" "release/3dprinta-${GITHUB_SHA}.images.json" "root@185.196.41.131:${relay_root}/images.json"
+          ssh "${ssh_options[@]}" root@185.196.41.131 "tar -xzf '${relay_root}/relay-sources.tar.gz' -C '${relay_root}'"
+      - name: Provision Docker and activate the Telegram-only container
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ssh_options=(-i "${HOME}/.ssh/relay_deploy" -o UserKnownHostsFile="${HOME}/.ssh/relay_known_hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=20)
+          printf '%s\n' "$REGISTRY_TOKEN" | ssh "${ssh_options[@]}" root@185.196.41.131 "bash '/opt/sidzen-telegram-relay/releases/${GITHUB_SHA}/scripts/deploy-telegram-relay.sh' '${GITHUB_SHA}' '${REGISTRY_PREFIX}' '${GITHUB_ACTOR}'"
+      - name: Remove relay runner credentials
+        if: always()
+        run: rm -f -- "${HOME}/.ssh/relay_deploy"

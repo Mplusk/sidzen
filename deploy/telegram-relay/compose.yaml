@@ -1,0 +1,30 @@
+name: sidzen-telegram-relay
+services:
+  relay:
+    image: ${RELAY_IMAGE:?Pinned relay image digest is required}
+    restart: unless-stopped
+    # Retain the real source IP and the existing host firewall behavior.
+    network_mode: host
+    environment:
+      SHOP_SOURCE_IP: 92.63.101.127
+      RELAY_LISTEN_IP: 185.196.41.131
+      RELAY_PORT: "18443"
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m,noexec,nosuid
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 32
+    mem_limit: 64m
+    cpus: 0.25
+    healthcheck:
+      test: [CMD, python, -c, "import socket; socket.create_connection(('185.196.41.131',18443),2).close()"]
+      interval: 20s
+      timeout: 4s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"

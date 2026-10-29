@@ -21,12 +21,20 @@ The preload forwards only Telegram calls lacking an explicit dispatcher; other
 integrations pass through untouched. It remains compatible with the newer
 native transport and does not modify files inside immutable container images.
 
-Deploy the two files to `/opt/sidzen-telegram-relay/relay.py` (0644) and
-`/etc/systemd/system/sidzen-telegram-relay.service` (0644), then run
-`systemd-analyze verify /etc/systemd/system/sidzen-telegram-relay.service`,
-`systemctl daemon-reload` and `systemctl enable --now sidzen-telegram-relay`.
-The service runs as a restricted dynamic user, with memory/concurrency/time
-limits. Do not disable or overwrite the host's existing firewall or services.
+The `Deploy Docker Telegram relay` GitHub Actions job publishes this service.
+After verification, CI builds the image, pushes it to the private GHCR package,
+and deploys its content digest. It installs Docker Engine and Compose from the
+official Docker Ubuntu repository on the first run. Only relay configuration
+and deployment scripts are uploaded to this host; shop images and the shop
+database remain on the Russian VPS. See [CI/CD](../CI_CD.md).
+
+`compose.yaml` retains the existing source-IP check and listening address with
+host networking. It exposes no new Docker ports, has no Docker socket mount,
+and runs as UID 10001 with a read-only filesystem, no capabilities, 64 MiB memory
+and 32-process limits. Docker uses bounded logs and restart-unless-stopped.
+The previous systemd service stops only after the image is available; on failed
+container health the job restarts it. After successful migration the old unit is
+disabled. Do not disable or overwrite the host's firewall or unrelated services.
 
 Set `TELEGRAM_PROXY_URL=http://185.196.41.131:18443` in the shop's protected
 production environment and recreate only app/worker using the current immutable

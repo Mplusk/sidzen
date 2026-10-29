@@ -127,6 +127,13 @@ cleanup_unused_shop_images() {
   # containers before this deploy. Keep rollback images and ALL used images.
   while IFS= read -r old_image; do
     if [[ -n "$old_image" ]] && ! grep -Fxq "$old_image" <<< "$protected_ids" && [[ -z "$(docker ps -aq --filter "ancestor=$old_image")" ]]; then
+      # Registry and local release tags can refer to the same unused image.
+      # Remove only this shop's tags; never force-remove another project's tag.
+      while IFS= read -r reference; do
+        case "$reference" in
+          3dprinta-app:*|3dprinta-migrate:*|3dprinta-marketplace-worker:*|ghcr.io/cossomoj/sidzen-app:*|ghcr.io/cossomoj/sidzen-migrate:*|ghcr.io/cossomoj/sidzen-marketplace-worker:*) docker image rm "$reference" || true ;;
+        esac
+      done < <(docker image inspect --format '{{range .RepoTags}}{{println .}}{{end}}' "$old_image" 2>/dev/null || true)
       docker image rm "$old_image" || true
     fi
   done < <(docker image ls --quiet --no-trunc --filter label=com.3dprinta.project=shop | sort -u)
@@ -197,7 +204,7 @@ python3 "${final_release}/scripts/preserve-proxy-config.py" "$previous_release" 
 
 if [[ "${DEPLOY_PREBUILT_IMAGES:-false}" == true ]]; then
   image_artifact="${incoming_root}/${release_sha}.images.tar.gz"
-  if [[ ! -f "$image_artifact" ]]; then
+  if [[ "${DEPLOY_REQUIRE_LOCAL_IMAGES:-false}" != true && ! -f "$image_artifact" ]]; then
     printf 'Prebuilt image archive is missing.\n' >&2
     exit 2
   fi
@@ -206,6 +213,10 @@ if [[ "${DEPLOY_PREBUILT_IMAGES:-false}" == true ]]; then
   for service_image in app migrate marketplace-worker; do
     if ! docker image inspect "3dprinta-${service_image}:${release_sha}" > /dev/null 2>&1; then images_present=false; fi
   done
+  if [[ "${DEPLOY_REQUIRE_LOCAL_IMAGES:-false}" == true && "$images_present" != true ]]; then
+    printf 'Registry release is missing a verified local image.\n' >&2
+    exit 2
+  fi
   if [[ "$images_present" != true ]]; then
     # Docker stores unpacked layers and compressed blobs. Reserve room for both
     # plus database writes BEFORE loading images or touching working containers.
