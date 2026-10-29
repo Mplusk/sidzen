@@ -10,8 +10,9 @@ import { normalizePageTitle } from "@/lib/seo";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { JsonLd } from "@/components/json-ld";
 import { ProductPurchaseForm } from "@/components/product-purchase-form";
+import { ProductPurchaseState, ProductMobilePrice } from "@/components/product-purchase-state";
 import { productOptionInclude, productOptions } from "@/lib/product-options-server";
-import { formatPrice, pluralRu } from "@/lib/format";
+import { pluralRu } from "@/lib/format";
 import { productSpecificationRows } from "@/lib/product-specifications";
 import { TruckIcon } from "@/components/icons";
 import { ProductReviews } from "@/components/product-reviews";
@@ -80,23 +81,29 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
       <JsonLd data={schema} />
       <Breadcrumbs visible={false} items={[{ label: "Каталог", href: "/catalog/" }, { label: category.name, href: `/catalog/${category.slug}/` }, { label: product.name, href: `/catalog/${category.slug}/${product.slug}/` }]} />
       <article className="container product-detail">
-        <div className="product-detail__grid">
-          <ProductGallery key={product.id} images={product.images.map(({ path, alt, caption, width, height }) => ({ path, alt, caption, width, height }))} name={product.name} badge={product.badge} />
-          <div className="product-summary">
-            <div className="product-summary__tools"><span className="product-summary__sku">Артикул: {product.sku}</span><FavoriteButton productId={product.id} name={product.name} /></div>
-            <h1>{product.h1 ?? product.name}</h1>
-            <p className="product-mobile-price">{formatPrice(defaultPrice)}<small>за 1 шт.</small></p>
-            <a className="product-rating" href="#reviews-heading">{reviewCount ? `★ ${rating.toFixed(1)} · ${reviewCount} ${pluralRu(reviewCount, ["отзыв", "отзыва", "отзывов"])}` : "Отзывы покупателей"}</a>
-            <ProductGroupOptions options={groupOptions} currentId={product.id} />
-            {specs.length > 0 && <section className="product-overview" aria-labelledby="product-overview-heading"><div className="product-overview__heading"><h2 id="product-overview-heading">О товаре</h2><a href="#specifications">Все характеристики</a></div><dl>{specs.slice(0, 6).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl></section>}
-            <a className="product-description-link" href="#description">Перейти к описанию →</a>
+        <ProductPurchaseState product={options} key={product.id}>
+          <div className="product-detail__grid">
+            <div className="product-media">
+              <ProductGallery key={product.id} images={product.images.map(({ path, alt, caption, width, height }) => ({ path, alt, caption, width, height }))} name={product.name} badge={product.badge} mobileActions={<FavoriteButton productId={product.id} name={product.name} />} />
+              <ProductMobilePrice oldPrice={product.oldPrice ? Number(product.oldPrice) : null} />
+            </div>
+            <div className="product-summary">
+              <div className="product-summary__heading">
+                <div className="product-summary__tools"><span className="product-summary__sku">Артикул: {product.sku}</span><FavoriteButton productId={product.id} name={product.name} /></div>
+                <h1>{product.h1 ?? product.name}</h1>
+                <a className="product-rating" href="#reviews-heading">{reviewCount ? `★ ${rating.toFixed(1)} · ${reviewCount} ${pluralRu(reviewCount, ["отзыв", "отзыва", "отзывов"])}` : "Отзывы покупателей"}</a>
+              </div>
+              <ProductGroupOptions options={groupOptions} currentId={product.id} />
+              {specs.length > 0 && <section className="product-overview" aria-labelledby="product-overview-heading"><div className="product-overview__heading"><h2 id="product-overview-heading">О товаре</h2><a href="#specifications">Все характеристики</a></div><dl>{specs.slice(0, 6).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl></section>}
+              <a className="product-description-link" href="#description">Перейти к описанию →</a>
+            </div>
+            <aside className="product-buy-panel" aria-label="Покупка товара">
+              <span className={"stock-label" + (product.stock < 1 && !product.madeToOrder ? " stock-label--unavailable" : "")}>{product.stock > 0 ? `В наличии: ${product.stock} шт.` : product.madeToOrder ? `Под заказ: ${product.leadDays}–${product.leadDays + 2} ${pluralRu(product.leadDays + 2, ["день", "дня", "дней"])}` : "Нет в наличии"}</span>
+              <ProductPurchaseForm product={options} />
+              <Link className="product-delivery-note" href="/delivery/"><TruckIcon aria-hidden="true" /><span>Бесплатная доставка<small>Расходы на перевозчика берёт на себя магазин</small></span></Link>
+            </aside>
           </div>
-          <aside className="product-buy-panel" aria-label="Покупка товара">
-            <span className={"stock-label" + (product.stock < 1 && !product.madeToOrder ? " stock-label--unavailable" : "")}>{product.stock > 0 ? `В наличии: ${product.stock} шт.` : product.madeToOrder ? `Под заказ: ${product.leadDays}–${product.leadDays + 2} ${pluralRu(product.leadDays + 2, ["день", "дня", "дней"])}` : "Нет в наличии"}</span>
-            <ProductPurchaseForm product={options} />
-            <Link className="product-delivery-note" href="/delivery/"><TruckIcon aria-hidden="true" /><span>Бесплатная доставка<small>Расходы на перевозчика берёт на себя магазин</small></span></Link>
-          </aside>
-        </div>
+        </ProductPurchaseState>
         <div className="content-tabs"><nav className="content-tabs__nav"><a href="#description">Описание</a>{specs.length > 0 && <a href="#specifications">Характеристики</a>}<a href="#delivery">Доставка</a></nav><div className="rich-text"><h2 id="description">Описание</h2>{description && <p className="product-description">{description}</p>}{product.usage && <p>{product.usage}</p>}{specs.length > 0 && <><h2 id="specifications">Характеристики</h2><table className="spec-table"><tbody>{specs.map(([key, value]) => <tr key={key}><th scope="row">{key}</th><td>{value}</td></tr>)}</tbody></table></>}<h2 id="delivery">Доставка и уход</h2><p>Доставка для покупателя бесплатная. Доступные способы и ПВЗ можно выбрать при оформлении заказа. {product.instructions}</p></div></div>
         <ProductReviews productId={product.id} path={`/catalog/${category.slug}/${product.slug}/`} total={reviewCount} rating={rating} requestedPage={query.reviewsPage} />
         {related.length > 0 && <section><h2>Вам также может подойти</h2><div className="product-grid">{related.map((item) => <ProductCard key={item.id} product={item} />)}</div></section>}

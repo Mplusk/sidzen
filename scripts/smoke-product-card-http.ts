@@ -79,6 +79,8 @@ try {
   const path = `/catalog/${category.slug}/${product.slug}/`;
   const response = await request(path); assert.equal(response.status, 200);
   let html = await response.text();
+  const detail = html.match(/<article class="container product-detail">[\s\S]*?<\/article>/)?.[0];
+  assert(detail && detail.indexOf('class="product-media"') < detail.indexOf('class="product-mobile-price"') && detail.indexOf('class="product-mobile-price"') < detail.indexOf('<h1>'), "Render photo, current price and title in that order before hydration");
   for (const retired of ['name="quality"', "QA retired", "Высота слоя"]) assert(!html.includes(retired), `Retired choice leaked: ${retired}`);
   assert(!html.includes('aria-label="Хлебные крошки"') && !html.includes('class="container product-breadcrumbs"'));
   assert(html.includes('"@type":"BreadcrumbList"'), "Retain breadcrumb structured data without visible navigation");

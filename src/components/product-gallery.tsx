@@ -2,18 +2,19 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode, type SyntheticEvent } from "react";
 import { ArrowIcon } from "@/components/icons";
 
 type GalleryImage = { path: string; alt: string; caption?: string | null; width?: number | null; height?: number | null };
 
-export function ProductGallery({ images, name, badge, href, compact = false, highPriority = false }: {
+export function ProductGallery({ images, name, badge, href, compact = false, highPriority = false, mobileActions }: {
   images: GalleryImage[];
   name: string;
   badge?: string | null;
   href?: string;
   compact?: boolean;
   highPriority?: boolean;
+  mobileActions?: ReactNode;
 }) {
   const [active, setActive] = useState(0);
   const [loadedPaths, setLoadedPaths] = useState<Set<string>>(() => new Set());
@@ -70,7 +71,7 @@ export function ProductGallery({ images, name, badge, href, compact = false, hig
   };
 
   return <div className={`product-gallery${compact ? " product-gallery--compact" : ""}`} role="region" aria-roledescription="карусель" aria-label={`Фотографии: ${name}`} onPointerEnter={event => { if (event.pointerType === "mouse") prepare(active); }} onFocus={() => prepare(active)}>
-    <div className="product-gallery__main" style={!compact && ratio ? { aspectRatio: ratio } : undefined} tabIndex={images.length > 1 ? 0 : undefined}
+    <div className="product-gallery__main" style={!compact ? { "--gallery-ratio": ratio ?? .8, ...(ratio ? { aspectRatio: ratio } : {}) } as CSSProperties : undefined} tabIndex={images.length > 1 ? 0 : undefined}
       onKeyDown={(event) => {
         if (images.length < 2 || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
         event.preventDefault();
@@ -103,6 +104,7 @@ export function ProductGallery({ images, name, badge, href, compact = false, hig
         </div>) : href ? <Link className="product-gallery__photo" href={href} aria-label={`Открыть товар: ${name}`}><span className="image-placeholder">3D</span></Link> : <span className="image-placeholder">3D</span>}
       </div>
       {badge && <span className="badge">{badge}</span>}
+      {mobileActions && <div className="product-gallery__mobile-actions">{mobileActions}</div>}
       {images.length > 1 && <>
         <button className="gallery-arrow gallery-arrow--previous" type="button" aria-label="Предыдущее фото" onClick={() => select(active - 1)}><ArrowIcon aria-hidden="true" /></button>
         <button className="gallery-arrow gallery-arrow--next" type="button" aria-label="Следующее фото" onClick={() => select(active + 1)}><ArrowIcon aria-hidden="true" /></button>

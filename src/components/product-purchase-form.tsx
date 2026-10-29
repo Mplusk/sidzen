@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import { useFormStatus } from "react-dom";
 import { addProductToCart, updateCartItem } from "@/app/actions/cart";
-import { defaultSelection, priceProduct, type ProductOptions, type ProductSelection } from "@/lib/product-options";
+import { type ProductOptions, type ProductSelection } from "@/lib/product-options";
+import { useProductPurchaseState } from "@/components/product-purchase-state";
 import { formatPrice } from "@/lib/format";
 import { useId } from "react";
 
@@ -14,8 +14,7 @@ function Submit({ editing }: { editing: boolean }) {
 
 export function ProductPurchaseForm({ product, initial, cartItemId }: { product: ProductOptions; initial?: ProductSelection; cartItemId?: string }) {
   const id = useId();
-  const [selection, setSelection] = useState(initial ?? defaultSelection(product));
-  const quote = priceProduct(product, selection);
+  const { selection, setSelection, quote } = useProductPurchaseState(product, initial, Boolean(cartItemId));
   const disabled = !product.madeToOrder && product.stock < selection.quantity;
   return <form id={id} action={cartItemId ? updateCartItem : addProductToCart} className="purchase-form">
     <input type="hidden" name="productId" value={product.id} />
@@ -25,6 +24,6 @@ export function ProductPurchaseForm({ product, initial, cartItemId }: { product:
     {product.colors.length > 0 && <fieldset className="option-block"><legend>Цвет</legend><div className="option-row">{product.colors.map((item) => <label className="option-chip" key={item.id}><input type="radio" name="color" value={item.slug} checked={selection.color === item.slug} onChange={() => setSelection({ ...selection, color: item.slug })} /><span className="color-dot" style={{ "--dot": item.hex } as React.CSSProperties} aria-hidden="true" />{item.name}</label>)}</div></fieldset>}
     <div className="product-actions"><label className="field"><span>Количество</span><input name="quantity" type="number" min="1" max="999" value={selection.quantity} onChange={(event) => setSelection({ ...selection, quantity: Math.max(1, Math.min(999, Math.floor(Number(event.target.value) || 1))) })} /></label>{!disabled && <Submit editing={Boolean(cartItemId)} />}</div>
     {disabled && <p className="notice" role="status">{product.stock > 0 ? `Доступно ${product.stock} шт. Уменьшите количество.` : "Товар временно отсутствует в наличии."}</p>}
-    {!cartItemId && <div className="mobile-purchase-bar" aria-label="Быстрая покупка"><strong>{formatPrice(quote.total)}</strong>{disabled ? <span>{product.stock > 0 ? `Доступно ${product.stock} шт.` : "Нет в наличии"}</span> : <Submit editing={false} />}</div>}
+    {!cartItemId && <div className="mobile-purchase-bar" aria-label="Быстрая покупка"><strong aria-live="polite" aria-atomic="true"><span className="visually-hidden">Итого: </span>{formatPrice(quote.total)}</strong>{disabled ? <span>{product.stock > 0 ? `Доступно ${product.stock} шт.` : "Нет в наличии"}</span> : <Submit editing={false} />}</div>}
   </form>;
 }
