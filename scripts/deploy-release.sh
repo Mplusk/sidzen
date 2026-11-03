@@ -13,6 +13,22 @@ staging_release="${release_root}/${release_sha}.staging"
 final_release="${release_root}/${release_sha}"
 compose_project="3dprinta"
 health_url="http://127.0.0.1:3000/api/health/"
+nginx_alias_target="/etc/nginx/conf.d/sidzen-idn.conf"
+nginx_alias_state=""
+nginx_alias_committed=false
+
+cleanup_nginx_alias() {
+  if [[ -n "$nginx_alias_state" && -d "$nginx_alias_state" ]]; then
+    if [[ "$nginx_alias_committed" != true && -f "$nginx_alias_state/changed" ]]; then
+      if ! bash "${final_release}/scripts/nginx-shop-idn.sh" restore "${final_release}/deploy/nginx/ispmanager-sidzen-idn.conf" "$nginx_alias_target" "" "$nginx_alias_state"; then
+        printf 'Nginx alias rollback requires operator attention; backup retained at %s.\n' "$nginx_alias_state" >&2
+        return
+      fi
+    fi
+    rm -r -- "$nginx_alias_state"
+  fi
+}
+trap cleanup_nginx_alias EXIT
 
 if [[ ! "$release_sha" =~ ^[0-9a-f]{40}$ ]]; then
   printf 'Invalid release SHA: %s\n' "$release_sha" >&2
@@ -245,6 +261,12 @@ printf 'Starting release %s.\n' "$release_sha"
 if ! compose_for "$final_release" run --rm --no-deps proxy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile; then
   rollback "proxy configuration validation"
 fi
+if [[ -f /etc/nginx/conf.d/3dprinta-shop.conf ]]; then
+  nginx_alias_state="$(mktemp -d "${incoming_root}/.nginx-alias.XXXXXX")"
+  if ! bash "${final_release}/scripts/nginx-shop-idn.sh" apply "${final_release}/deploy/nginx/ispmanager-sidzen-idn.conf" "$nginx_alias_target" "${previous_release}/deploy/nginx/ispmanager-sidzen-idn.conf" "$nginx_alias_state"; then
+    rollback "Nginx alias configuration"
+  fi
+fi
 if ! compose_for "$final_release" up -d --no-build --remove-orphans; then
   rollback "container start or migration"
 fi
@@ -276,6 +298,7 @@ temporary_link="${project_root}/.current-${release_sha}"
 if ! (rm -f -- "$temporary_link" && ln -s "$final_release" "$temporary_link" && mv -Tf "$temporary_link" "$current_link"); then
   rollback "current release switch"
 fi
+nginx_alias_committed=true
 
 printf 'Release %s is healthy. Removing caches and previous versions.\n' "$release_sha"
 cleanup_successful_deploy

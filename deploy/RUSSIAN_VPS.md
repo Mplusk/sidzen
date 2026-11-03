@@ -1,7 +1,8 @@
 # Russian VPS deployment
 
 The shop is hosted on `92.63.101.127`. The authoritative DNS A records for
-`sidzen.shop` and `www.sidzen.shop` must point to this address. Leave other
+`sidzen.shop`, `www.sidzen.shop`, `сидзэн.рф` and `www.сидзэн.рф` must point to this address. The Russian-domain aliases redirect to `sidzen.shop`.
+Leave other
 domains and mail records unchanged.
 
 Run `scripts/provision-container-runtime.sh` as root on Ubuntu 24.04. It installs
@@ -15,6 +16,9 @@ configuration and reload it. Copy `deploy/compose-ispmanager.yaml` to
 `/opt/3dprinta/shared/compose.override.yaml`. This routes shop HTTP through
 loopback port 8080; Caddy terminates public HTTPS on port 443. The deployment
 script retains this host-specific overlay for every release and rollback.
+For this specific ISPmanager host, the release script also installs the separate
+`deploy/nginx/ispmanager-sidzen-idn.conf` route with an Nginx validation and
+reload; an existing independently changed alias route is not overwritten.
 
 GitHub Actions builds the three application images on its runner, tags them by
 commit SHA, and uploads them with the matching source archive. Production loads

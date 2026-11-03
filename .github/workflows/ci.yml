@@ -44,6 +44,7 @@ jobs:
       - run: pnpm test
       - run: python3 -m unittest discover -s deploy/telegram-relay -p 'test_*.py'
       - run: python3 -m unittest discover -s scripts -p 'test_registry_release_manifest.py'
+      - run: python3 -m unittest discover -s scripts -p 'test_nginx_shop_idn.py'
       - name: Verify marketplace database synchronization with fixture APIs
         env:
           DATABASE_URL: postgresql://postgres:ci-qa-only@127.0.0.1:5432/shop_qa
@@ -231,6 +232,21 @@ jobs:
         run: |
           ssh_options=(-i "${HOME}/.ssh/3dprinta_deploy" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15)
           ssh "${ssh_options[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" "test \"\$(readlink -f /opt/3dprinta/current)\" = '/opt/3dprinta/releases/${GITHUB_SHA}' && test \"\$(docker inspect --format '{{.State.Health.Status}}' 3dprinta-marketplace-worker-1)\" = healthy" < /dev/null
+
+      - name: Verify Russian-domain HTTPS redirects
+        run: |
+          for host in xn--d1agbwq9e.xn--p1ai www.xn--d1agbwq9e.xn--p1ai; do
+            destination=""
+            for attempt in $(seq 1 24); do
+              destination="$(curl --silent --show-error --max-time 8 --output /dev/null --write-out '%{redirect_url}' "https://${host}/.well-known/sidzen-domain-check?source=ci" 2>/dev/null || true)"
+              if [[ "$destination" == 'https://sidzen.shop/.well-known/sidzen-domain-check?source=ci' ]]; then break; fi
+              sleep 5
+            done
+            if [[ "$destination" != 'https://sidzen.shop/.well-known/sidzen-domain-check?source=ci' ]]; then
+              printf 'HTTPS redirect is not ready for %s.\n' "$host" >&2
+              exit 1
+            fi
+          done
 
       - name: Remove runner credentials
         if: always()

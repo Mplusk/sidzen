@@ -12,3 +12,8 @@ sidzen.shop {
 www.sidzen.shop {
     redir https://sidzen.shop{uri} permanent
 }
+
+# сидзэн.рф and www.сидзэн.рф, encoded as IDNA for TLS and DNS.
+xn--d1agbwq9e.xn--p1ai, www.xn--d1agbwq9e.xn--p1ai {
+    redir https://sidzen.shop{uri} permanent
+}
