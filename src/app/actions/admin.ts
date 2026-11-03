@@ -45,6 +45,7 @@ export async function updateOrderStatusAction(formData: FormData) {
       if (status === "DELIVERED") await queueDerivedReceipt(tx, before.id, "SETTLEMENT");
     }
     const updated = await tx.order.update({ where: { id: before.id }, data: { status: parsed.data.status, internalNote: parsed.data.note || null, privacyClosedAt: terminalOrderStatuses.some(status => status === parsed.data.status) ? before.status === parsed.data.status ? before.privacyClosedAt ?? new Date() : new Date() : null, ...(before.kind === "APPLICATION" ? { purchaseConfirmedAt: parsed.data.status === "DELIVERED" ? before.purchaseConfirmedAt ?? new Date() : null } : {}) } });
+    if (parsed.data.status === "CANCELED") await tx.cdekDeliveryJob.updateMany({ where: { shipment: { orderId: before.id }, status: { notIn: ["CANCELED", "FINISHED"] } }, data: { cancelRequestedAt: new Date(), nextAttemptAt: new Date() } });
     await tx.auditLog.create({ data: { actorId: user.id, action: "order.status.update", entityType: "Order", entityId: before.id, before: { status: before.status }, after: { status: updated.status, deliveryConfirmed: formData.get("deliveryConfirmed") === "on", purchaseConfirmed: Boolean(updated.purchaseConfirmedAt) } } });
     return updated;
   });

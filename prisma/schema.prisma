@@ -703,6 +703,27 @@ model Shipment {
   deliveredAt DateTime?
   order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   ozonJob     OzonDeliveryJob?
+  cdekJob     CdekDeliveryJob?
+}
+
+model CdekDeliveryJob {
+  id String @id @default(cuid())
+  shipmentId String @unique
+  environment String
+  clientId String
+  request Json
+  remoteId String? @unique
+  status String @default("PENDING")
+  error String?
+  attempts Int @default(0)
+  lockedUntil DateTime?
+  lockToken String?
+  nextAttemptAt DateTime @default(now())
+  cancelRequestedAt DateTime?
+  updatedAt DateTime @updatedAt
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  @@index([status, nextAttemptAt])
+  @@index([cancelRequestedAt, nextAttemptAt])
 }
 
 model OzonDeliveryJob {

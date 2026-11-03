@@ -100,7 +100,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
             <aside className="product-buy-panel" aria-label="Покупка товара">
               <span className={"stock-label" + (product.stock < 1 && !product.madeToOrder ? " stock-label--unavailable" : "")}>{product.stock > 0 ? `В наличии: ${product.stock} шт.` : product.madeToOrder ? `Под заказ: ${product.leadDays}–${product.leadDays + 2} ${pluralRu(product.leadDays + 2, ["день", "дня", "дней"])}` : "Нет в наличии"}</span>
               <ProductPurchaseForm product={options} />
-              <Link className="product-delivery-note" href="/delivery/"><TruckIcon aria-hidden="true" /><span>Бесплатная доставка<small>Расходы на перевозчика берёт на себя магазин</small></span></Link>
+              <Link className="product-delivery-note" href="/delivery/"><TruckIcon aria-hidden="true" /><span>Доставка в ПВЗ<small>Условия зависят от выбранного перевозчика</small></span></Link>
             </aside>
           </div>
         </ProductPurchaseState>

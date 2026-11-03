@@ -10,7 +10,7 @@ function showSelection(button: HTMLButtonElement, selected: boolean) {
   button.setAttribute("aria-pressed", String(selected));
 }
 
-export default function OzonPickupMap({ points, selected, onSelect }: { points: PickupPoint[]; selected: string; onSelect: (id: string) => void }) {
+export default function OzonPickupMap({ points, selected, onSelect, carrier = "Ozon" }: { points: PickupPoint[]; selected: string; onSelect: (id: string) => void; carrier?: string }) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markersRef = useRef(new Map<string, L.Marker>());
@@ -62,5 +62,5 @@ export default function OzonPickupMap({ points, selected, onSelect }: { points: 
     }
   }, [points, selected]);
   const focused = initialMapPoints(points).length;
-  return <div className="ozon-map-wrapper"><div ref={container} className="ozon-pickup-map" role="region" aria-label="Карта пунктов выдачи Ozon" />{focused < points.filter(hasPointCoordinates).length && <p className="muted">Карта открыта в районе большинства найденных ПВЗ. Пункты в других районах тоже доступны: выберите адрес в списке — карта перейдёт к нему.</p>}{tileError && <p className="muted" role="status">Подложка карты временно недоступна. ПВЗ можно выбрать по метке или из списка ниже.</p>}</div>;
+  return <div className="ozon-map-wrapper"><div ref={container} className="ozon-pickup-map" role="region" aria-label={`Карта пунктов выдачи ${carrier}`} />{focused < points.filter(hasPointCoordinates).length && <p className="muted">Карта открыта в районе большинства найденных ПВЗ. Пункты в других районах тоже доступны: выберите адрес в списке — карта перейдёт к нему.</p>}{tileError && <p className="muted" role="status">Подложка карты временно недоступна. ПВЗ можно выбрать по метке или из списка ниже.</p>}</div>;
 }

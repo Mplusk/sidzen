@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ permission: vi.fn(), find: vi.fn(), update: vi.fn(), audit: vi.fn(), queue: vi.fn(), transaction: vi.fn() }));
+const m = vi.hoisted(() => ({ permission: vi.fn(), find: vi.fn(), update: vi.fn(), audit: vi.fn(), queue: vi.fn(), transaction: vi.fn(), cancelCdek: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ requirePermission: m.permission }));
 vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: m.transaction } }));
 vi.mock("@/lib/audit", () => ({ writeAudit: vi.fn() }));
@@ -13,7 +13,7 @@ beforeEach(() => {
   vi.resetAllMocks(); m.permission.mockResolvedValue({ id: "staff" });
   m.find.mockResolvedValue({ id: "order", number: "QA-1", kind: "APPLICATION", status: "NEW", deletedAt: null, purchaseConfirmedAt: null, payment: null, fiscalReceipts: [] });
   m.update.mockImplementation(async (query) => ({ id: "order", number: "QA-1", ...query.data }));
-  m.transaction.mockImplementation(callback => callback({ $executeRaw: vi.fn(), order: { findUnique: m.find, update: m.update }, auditLog: { create: m.audit } }));
+  m.transaction.mockImplementation(callback => callback({ $executeRaw: vi.fn(), order: { findUnique: m.find, update: m.update }, auditLog: { create: m.audit }, cdekDeliveryJob: { updateMany: m.cancelCdek } }));
 });
 describe("manual application lifecycle", () => {
   it("requires order write permission", async () => { m.permission.mockRejectedValue(new Error("forbidden")); await expect(updateOrderStatusAction(request("IN_PROGRESS"))).rejects.toThrow("forbidden"); expect(m.transaction).not.toHaveBeenCalled(); });

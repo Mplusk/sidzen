@@ -20,6 +20,11 @@ import { ozonDiagnosticCode, type DiagnosticCode } from "@/lib/diagnostic-events
 import { ozonCreateBody } from "@/lib/delivery/ozon-worker";
 import { queueTelegramOrder } from "@/lib/telegram/config";
 import type { CheckoutActionState } from "@/lib/checkout-action-state";
+import { CDEK_DELIVERY_CODE, getCdekConfig, requireCdek } from "@/lib/delivery/cdek-config";
+import { cdekConfigFingerprint, cdekPackages, verifyCdekQuote, type CdekQuote } from "@/lib/delivery/cdek-quote";
+import { CdekDeliveryClient } from "@/lib/delivery/cdek-client";
+import { checkedCdekPoint } from "@/lib/delivery/cdek-points";
+import { z } from "zod";
 
 async function submitOrder(formData: FormData, inline: boolean): Promise<CheckoutActionState> {
   const fail = (error: string, reference?: string, fields?: Record<string, string[]>) => {
@@ -27,14 +32,19 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
     redirect(`/checkout/?error=${error}${reference ? `&reference=${reference}` : ""}`);
   };
   if (!await operatorReady()) return fail("operator");
-  const parsed = checkoutSchema.safeParse(Object.fromEntries(["name", "email", "phone", "city", "address", "postalCode", "delivery", "comment", "legal", "expectedTotal", "ozonQuote", "ozonConsent"].map((key) => [key, formData.get(key) ?? ""])));
+  const parsed = checkoutSchema.safeParse(Object.fromEntries(["name", "email", "phone", "city", "address", "postalCode", "delivery", "comment", "legal", "expectedTotal", "ozonQuote", "ozonConsent", "cdekQuote"].map((key) => [key, formData.get(key) ?? ""])));
   if (!parsed.success) { await writeDiagnostic("checkout.invalid"); return fail("invalid", undefined, parsed.error.flatten().fieldErrors); }
   const cart = await getCart();
   if (!cart?.items.length) redirect("/cart/?error=empty");
   if (cart.items.some((item) => !item.available || !item.quote)) redirect("/cart/?error=unavailable");
   const user = await getCurrentUser();
   const isOzon = parsed.data.delivery === OZON_DELIVERY_CODE;
+  const isCdek = parsed.data.delivery === CDEK_DELIVERY_CODE;
+  // The old fixed-price CDEK method treated delivery as free; it cannot bypass
+  // the new carrier calculation or the buyer's explicit tariff selection.
+  if (parsed.data.delivery === "cdek") return fail("delivery");
   let ozonQuote: OzonQuote | undefined;
+  let cdekQuote: CdekQuote | undefined;
   if (isOzon) {
     let stage: "verify" | "consent" | "recheck" = "verify";
     const started = Date.now();
@@ -66,20 +76,45 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
     }
     await writeDiagnostic("delivery.recheck.ok", { stage: "recheck", durationMs: Date.now() - started, attempts });
   }
-  const deliveryMethod = isOzon ? { active: true, code: OZON_DELIVERY_CODE, name: "Ozon Доставка · ПВЗ", basePrice: ozonQuote!.cost } : await prisma.deliveryMethod.findFirst({ where: { code: parsed.data.delivery, active: true, deletedAt: null } });
+  if (isCdek) {
+    try {
+      const config = await getCdekConfig(); requireCdek(config);
+      cdekQuote = verifyCdekQuote(parsed.data.cdekQuote, cart, config);
+      const api = new CdekDeliveryClient(config, config.environment);
+      const packages = cdekPackages(cart);
+      await checkedCdekPoint(api, cdekQuote.point, cdekQuote.cityCode, packages);
+      await checkedCdekPoint(api, config.senderPoint, config.senderCityCode!, packages, "sender");
+      const fresh = z.object({ total_sum: z.number().finite().nonnegative(), currency: z.literal("RUB"), errors: z.array(z.unknown()).optional() }).parse(await api.tariff({ type: 2, tariff_code: cdekQuote.tariff, from_location: { code: config.senderCityCode! }, to_location: { code: cdekQuote.cityCode }, shipment_point: config.senderPoint, delivery_point: cdekQuote.point, packages }));
+      if (fresh.errors?.length || Math.abs(fresh.total_sum - cdekQuote.cost) > 0.005) throw new Error("price");
+    } catch { return fail("cdek"); }
+  }
+  const deliveryMethod = isOzon ? { active: true, code: OZON_DELIVERY_CODE, name: "Ozon Доставка · ПВЗ", basePrice: ozonQuote!.cost } : isCdek ? { active: true, code: CDEK_DELIVERY_CODE, name: "СДЭК · ПВЗ", basePrice: cdekQuote!.cost } : await prisma.deliveryMethod.findFirst({ where: { code: parsed.data.delivery, active: true, deletedAt: null } });
   if (!deliveryMethod?.active) return fail("delivery");
   const subtotal = cart.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-  const { deliveryPrice, carrierCost, total } = deliveryTotals(subtotal, Number(deliveryMethod.basePrice));
+  const sums = deliveryTotals(subtotal, Number(deliveryMethod.basePrice));
+  const carrierCost = sums.carrierCost;
+  const deliveryPrice = isCdek ? carrierCost : sums.deliveryPrice;
+  const total = Math.round((subtotal + deliveryPrice) * 100) / 100;
   if (Math.abs(total - parsed.data.expectedTotal) > 0.005) { await writeDiagnostic("checkout.price"); return fail("price"); }
   const number = `3DP-${new Date().toISOString().slice(2, 10).replace(/-/g, "")}-${randomBytes(4).toString("hex").toUpperCase()}`;
   let order;
   try {
     order = await prisma.$transaction(async (tx) => {
-      if (!isOzon) {
+      if (!isOzon && !isCdek) {
         // Serialize checkout with delivery deletion; stale forms cannot reuse removed methods.
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412028)`;
         const current = await tx.deliveryMethod.findFirst({ where: { code: deliveryMethod.code, active: true, deletedAt: null } });
         if (!current || Number(current.basePrice) !== Number(deliveryMethod.basePrice)) throw new Error("delivery-config-changed");
+      }
+      let cdekRequest: object | undefined;
+      let cdekConfig: Awaited<ReturnType<typeof getCdekConfig>> | undefined;
+      if (cdekQuote) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412030)`;
+        cdekConfig = await getCdekConfig(tx); requireCdek(cdekConfig);
+        if (cdekConfigFingerprint(cdekConfig) !== cdekQuote.config) throw new Error("delivery-config-changed");
+        verifyCdekQuote(parsed.data.cdekQuote, cart, cdekConfig);
+        const contents = cart.items.flatMap(item => Array.from({ length: item.quantity }, () => item.product!.name.slice(0, 255)));
+        cdekRequest = { type: 2, tariff_code: cdekQuote.tariff, shipment_point: cdekConfig.senderPoint, delivery_point: cdekQuote.point, sender: { company: cdekConfig.senderName, name: cdekConfig.senderName, phones: [{ number: cdekConfig.senderPhone }] }, recipient: { name: parsed.data.name, phones: [{ number: parsed.data.phone }], email: parsed.data.email }, packages: cdekPackages(cart).map((value, index) => ({ ...value, number: `${number}-${index + 1}`, comment: contents[index] })) };
       }
       if (ozonQuote) {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412027)`;
@@ -93,12 +128,12 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
       if (claimed.count !== cart.items.length) throw new Error("cart-changed");
       const created = await tx.order.create({ data: {
         number, userId: user?.id, kind: "APPLICATION", status: "NEW", customerName: parsed.data.name, customerEmail: parsed.data.email, customerPhone: parsed.data.phone,
-        shippingAddress: ozonQuote ? ozonQuote.address : parsed.data.delivery === "pickup" ? "Самовывоз по согласованию" : `${parsed.data.postalCode ? `${parsed.data.postalCode}, ` : ""}${parsed.data.city}, ${parsed.data.address}`,
+        shippingAddress: ozonQuote ? ozonQuote.address : cdekQuote ? cdekQuote.address : parsed.data.delivery === "pickup" ? "Самовывоз по согласованию" : `${parsed.data.postalCode ? `${parsed.data.postalCode}, ` : ""}${parsed.data.city}, ${parsed.data.address}`,
         customerComment: parsed.data.comment || undefined, subtotal, deliveryPrice, total,
         items: { create: cart.items.map((item) => ({ productId: item.productId, productName: item.product!.name, sku: item.product!.sku, quantity: item.quantity, unitPrice: item.unitPrice, totalPrice: item.unitPrice * item.quantity, configuration: item.quote!.config, materialId: item.quote!.materialId, colorId: item.quote!.colorId })) },
         // Persist the carrier outbox atomically with the application. Retries
         // reuse this immutable body/key; no payment or receipt is created.
-        shipment: { create: { provider: deliveryMethod.code, method: deliveryMethod.name, cost: carrierCost, ...(ozonQuote ? { payload: { pointId: ozonQuote.request.delivery.delivery_point.delivery_point_id, address: ozonQuote.address, estimatedDays: ozonQuote.days }, ozonJob: { create: { clientId: (await getOzonDeliveryConfig(tx)).clientId, request: ozonCreateBody(ozonQuote.request, number, parsed.data.name, cart.items.flatMap(item => Array.from({ length: item.quantity }, () => item.product!.name))) } } } : {}) } },
+        shipment: { create: { provider: deliveryMethod.code, method: deliveryMethod.name, cost: carrierCost, ...(ozonQuote ? { payload: { pointId: ozonQuote.request.delivery.delivery_point.delivery_point_id, address: ozonQuote.address, estimatedDays: ozonQuote.days }, ozonJob: { create: { clientId: (await getOzonDeliveryConfig(tx)).clientId, request: ozonCreateBody(ozonQuote.request, number, parsed.data.name, cart.items.flatMap(item => Array.from({ length: item.quantity }, () => item.product!.name))) } } } : {}), ...(cdekQuote && cdekConfig && cdekRequest ? { payload: { pointId: cdekQuote.point, address: cdekQuote.address, tariff: cdekQuote.tariff, daysMin: cdekQuote.daysMin, daysMax: cdekQuote.daysMax }, cdekJob: { create: { clientId: cdekConfig.clientId, environment: cdekConfig.environment, request: JSON.parse(JSON.stringify(cdekRequest)) } } } : {}) } },
         notifications: { create: { channel: "email", recipient: parsed.data.email, template: "order-confirmation", status: "PENDING" } },
       } });
       await queueTelegramOrder(tx, created.id);

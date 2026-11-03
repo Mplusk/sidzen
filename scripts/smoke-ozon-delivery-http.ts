@@ -146,10 +146,14 @@ try {
   assert(disabledCheckout.includes("Ozon Доставка</strong>"));
   assert(!disabledCheckout.includes('value="ozon-delivery"'));
   assert(disabledCheckout.includes('aria-disabled="true"'));
+  assert(!disabledCheckout.includes('value="cdek"'), "Legacy free CDEK must not bypass carrier pricing");
+  const legacyOrder = actionForm(disabledCheckout, 'name="expectedTotal"');
+  for (const [key, value] of Object.entries({ name: "QA Recipient Test", phone: "+79991234567", email: "buyer@example.test", delivery: "cdek", city: "Москва", address: "QA улица, 1", legal: "on", expectedTotal: "240" })) legacyOrder.set(key, value);
+  await assertInlineCheckoutError(await request("/checkout/", legacyOrder), "delivery");
   const manualOrder = actionForm(disabledCheckout, 'name="expectedTotal"');
-  const carrier = await prisma.deliveryMethod.findUniqueOrThrow({ where: { code: "cdek" } });
+  const carrier = await prisma.deliveryMethod.findUniqueOrThrow({ where: { code: "russian-post" } });
   assert(Number(carrier.basePrice) > 0, "QA carrier fixture must have nonzero internal expenses");
-  for (const [key, value] of Object.entries({ name: "QA Recipient Test", phone: "+79991234567", email: "buyer@example.test", delivery: "cdek", city: "Москва", address: "QA улица, 1", postalCode: "", comment: "QA order only", payment: "manual", legal: "on", expectedTotal: "240" })) manualOrder.set(key, value);
+  for (const [key, value] of Object.entries({ name: "QA Recipient Test", phone: "+79991234567", email: "buyer@example.test", delivery: "russian-post", city: "Москва", address: "QA улица, 1", postalCode: "123456", comment: "QA order only", payment: "manual", legal: "on", expectedTotal: "240" })) manualOrder.set(key, value);
   const orderResult = await request("/checkout/", manualOrder);
   const number = (orderResult.headers.get("location") || "").match(/\/checkout\/success\/([^/]+)\//)?.[1];
   assert(number, "QA manual order should complete");

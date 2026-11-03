@@ -20,5 +20,7 @@ it("does not erase active orders, open financial cases, carrier cancellation or 
     { shipment: { ozonJob: { status: "CREATED", lockedUntil: null, cancelRequestedAt: now } } },
   ]) expect(erasureBlocked({ ...closed, ...patch }, now)).toBe(true);
   expect(erasureBlocked({ ...closed, shipment: { ozonJob: { status: "CANCELED", lockedUntil: null, cancelRequestedAt: now } } }, now)).toBe(false);
+  for (const status of ["PENDING", "SENDING", "ACCEPTED", "CREATED", "CANCELING", "REVIEW"]) expect(erasureBlocked({ ...closed, shipment: { ozonJob: null, cdekJob: { status, lockedUntil: null, cancelRequestedAt: now } } }, now)).toBe(true);
+  expect(erasureBlocked({ ...closed, shipment: { ozonJob: null, cdekJob: { status: "CANCELED", lockedUntil: null, cancelRequestedAt: now } } }, now)).toBe(false);
   expect(inactiveAccountCutoff(now)).toEqual(new Date("2024-10-15Z"));
 });

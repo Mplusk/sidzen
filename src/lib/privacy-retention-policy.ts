@@ -16,7 +16,7 @@ export type RetentionOrder = {
   privacyClosedAt: Date | null; retentionHoldUntil: Date | null; purchaseConfirmedAt: Date | null;
   payment: { status: string; refundReviewRequired: boolean; paidAt: Date | null } | null;
   fiscalReceipts: Array<{ status: string; createdAt: Date; processedAt: Date | null }>;
-  shipment: { ozonJob: { status: string; lockedUntil: Date | null; cancelRequestedAt: Date | null } | null } | null;
+  shipment: { ozonJob: { status: string; lockedUntil: Date | null; cancelRequestedAt: Date | null } | null; cdekJob?: { status: string; lockedUntil: Date | null; cancelRequestedAt: Date | null } | null } | null;
 };
 export function erasureBlocked(order: RetentionOrder, now: Date) {
   if (order.retentionHoldUntil && order.retentionHoldUntil > now) return true;
@@ -26,6 +26,8 @@ export function erasureBlocked(order: RetentionOrder, now: Date) {
   if (order.fiscalReceipts.some(receipt => !["PROCESSED", "CANCELED"].includes(receipt.status))) return true;
   const job = order.shipment?.ozonJob;
   if (job && ((job.lockedUntil && job.lockedUntil > now) || ["PENDING", "RUNNING"].includes(job.status) || (job.cancelRequestedAt && job.status !== "CANCELED"))) return true;
+  const cdek = order.shipment?.cdekJob;
+  if (cdek && ((cdek.lockedUntil && cdek.lockedUntil > now) || ["PENDING", "SENDING", "ACCEPTED", "CREATED", "CANCELING", "REVIEW"].includes(cdek.status) || (cdek.cancelRequestedAt && cdek.status !== "CANCELED"))) return true;
   return false;
 }
 export function orderRetentionEnd(order: RetentionOrder) {

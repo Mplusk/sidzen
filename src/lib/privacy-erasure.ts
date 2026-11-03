@@ -25,7 +25,7 @@ const ledgerFile = (value: string) => join(ledgerDirectory(), `${z.uuid().parse(
 export class ErasureError extends Error {
   constructor(readonly code: "active" | "protected" | "missing" | "storage" | "files-in-use") { super(code); }
 }
-const orderInclude = { payment: true, fiscalReceipts: true, shipment: { include: { ozonJob: true } } } as const;
+const orderInclude = { payment: true, fiscalReceipts: true, shipment: { include: { ozonJob: true, cdekJob: true } } } as const;
 async function lock(tx: Prisma.TransactionClient) {
   // Match the order/review worker's lock order before the privacy lock.
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412026)`;

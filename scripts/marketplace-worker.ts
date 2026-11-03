@@ -4,6 +4,7 @@ import { prisma } from "../src/lib/prisma";
 import { claimRun, processRun } from "../src/lib/marketplaces/sync";
 import { catalogInvalidationToken } from "../src/lib/marketplaces/cache-token";
 import { cancelOzonJob, processOzonJob, refreshOzonJob, syncOzonPointsPage } from "../src/lib/delivery/ozon-worker";
+import { processCdekJob } from "../src/lib/delivery/cdek-worker";
 import { pruneTransientPersonalData } from "../src/lib/privacy-maintenance";
 import { prunePersonalDataRetention } from "../src/lib/privacy-retention";
 import { reconcileTochkaPayments } from "../src/lib/payments";
@@ -114,6 +115,7 @@ try {
       await processOzonJob();
       await refreshOzonJob();
       await syncOzonPointsPage();
+      await processCdekJob();
       await new Promise((resolve) => setTimeout(resolve, 2000));
     } catch {
       await writeDiagnostic("worker.failed");
