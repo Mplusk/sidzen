@@ -368,6 +368,11 @@ h3 { font-size: clamp(1.125rem, 1.5vw, 1.375rem); }
 .upload-zone svg { width: 42px; height: 42px; margin-bottom: 12px; color: var(--blue); }
 .upload-zone small { display: block; color: var(--muted); }
 .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+.delivery-availability { margin: 18px 0; }
+.delivery-availability__label { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer; }
+.delivery-availability__label input { width: 20px; height: 20px; flex: 0 0 20px; accent-color: var(--blue); cursor: pointer; }
+.delivery-availability__label input:disabled { cursor: wait; }
+.delivery-availability > p { margin: 6px 0 0 30px; }
 .field { display: flex; flex-direction: column; gap: 7px; }
 .field--full { grid-column: 1 / -1; }
 .field label, .field > span { font-size: .82rem; font-weight: 500; }

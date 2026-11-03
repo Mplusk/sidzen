@@ -3,13 +3,15 @@ import { saveOzonDelivery } from "@/app/actions/ozon-delivery";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getOzonDeliveryConfig } from "@/lib/delivery/ozon-config";
+import { DeliveryAvailabilityToggle } from "@/components/delivery-availability-toggle";
 
 export async function OzonDeliverySettings() {
   const [config, sync] = await Promise.all([getOzonDeliveryConfig(), prisma.ozonDeliverySync.findUnique({ where: { id: "ozon" } })]);
   const count = config.shipmentMethodId ? await prisma.ozonDeliveryPoint.count({ where: { clientId: config.clientId, methodId: BigInt(config.shipmentMethodId), active: true } }) : 0;
   const missingPackaging = await prisma.product.count({ where: { status: "PUBLISHED", type: { in: ["READY", "PARAMETRIC"] }, OR: [{ shippingWeightG: null }, { shippingLengthMm: null }, { shippingWidthMm: null }, { shippingHeightMm: null }] } });
   return <section className="content-card" id="ozon-delivery"><h2>Ozon Доставка · Delivery API</h2>
-    <p>{config.enabled ? "Доставка включена" : "Доставка выключена"}. Секрет: {config.clientSecret ? "сохранён, скрыт" : "не задан"}.</p>
+    <DeliveryAvailabilityToggle carrier="ozon" enabled={config.enabled} />
+    <p>Секрет: {config.clientSecret ? "сохранён, скрыт" : "не задан"}.</p>
     {!!missingPackaging && <p className="notice notice--danger">У {missingPackaging} опубликованных товаров не заполнены вес и габариты упакованной посылки. Для них Ozon не сможет рассчитать доставку. Заполните реальные измерения в <Link className="text-link" href="/admin/products/">редакторе товаров</Link>; размеры самого изделия не заменяют параметры упаковки.</p>}
     <p className="muted">Это отдельное подключение Ozon Доставки для бизнеса, не Seller API для товаров. Создайте частное приложение в <a className="text-link" href="https://seller.ozon.ru/app/settings/private-apps" target="_blank" rel="noreferrer">кабинете Ozon Доставки</a> и скопируйте client_id / client_secret.</p>
     <p>Права приложения: <code>delivery-api.shipment-method</code>, <code>delivery-api.delivery</code>, <code>delivery-api.delivery-point</code>, <code>delivery-api.order</code>, <code>delivery-api.posting</code>. В Ozon заранее настройте активный метод отгрузки, пункт передачи заказов и возвратов.</p>
@@ -21,7 +23,8 @@ export async function OzonDeliverySettings() {
       <label className="field">ID метода отгрузки Ozon<input name="shipmentMethodId" type="number" list="ozon-shipment-methods" min="1" step="1" defaultValue={config.shipmentMethodId ?? ""} /><small>Для сохранения ключей можно оставить пустым. Единственный активный метод выберется автоматически; если их несколько, выберите нужный ID.</small></label>
       <datalist id="ozon-shipment-methods">{config.methods?.filter(method => method.status === "active").map(method => <option key={method.shipment_method_id} value={method.shipment_method_id}>{method.name}</option>)}</datalist>
       <label className="field">Подготовка к отгрузке, дней<input name="dispatchDays" type="number" min="1" max="30" step="1" defaultValue={config.dispatchDays} /><small>Для изделий под заказ учитывается также срок изготовления товара.</small></label>
-      <label><input name="enabled" type="checkbox" defaultChecked={config.enabled} /> Предлагать Ozon Доставку покупателям</label>
+      <input type="hidden" name="enabled" value={config.enabled ? "on" : ""} />
+      <input type="hidden" name="availabilityVersion" value={config.enabled ? "on" : "off"} />
       <SubmitButton className="button" pendingLabel="Сохраняем…">Сохранить Delivery API</SubmitButton>
       <SubmitButton className="button button--outline" name="intent" value="check" pendingLabel="Проверяем…">Проверить подключение</SubmitButton>
       <SubmitButton className="button button--outline" name="intent" value="methods" pendingLabel="Загружаем…">Загрузить методы отгрузки</SubmitButton>

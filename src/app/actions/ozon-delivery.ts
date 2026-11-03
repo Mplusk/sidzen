@@ -26,6 +26,7 @@ export async function saveOzonDelivery(form: FormData) {
   const user = await requirePermission("settings.write");
   if (!rateLimit(`ozon-settings:${user.id}`, 10, 60000).allowed) finish("rate");
   const current = await getOzonDeliveryConfig();
+  if (form.has("availabilityVersion") && form.get("availabilityVersion") !== (current.enabled ? "on" : "off")) finish("ozon-pending");
   const parsed = ozonDeliveryConfigSchema.safeParse({ enabled: form.get("enabled") === "on", clientId: String(form.get("clientId") ?? "").trim(), clientSecret: String(form.get("clientSecret") ?? "").trim() || current.clientSecret, shipmentMethodId: form.get("shipmentMethodId") ? Number(form.get("shipmentMethodId")) : null, dispatchDays: Number(form.get("dispatchDays")) });
   if (!parsed.success) finish("ozon-invalid");
   const config = parsed.data;

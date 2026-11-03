@@ -24,6 +24,7 @@ export async function saveCdekDelivery(form: FormData) {
   const user = await requirePermission("settings.write");
   if (!rateLimit(`cdek-settings:${user.id}`, 10, 60000).allowed) finish("cdek-rate");
   const current = await getCdekConfig();
+  if (form.has("availabilityVersion") && form.get("availabilityVersion") !== (current.enabled ? "on" : "off")) finish("cdek-changed");
   const parsed = cdekConfigSchema.safeParse({
     enabled: form.get("enabled") === "on",
     clientId: String(form.get("clientId") ?? ""),
