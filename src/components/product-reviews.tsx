@@ -17,7 +17,7 @@ export async function ProductReviews({ productId, path, total, rating, requested
     user ? prisma.order.findFirst({ where: purchasedProductWhere(user.id, productId), select: { id: true } }) : null,
     operatorReady(),
   ]);
-  return <section className="product-reviews" aria-labelledby="reviews-heading">
+  return <section className="product-reviews ym-hide-content ym-disable-keys" aria-labelledby="reviews-heading">
     <div className="reviews-heading"><h2 id="reviews-heading">Отзывы покупателей <span className="muted">{total}</span></h2>{total > 0 && <strong className="reviews-average">★ {rating.toFixed(1)} <small>из 5</small></strong>}</div>
     {!user ? <p className="notice">Отзывы доступны всем. <Link className="text-link" href={`/login/?returnTo=${encodeURIComponent(`${path}#reviews-heading`)}`}>Войдите</Link>, чтобы оставить отзыв о купленном товаре.</p>
       : own ? <p className="notice">Ваш отзыв: {reviewStatusLabel(own.status).toLowerCase()}. <Link className="text-link" href="/account/reviews/">Открыть мои отзывы</Link></p>

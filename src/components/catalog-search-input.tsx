@@ -44,7 +44,7 @@ function CatalogSearchControl({ initialQuery }: { initialQuery: string }) {
   }, [query]);
   const expanded = open && query.trim().length >= 2;
   const all = `/catalog/?q=${encodeURIComponent(query.trim())}`;
-  return <form className="header-search" action="/catalog/" method="get" role="search" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }} onSubmit={event => {
+  return <form className="header-search ym-hide-content ym-disable-keys" action="/catalog/" method="get" role="search" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }} onSubmit={event => {
     setOpen(false);
     if (expanded && active >= 0 && items[active]) { event.preventDefault(); router.push(items[active].href); }
   }}>

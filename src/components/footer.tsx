@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/logo";
+import { CookieSettingsButton } from "@/components/cookie-settings-button";
 export async function Footer() {
   return <footer className="site-footer">
     <div className="container footer-grid">
@@ -20,7 +21,8 @@ export async function Footer() {
       <nav className="footer-legal" aria-label="Правовая информация">
         <Link href="/legal/privacy/">Политика конфиденциальности</Link>
         <Link href="/legal/offer/">Публичная оферта</Link>
-        <Link href="/legal/cookies/">Технические cookies</Link>
+        <Link href="/legal/cookies/">Cookies и статистика</Link>
+        <CookieSettingsButton />
       </nav>
     </div>
   </footer>;

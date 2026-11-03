@@ -4,6 +4,7 @@ import { getStoreContacts } from "@/lib/settings";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { PageViewCounter } from "@/components/page-view-counter";
+import { MetrikaConsent } from "@/components/metrika-consent";
 import { Suspense } from "react";
 import { ShoppingState } from "@/components/shopping-state";
 import { getFavoriteIds, getCartQuantity } from "@/lib/favorites-server";
@@ -30,13 +31,13 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const [contacts, favorites, cartQuantity] = await Promise.all([getStoreContacts(), getFavoriteIds(), getCartQuantity()]);
   return (
     <html lang="ru">
-      <body>
+      <body className="ym-disable-keys">
         <a className="skip-link" href="#main">К содержимому</a>
         <JsonLd data={{ "@context": "https://schema.org", "@type": "Organization", "@id": "https://sidzen.shop/#organization", name: "SIDZEN", url: "https://sidzen.shop", logo: "https://sidzen.shop/icon-512.png", ...(contacts.legalName ? { legalName: contacts.legalName } : {}), ...(contacts.phone ? { telephone: contacts.phone } : {}), ...(contacts.email ? { email: contacts.email } : {}) }} />
         <ShoppingState ids={favorites} cartQuantity={cartQuantity}><Header />
         <main id="main">{children}</main>
         <Footer /></ShoppingState>
-        <Suspense fallback={null}><PageViewCounter /></Suspense>
+        <Suspense fallback={null}><PageViewCounter /><MetrikaConsent /></Suspense>
       </body>
     </html>
   );
