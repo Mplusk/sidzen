@@ -55,7 +55,7 @@ try {
   const saved = (await db.siteSetting.findUniqueOrThrow({ where: { key: paymentKey } })).value;
   assert(saved.token.startsWith("v1.") && !saved.token.includes(token));
   assert.equal(decryptSecret(saved.token, paymentKey), token);
-  const html = await (await request(path)).text(); assert(html.includes("Точка · интернет-эквайринг") && !html.includes("ЮKassa")); assert(!html.includes(token) && !html.includes(saved.token));
+  const html = await (await request(path)).text(); assert(html.includes("Точка · интернет-эквайринг") && html.includes("ЮKassa · оплата и чеки")); assert(!html.includes(token) && !html.includes(saved.token));
   assert(!(await (await request("/admin/settings/")).text()).includes(saved.token));
   payment.set("token", "");
   assert.equal((await request(path, payment)).headers.get("location"), path + "?result=saved");
