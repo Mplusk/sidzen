@@ -937,6 +937,7 @@ body:has(.admin-shell) > .site-footer { display: none; }
   .gallery-arrow:active::before { background: #d9c8b2; }
   .gallery-arrow--previous { left: 0; }
   .gallery-arrow--next { right: 0; }
+  .metrika-consent { right: 16px; bottom: 16px; }
   .site-footer { padding-top: 2rem; }
   .footer-grid { grid-template-columns: 1fr; gap: 2rem; }
   .footer-info { justify-self: start; }
@@ -1034,4 +1035,3 @@ body:has(.admin-shell) > .site-footer { display: none; }
 .metrika-consent__actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .metrika-consent__actions button { border: 1px solid #6c705d; border-radius: 10px; padding: 10px 14px; background: #fff; color: #4e5444; cursor: pointer; font: inherit; }
 .metrika-consent__actions button:last-child:not(:only-child) { background: #6c705d; color: #fff; }
-@media (max-width: 600px) { .metrika-consent { right: 16px; bottom: 16px; } }
