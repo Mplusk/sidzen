@@ -8,6 +8,8 @@ import { processCdekJob } from "../src/lib/delivery/cdek-worker";
 import { pruneTransientPersonalData } from "../src/lib/privacy-maintenance";
 import { prunePersonalDataRetention } from "../src/lib/privacy-retention";
 import { reconcileTochkaPayments } from "../src/lib/payments";
+import { reconcileYooKassaPayments } from "../src/lib/yookassa/payments";
+import { processYooKassaSettlement } from "../src/lib/yookassa/settlements";
 import { processFiscalReceipt } from "../src/lib/cloudkassir/worker";
 import { pruneDiagnosticLogs, writeDiagnostic } from "../src/lib/diagnostics";
 import { pruneMonitoring } from "../src/lib/monitoring";
@@ -34,8 +36,10 @@ async function financeLoop() {
       if (Date.now() >= nextPaymentCheck) {
         nextPaymentCheck = Date.now() + 60_000;
         await reconcileTochkaPayments(() => stopping).catch(async () => { await writeDiagnostic("payment.reconcile.failed"); });
+        await reconcileYooKassaPayments().catch(async () => { await writeDiagnostic("payment.reconcile.failed"); });
       }
       if (!stopping) await processFiscalReceipt();
+      if (!stopping) await processYooKassaSettlement();
     } catch { await writeDiagnostic("fiscal.failed", { reason: "temporary" }); }
     if (!stopping) await new Promise(resolve => setTimeout(resolve, 2000));
   }

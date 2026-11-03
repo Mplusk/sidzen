@@ -16,6 +16,7 @@ export type RetentionOrder = {
   privacyClosedAt: Date | null; retentionHoldUntil: Date | null; purchaseConfirmedAt: Date | null;
   payment: { status: string; refundReviewRequired: boolean; paidAt: Date | null } | null;
   fiscalReceipts: Array<{ status: string; createdAt: Date; processedAt: Date | null }>;
+  yookassaSettlement?: { status: string; createdAt: Date; processedAt: Date | null } | null;
   shipment: { ozonJob: { status: string; lockedUntil: Date | null; cancelRequestedAt: Date | null } | null; cdekJob?: { status: string; lockedUntil: Date | null; cancelRequestedAt: Date | null } | null } | null;
 };
 export function erasureBlocked(order: RetentionOrder, now: Date) {
@@ -24,6 +25,7 @@ export function erasureBlocked(order: RetentionOrder, now: Date) {
   if (!terminalOrderStatuses.some(status => status === order.status) && ["PAID", "QUEUED", "PRINTING", "POST_PROCESSING", "PACKED", "SHIPPED"].includes(order.status)) return true;
   if (order.payment && (["PENDING", "AUTHORIZED"].includes(order.payment.status) || order.payment.refundReviewRequired)) return true;
   if (order.fiscalReceipts.some(receipt => !["PROCESSED", "CANCELED"].includes(receipt.status))) return true;
+  if (order.yookassaSettlement && !["PROCESSED", "CANCELED"].includes(order.yookassaSettlement.status)) return true;
   const job = order.shipment?.ozonJob;
   if (job && ((job.lockedUntil && job.lockedUntil > now) || ["PENDING", "RUNNING"].includes(job.status) || (job.cancelRequestedAt && job.status !== "CANCELED"))) return true;
   const cdek = order.shipment?.cdekJob;
@@ -35,9 +37,9 @@ export function orderRetentionEnd(order: RetentionOrder) {
   const financial = hasFinancialEvidence(order);
   // One-day sweep margin keeps hourly cleanup inside the published 30-day max.
   if (!financial) return afterDays(closed, RETENTION.closedApplicationDays - 1);
-  const events = [closed, order.purchaseConfirmedAt, order.payment?.paidAt, ...order.fiscalReceipts.map(receipt => receipt.processedAt ?? receipt.createdAt)].filter((date): date is Date => Boolean(date));
+  const events = [closed, order.purchaseConfirmedAt, order.payment?.paidAt, order.yookassaSettlement?.processedAt ?? order.yookassaSettlement?.createdAt, ...order.fiscalReceipts.map(receipt => receipt.processedAt ?? receipt.createdAt)].filter((date): date is Date => Boolean(date));
   return fiscalRetentionEnd(new Date(Math.max(...events.map(date => date.getTime()))));
 }
 export function hasFinancialEvidence(order: RetentionOrder) {
-  return Boolean(["DELIVERED", "REFUNDED"].includes(order.status) || order.purchaseConfirmedAt || order.fiscalReceipts.length || (order.payment && ["PAID", "REFUNDED"].includes(order.payment.status)));
+  return Boolean(["DELIVERED", "REFUNDED"].includes(order.status) || order.purchaseConfirmedAt || order.fiscalReceipts.length || order.yookassaSettlement || (order.payment && ["PAID", "REFUNDED"].includes(order.payment.status)));
 }

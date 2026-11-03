@@ -80,6 +80,7 @@ export async function refreshTochkaPayment(paymentId: string) {
 export async function refreshPayment(externalId: string) {
   const payment = await prisma.payment.findUnique({ where: { externalId } });
   if (!payment) return;
+  if (payment.provider === "yookassa-online") return (await import("@/lib/yookassa/payments")).refreshYooKassaPayment(externalId);
   if (payment.provider === "yookassa") return (await import("@/lib/legacy-yookassa")).refreshPayment(externalId);
   if (payment.provider === "tochka") await refreshTochkaPayment(payment.id);
 }

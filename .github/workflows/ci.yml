@@ -56,6 +56,7 @@ jobs:
           pnpm exec tsx scripts/smoke-review-ai-telegram.ts
           pnpm exec tsx scripts/smoke-tochka.ts
           pnpm exec tsx scripts/smoke-cloudkassir.ts
+          pnpm exec tsx scripts/smoke-yookassa.ts
           pnpm exec tsx scripts/smoke-social.ts
           pnpm exec tsx scripts/smoke-privacy-retention.ts
           pnpm exec tsx scripts/smoke-ozon-applications.ts

@@ -25,6 +25,7 @@ export async function checkYookassa(config: { shopId: string; secret: string }) 
   if (!response.ok) throw new Error("connection");
   const result = z.object({ account_id: z.string(), test: z.boolean(), status: z.string().optional() }).parse(await response.json());
   if (result.account_id !== config.shopId || (result.test && process.env.YOOKASSA_ALLOW_TEST !== "true") || (result.status && result.status !== "enabled")) throw new Error("merchant");
+  return result;
 }
 
 export const deliveryConfigSchema = z.object({

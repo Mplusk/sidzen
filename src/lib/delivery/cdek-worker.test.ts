@@ -8,7 +8,7 @@ import { CdekDeliveryError } from "./cdek-client";
 import { processCdekJob } from "./cdek-worker";
 
 const uuid = "09649cbe-9101-4bb6-aa43-2a11e9cafd17";
-const fixture = () => ({ id: "job", shipmentId: "shipment", clientId: "account", environment: "test", status: "PENDING", attempts: 0, request: { test: true }, remoteId: null as string | null, cancelRequestedAt: null as Date | null, shipment: { order: { status: "NEW", deletedAt: null as Date | null } } });
+const fixture = () => ({ id: "job", shipmentId: "shipment", clientId: "account", environment: "test", status: "PENDING", attempts: 0, request: { test: true }, remoteId: null as string | null, cancelRequestedAt: null as Date | null, shipment: { order: { kind: "APPLICATION", payment: null as null | { status: string }, status: "NEW", deletedAt: null as Date | null } } });
 describe("CDEK shipment queue", () => {
   beforeEach(() => {
     vi.resetAllMocks(); m.find.mockResolvedValue(fixture()); m.update.mockResolvedValue({ count: 1 }); m.privacy.mockResolvedValue(true);
@@ -21,6 +21,10 @@ describe("CDEK shipment queue", () => {
     await processCdekJob();
     expect(m.create).toHaveBeenCalledTimes(1);
     expect(m.update).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "ACCEPTED", remoteId: uuid }) }));
+  });
+  it("does not submit a paid checkout shipment before payment", async () => {
+    const job = fixture(); job.shipment.order.kind = "ORDER"; job.shipment.order.payment = { status: "PENDING" }; m.find.mockResolvedValue(job);
+    await processCdekJob(); expect(m.create).not.toHaveBeenCalled();
   });
   it("never retries an ambiguous create after a timeout or crash", async () => {
     m.create.mockRejectedValueOnce(new Error("timeout")); await processCdekJob();

@@ -52,6 +52,7 @@ export async function processOzonJob(id?: string) {
   const eligibleStatus = id ? { in: ["PENDING", "REVIEW"] } : "PENDING";
   const job = await prisma.ozonDeliveryJob.findFirst({ where: { cancelRequestedAt: null, shipment: { order: { deletedAt: null, OR: [{ kind: "APPLICATION", status: { notIn: ["CANCELED", "REFUNDED"] } }, { kind: "ORDER", ...(!id ? { OR: [{ payment: { status: "PAID" } }, { status: { in: [...paidOrderStatuses] } }] } : {}) }] } }, ...(id ? { id } : { nextAttemptAt: { lte: new Date() } }), status: eligibleStatus, ...unlocked() }, include: { shipment: { include: { order: { include: { payment: true } } } } }, orderBy: { nextAttemptAt: "asc" } });
   if (!job) return false;
+  if (job.shipment.order.payment?.provider === "yookassa-online" && job.shipment.order.payment.status !== "PAID") return false;
   const lockToken = randomUUID();
   if (!(await prisma.ozonDeliveryJob.updateMany({ where: { id: job.id, cancelRequestedAt: null, shipment: { order: { deletedAt: null } }, status: eligibleStatus, ...unlocked() }, data: { lockToken, lockedUntil: new Date(Date.now() + 120000), attempts: { increment: 1 } } })).count) return false;
   try {

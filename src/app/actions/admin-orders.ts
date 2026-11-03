@@ -19,9 +19,11 @@ export async function deleteOrderAction(formData: FormData) {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412027)`;
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412030)`;
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412026)`;
-      const order = await tx.order.findUnique({ where: { id: input.data.orderId }, select: { id: true, number: true, status: true, total: true, deletedAt: true, shipment: { select: { ozonJob: { select: { id: true } }, cdekJob: { select: { id: true, status: true } } } } } });
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412034)`;
+      const order = await tx.order.findUnique({ where: { id: input.data.orderId }, select: { id: true, number: true, status: true, total: true, deletedAt: true, payment: { select: { provider: true, status: true } }, shipment: { select: { ozonJob: { select: { id: true } }, cdekJob: { select: { id: true, status: true } } } } } });
       if (!order || order.deletedAt) return null;
       if (order.number !== input.data.confirmation) throw new Error("confirmation");
+      if (order.payment?.provider === "yookassa-online" && !["CANCELED", "REFUNDED"].includes(order.payment.status)) throw new Error("payment-active");
       // Commit cancellation intent with archival. Do not clear an active lease:
       // an in-flight create must save its remote identifiers for cancellation.
       if (order.shipment?.ozonJob) await tx.ozonDeliveryJob.update({ where: { id: order.shipment.ozonJob.id }, data: { cancelRequestedAt: new Date(), cancelError: null, nextAttemptAt: new Date() } });
@@ -32,6 +34,7 @@ export async function deleteOrderAction(formData: FormData) {
     });
   } catch (error) {
     if (error instanceof Error && error.message === "confirmation") redirect("/admin/orders/?error=confirmation");
+    if (error instanceof Error && error.message === "payment-active") redirect("/admin/orders/?error=payment-active");
     console.error("Could not delete order");
     redirect("/admin/orders/?error=delete");
   }

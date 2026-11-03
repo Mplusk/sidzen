@@ -20,12 +20,14 @@ export async function prunePersonalDataRetention(now = new Date()) {
       { OR: [{ status: { in: [...terminalOrderStatuses] } }, { deletedAt: { not: null }, status: { in: ["NEW", "ESTIMATING", "APPROVED", "IN_PROGRESS", "AWAITING_PAYMENT"] } }] },
       { OR: [{ payment: null }, { payment: { is: { status: { notIn: ["PENDING", "AUTHORIZED"] }, refundReviewRequired: false } } }] },
       { fiscalReceipts: { none: { status: { notIn: ["PROCESSED", "CANCELED"] } } } },
+      { OR: [{ yookassaSettlement: null }, { yookassaSettlement: { is: { status: { in: ["PROCESSED", "CANCELED"] } } } }] },
       { OR: [
         { status: { notIn: ["DELIVERED", "REFUNDED"] }, purchaseConfirmedAt: null, fiscalReceipts: { none: {} }, OR: [{ payment: null }, { payment: { is: { status: { notIn: ["PAID", "REFUNDED"] } } } }] },
         { privacyClosedAt: { lt: financialBefore }, AND: [
           { OR: [{ purchaseConfirmedAt: null }, { purchaseConfirmedAt: { lt: financialBefore } }] },
           { OR: [{ payment: null }, { payment: { is: { OR: [{ paidAt: null }, { paidAt: { lt: financialBefore } }] } } }] },
           { fiscalReceipts: { none: { OR: [{ processedAt: { gte: financialBefore } }, { processedAt: null, createdAt: { gte: financialBefore } }] } } },
+          { OR: [{ yookassaSettlement: null }, { yookassaSettlement: { is: { OR: [{ processedAt: { lt: financialBefore } }, { processedAt: null, createdAt: { lt: financialBefore } }] } } }] },
         ] },
       ] },
     ],

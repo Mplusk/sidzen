@@ -25,11 +25,12 @@ const ledgerFile = (value: string) => join(ledgerDirectory(), `${z.uuid().parse(
 export class ErasureError extends Error {
   constructor(readonly code: "active" | "protected" | "missing" | "storage" | "files-in-use") { super(code); }
 }
-const orderInclude = { payment: true, fiscalReceipts: true, shipment: { include: { ozonJob: true, cdekJob: true } } } as const;
+const orderInclude = { payment: true, fiscalReceipts: true, yookassaSettlement: true, shipment: { include: { ozonJob: true, cdekJob: true } } } as const;
 async function lock(tx: Prisma.TransactionClient) {
   // Match the order/review worker's lock order before the privacy lock.
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412026)`;
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412032)`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412034)`;
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${LOCK})`;
 }
 async function assertCustomer(tx: Prisma.TransactionClient, userId: string | null, actorId?: string) {
@@ -88,6 +89,7 @@ async function applyPlan(tx: Prisma.TransactionClient, plan: ErasurePlan, actorI
     await tx.payment.updateMany({ where: { orderId: order.id }, data: { payload: Prisma.DbNull } });
     if (!retain) {
       await tx.fiscalReceipt.deleteMany({ where: { orderId: order.id } });
+      await tx.yooKassaSettlement.deleteMany({ where: { orderId: order.id } });
       // Without an independent retention basis do not keep a re-identifiable
       // order-number stub merely for convenience or statistics.
       await tx.order.delete({ where: { id: order.id } });

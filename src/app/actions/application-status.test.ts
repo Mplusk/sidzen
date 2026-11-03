@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ permission: vi.fn(), find: vi.fn(), update: vi.fn(), audit: vi.fn(), queue: vi.fn(), transaction: vi.fn(), cancelCdek: vi.fn() }));
+const m = vi.hoisted(() => ({ permission: vi.fn(), find: vi.fn(), update: vi.fn(), audit: vi.fn(), queue: vi.fn(), yooQueue: vi.fn(), transaction: vi.fn(), cancelCdek: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ requirePermission: m.permission }));
 vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: m.transaction } }));
 vi.mock("@/lib/audit", () => ({ writeAudit: vi.fn() }));
 vi.mock("@/lib/marketplaces/sync", () => ({ guardProductWrite: vi.fn() }));
 vi.mock("@/lib/cloudkassir/lifecycle", () => ({ queueDerivedReceipt: m.queue }));
+vi.mock("@/lib/yookassa/settlements", () => ({ queueYooKassaSettlement: m.yooQueue }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), updateTag: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: (path: string) => { throw new Error(`redirect:${path}`); } }));
 import { updateOrderStatusAction } from "./admin";
@@ -14,6 +15,23 @@ beforeEach(() => {
   m.find.mockResolvedValue({ id: "order", number: "QA-1", kind: "APPLICATION", status: "NEW", deletedAt: null, purchaseConfirmedAt: null, payment: null, fiscalReceipts: [] });
   m.update.mockImplementation(async (query) => ({ id: "order", number: "QA-1", ...query.data }));
   m.transaction.mockImplementation(callback => callback({ $executeRaw: vi.fn(), order: { findUnique: m.find, update: m.update }, auditLog: { create: m.audit }, cdekDeliveryJob: { updateMany: m.cancelCdek } }));
+});
+describe("YooKassa order lifecycle", () => {
+  it("requires paid status and explicit handover before queueing a settlement receipt", async () => {
+    m.find.mockResolvedValue({ id: "order", number: "QA-1", kind: "ORDER", status: "PAID", deletedAt: null, payment: { provider: "yookassa-online", status: "PAID", refundReviewRequired: false }, fiscalReceipts: [] });
+    await expect(updateOrderStatusAction(request("DELIVERED"))).rejects.toThrow("fiscal-status");
+    expect(m.yooQueue).not.toHaveBeenCalled();
+    const confirmed = request("DELIVERED"); confirmed.set("deliveryConfirmed", "on");
+    await expect(updateOrderStatusAction(confirmed)).rejects.toThrow("saved=1");
+    expect(m.yooQueue).toHaveBeenCalledWith(expect.anything(), "order");
+  });
+  it("does not mark an unpaid order as paid or handed over", async () => {
+    m.find.mockResolvedValue({ id: "order", number: "QA-1", kind: "ORDER", status: "AWAITING_PAYMENT", deletedAt: null, payment: { provider: "yookassa-online", status: "PENDING", refundReviewRequired: false }, fiscalReceipts: [] });
+    await expect(updateOrderStatusAction(request("PAID"))).rejects.toThrow("fiscal-status");
+    const confirmed = request("DELIVERED"); confirmed.set("deliveryConfirmed", "on");
+    await expect(updateOrderStatusAction(confirmed)).rejects.toThrow("fiscal-status");
+    expect(m.yooQueue).not.toHaveBeenCalled(); expect(m.update).not.toHaveBeenCalled();
+  });
 });
 describe("manual application lifecycle", () => {
   it("requires order write permission", async () => { m.permission.mockRejectedValue(new Error("forbidden")); await expect(updateOrderStatusAction(request("IN_PROGRESS"))).rejects.toThrow("forbidden"); expect(m.transaction).not.toHaveBeenCalled(); });

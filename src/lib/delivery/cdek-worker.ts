@@ -14,7 +14,7 @@ const acceptedSchema = z.object({ entity: z.object({ uuid: z.uuid() }), requests
  * orders have no reliable client order number with which to reconcile them. */
 export async function processCdekJob() {
   const now = new Date();
-  const job = await prisma.cdekDeliveryJob.findFirst({ where: { status: { in: ["PENDING", "SENDING", "ACCEPTED", "CREATED", "CANCELING"] }, nextAttemptAt: { lte: now }, ...unlocked() }, include: { shipment: { include: { order: true } } }, orderBy: { nextAttemptAt: "asc" } });
+  const job = await prisma.cdekDeliveryJob.findFirst({ where: { status: { in: ["PENDING", "SENDING", "ACCEPTED", "CREATED", "CANCELING"] }, nextAttemptAt: { lte: now }, ...unlocked() }, include: { shipment: { include: { order: { include: { payment: true } } } } }, orderBy: { nextAttemptAt: "asc" } });
   if (!job) return false;
   const lockToken = randomUUID();
   if (!(await prisma.cdekDeliveryJob.updateMany({ where: { id: job.id, status: job.status, ...unlocked() }, data: { lockToken, lockedUntil: new Date(Date.now() + 60000) } })).count) return false;
@@ -26,6 +26,7 @@ export async function processCdekJob() {
       await save({ status: "CANCELED", error: null }); return true;
     }
     if (job.status === "PENDING" && !await operatorReady()) { await save({ nextAttemptAt: later() }); return true; }
+    if (job.status === "PENDING" && job.shipment.order.kind !== "APPLICATION" && job.shipment.order.payment?.status !== "PAID") { await save({ nextAttemptAt: later() }); return true; }
     const config = await getCdekConfig();
     if (config.clientId !== job.clientId || config.environment !== job.environment || !config.clientSecret) throw new Error("config");
     const api = new CdekDeliveryClient(config, config.environment);

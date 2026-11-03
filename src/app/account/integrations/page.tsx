@@ -11,9 +11,13 @@ import { AdminDeleteDelivery } from "@/components/admin-delete-delivery";
 import { CloudKassirSettings } from "@/components/cloudkassir-settings";
 import { CategoryAiSettings } from "@/components/category-ai-settings";
 import { CommunicationsSettings } from "@/components/communications-settings";
+import { YooKassaSettings } from "@/components/yookassa-settings";
 
 export const metadata: Metadata = { title: "Подключения магазина", robots: { index: false, follow: false } };
 const messages: Record<string, string> = {
+  "yookassa-rate": "Слишком много проверок ЮKassa. Повторите через минуту.", "yookassa-invalid": "Проверьте идентификатор магазина и секретный ключ ЮKassa.",
+  "yookassa-receipts": "Подтвердите подключение чеков и налоговые настройки в ЮKassa.", "yookassa-connection": "ЮKassa не подтвердила рабочее подключение. Проверьте ключи и статус магазина.",
+  "yookassa-changed": "Настройки изменились или остались платежи для сверки. Обновите страницу.", "yookassa-checked": "Подключение ЮKassa проверено и настройки сохранены; платёж не проводился.", "yookassa-saved": "Настройки ЮKassa сохранены.",
   "cdek-saved": "Настройки СДЭК сохранены.", "cdek-checked": "Настройки СДЭК сохранены, авторизация проверена.",
   "cdek-invalid": "Проверьте настройки СДЭК и ключи API.", "cdek-connection": "СДЭК не подтвердил авторизацию. Проверьте ключи и выбранную среду.",
   "cdek-rate": "Слишком много проверок СДЭК. Повторите через минуту.", "cdek-changed": "Настройки СДЭК изменились. Обновите страницу и повторите.",
@@ -72,9 +76,10 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
   await requirePermission("settings.write");
   const [config, methods, params] = await Promise.all([getTochkaConfig(), prisma.deliveryMethod.findMany({ where: { deletedAt: null }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }), searchParams]);
   return <>
-    <h1>Подключения магазина</h1><p className="notice">Сайт принимает только заявки. Все способы оплаты убраны из оформления; платёжные ссылки и чеки для новых заявок не создаются. Отправления выбранной Ozon Доставки создаются автоматически, а при удалении заявки запрашивается их отмена.</p>
+    <h1>Подключения магазина</h1><p className="notice">Управляйте оплатой, чеками и способами доставки магазина.</p>
     <p><Link className="text-link" href="/account/marketplaces/">Подключить Ozon / Wildberries и синхронизировать товары →</Link></p>
     {params.result && messages[params.result] && <p role="status" className="content-card">{messages[params.result]}</p>}
+    <YooKassaSettings />
     <details className="content-card"><summary>Архивные платёжные интеграции — только для ранее созданных заказов</summary><p className="muted">Настройки и проверка старых обязательств сохранены. Даже включённая здесь интеграция не добавляет способы оплаты к новым заявкам.</p>
     <section className="content-card"><h2>Точка · интернет-эквайринг</h2>
       <p>Оплата новых заявок на сайте отключена. JWT-ключ: {config.token ? "сохранён, скрыт" : "не задан"}.</p>

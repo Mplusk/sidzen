@@ -25,6 +25,8 @@ import { cdekConfigFingerprint, cdekPackages, verifyCdekQuote, type CdekQuote } 
 import { CdekDeliveryClient } from "@/lib/delivery/cdek-client";
 import { checkedCdekPoint } from "@/lib/delivery/cdek-points";
 import { z } from "zod";
+import { getYooKassaConfig, yookassaReady } from "@/lib/yookassa/config";
+import { receiptForOrder } from "@/lib/yookassa/receipt";
 
 async function submitOrder(formData: FormData, inline: boolean): Promise<CheckoutActionState> {
   const fail = (error: string, reference?: string, fields?: Record<string, string[]>) => {
@@ -96,6 +98,13 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
   const deliveryPrice = isCdek ? carrierCost : sums.deliveryPrice;
   const total = Math.round((subtotal + deliveryPrice) * 100) / 100;
   if (Math.abs(total - parsed.data.expectedTotal) > 0.005) { await writeDiagnostic("checkout.price"); return fail("price"); }
+  const paymentConfig = await getYooKassaConfig();
+  const onlinePayment = yookassaReady(paymentConfig);
+  if ((formData.get("paymentMode") === "online") !== onlinePayment) return fail("payment-changed");
+  if (onlinePayment) {
+    try { receiptForOrder({ customerEmail: parsed.data.email, total, deliveryPrice, items: cart.items.map(item => ({ productName: item.product!.name, quantity: item.quantity, unitPrice: item.unitPrice })) }, "full_prepayment"); }
+    catch { return fail("payment-items"); }
+  }
   const number = `3DP-${new Date().toISOString().slice(2, 10).replace(/-/g, "")}-${randomBytes(4).toString("hex").toUpperCase()}`;
   let order;
   try {
@@ -123,14 +132,17 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
         await tx.$queryRaw`SELECT "id" FROM "PrivacyConsent" WHERE "id" = ${ozonQuote.consentId ?? ""} FOR UPDATE`;
         await verifyDeliveryConsent(ozonQuote.consentId ?? "", cart.id, parsed.data.phone, tx);
       }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412034)`;
+      if (yookassaReady(await getYooKassaConfig(tx)) !== onlinePayment) throw new Error("payment-config-changed");
       // Claim the cart rows atomically so a double click cannot create two orders.
       const claimed = await tx.cartItem.deleteMany({ where: { cartId: cart.id, OR: cart.items.map((item) => ({ id: item.id, quantity: item.quantity, updatedAt: item.updatedAt })) } });
       if (claimed.count !== cart.items.length) throw new Error("cart-changed");
       const created = await tx.order.create({ data: {
-        number, userId: user?.id, kind: "APPLICATION", status: "NEW", customerName: parsed.data.name, customerEmail: parsed.data.email, customerPhone: parsed.data.phone,
+        number, userId: user?.id, kind: onlinePayment ? "ORDER" : "APPLICATION", status: onlinePayment ? "AWAITING_PAYMENT" : "NEW", customerName: parsed.data.name, customerEmail: parsed.data.email, customerPhone: parsed.data.phone,
         shippingAddress: ozonQuote ? ozonQuote.address : cdekQuote ? cdekQuote.address : parsed.data.delivery === "pickup" ? "Самовывоз по согласованию" : `${parsed.data.postalCode ? `${parsed.data.postalCode}, ` : ""}${parsed.data.city}, ${parsed.data.address}`,
         customerComment: parsed.data.comment || undefined, subtotal, deliveryPrice, total,
         items: { create: cart.items.map((item) => ({ productId: item.productId, productName: item.product!.name, sku: item.product!.sku, quantity: item.quantity, unitPrice: item.unitPrice, totalPrice: item.unitPrice * item.quantity, configuration: item.quote!.config, materialId: item.quote!.materialId, colorId: item.quote!.colorId })) },
+        ...(onlinePayment ? { payment: { create: { provider: "yookassa-online", amount: total, status: "PENDING" } } } : {}),
         // Persist the carrier outbox atomically with the application. Retries
         // reuse this immutable body/key; no payment or receipt is created.
         shipment: { create: { provider: deliveryMethod.code, method: deliveryMethod.name, cost: carrierCost, ...(ozonQuote ? { payload: { pointId: ozonQuote.request.delivery.delivery_point.delivery_point_id, address: ozonQuote.address, estimatedDays: ozonQuote.days }, ozonJob: { create: { clientId: (await getOzonDeliveryConfig(tx)).clientId, request: ozonCreateBody(ozonQuote.request, number, parsed.data.name, cart.items.flatMap(item => Array.from({ length: item.quantity }, () => item.product!.name))) } } } : {}), ...(cdekQuote && cdekConfig && cdekRequest ? { payload: { pointId: cdekQuote.point, address: cdekQuote.address, tariff: cdekQuote.tariff, daysMin: cdekQuote.daysMin, daysMax: cdekQuote.daysMax }, cdekJob: { create: { clientId: cdekConfig.clientId, environment: cdekConfig.environment, request: JSON.parse(JSON.stringify(cdekRequest)) } } } : {}) } },
@@ -153,6 +165,13 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
   revalidatePath("/admin", "layout");
   revalidatePath("/account", "layout");
   revalidatePath("/", "layout");
+  if (onlinePayment) {
+    try {
+      const { createYooKassaPayment } = await import("@/lib/yookassa/payments");
+      const url = await createYooKassaPayment(order.id);
+      if (url) redirect(url);
+    } catch (error) { unstable_rethrow(error); }
+  }
   redirect(`/checkout/success/${order.number}/`);
 }
 

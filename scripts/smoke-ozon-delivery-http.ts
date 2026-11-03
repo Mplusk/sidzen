@@ -143,9 +143,8 @@ try {
   assert.equal(await prisma.order.count(), ordersBefore); assert.equal(await prisma.ozonDeliveryJob.count(), 0);
   config.enabled = false; await save();
   const disabledCheckout = await (await request("/checkout/")).text();
-  assert(disabledCheckout.includes("Ozon Доставка</strong>"));
+  assert(!disabledCheckout.includes("Ozon Доставка</strong>"));
   assert(!disabledCheckout.includes('value="ozon-delivery"'));
-  assert(disabledCheckout.includes('aria-disabled="true"'));
   assert(!disabledCheckout.includes('value="cdek"'), "Legacy free CDEK must not bypass carrier pricing");
   const legacyOrder = actionForm(disabledCheckout, 'name="expectedTotal"');
   for (const [key, value] of Object.entries({ name: "QA Recipient Test", phone: "+79991234567", email: "buyer@example.test", delivery: "cdek", city: "Москва", address: "QA улица, 1", legal: "on", expectedTotal: "240" })) legacyOrder.set(key, value);

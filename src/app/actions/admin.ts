@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma";
 import { arrangeProductImages, assertImageCapacity, parseProductForm, storedProductImageName, type ProductGalleryEntry } from "@/lib/product-admin";
 import { guardProductWrite } from "@/lib/marketplaces/sync";
 import { queueDerivedReceipt } from "@/lib/cloudkassir/lifecycle";
+import { queueYooKassaSettlement } from "@/lib/yookassa/settlements";
 import { categoryAiReady, getCategoryAiConfig, queueCategoryAi } from "@/lib/category-ai/config";
 
 import { applicationStatuses, orderStatuses } from "@/lib/order-status";
@@ -28,7 +29,8 @@ export async function updateOrderStatusAction(formData: FormData) {
   const order = await prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412026)`;
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412032)`;
-    const before = await tx.order.findUnique({ where: { id: parsed.data.orderId }, include: { payment: true, fiscalReceipts: true } });
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412034)`;
+    const before = await tx.order.findUnique({ where: { id: parsed.data.orderId }, include: { payment: true, fiscalReceipts: true, yookassaSettlement: true } });
     if (!before || before.deletedAt || before.personalDataErasedAt) { statusError = "missing"; return null; }
     if (before.kind === "APPLICATION") {
       statusError = "application-status";
@@ -43,6 +45,14 @@ export async function updateOrderStatusAction(formData: FormData) {
       if ((status === "PAID" && before.payment?.status !== "PAID") || (status === "REFUNDED" && before.payment?.status !== "REFUNDED") || (status === "CANCELED" && before.payment?.status === "PAID") || (before.fiscalReceipts.some(row => row.kind === "SETTLEMENT") && status !== "DELIVERED" && status !== "REFUNDED")) return null;
       if (status === "DELIVERED" && (formData.get("deliveryConfirmed") !== "on" || before.payment?.status !== "PAID" || before.payment.refundReviewRequired)) return null;
       if (status === "DELIVERED") await queueDerivedReceipt(tx, before.id, "SETTLEMENT");
+    }
+    if (before.payment?.provider === "yookassa-online") {
+      if (["IN_PROGRESS", "QUEUED", "PRINTING", "PACKED", "SHIPPED", "DELIVERED"].includes(parsed.data.status) && before.payment.status !== "PAID") return null;
+      if ((parsed.data.status === "PAID" && before.payment.status !== "PAID") || (parsed.data.status === "REFUNDED" && before.payment.status !== "REFUNDED") || (parsed.data.status === "CANCELED" && before.payment.status !== "CANCELED") || (before.yookassaSettlement && !["DELIVERED", "REFUNDED"].includes(parsed.data.status))) return null;
+      if (parsed.data.status === "DELIVERED") {
+        if (formData.get("deliveryConfirmed") !== "on" || before.payment.refundReviewRequired) return null;
+        await queueYooKassaSettlement(tx, before.id);
+      }
     }
     const updated = await tx.order.update({ where: { id: before.id }, data: { status: parsed.data.status, internalNote: parsed.data.note || null, privacyClosedAt: terminalOrderStatuses.some(status => status === parsed.data.status) ? before.status === parsed.data.status ? before.privacyClosedAt ?? new Date() : new Date() : null, ...(before.kind === "APPLICATION" ? { purchaseConfirmedAt: parsed.data.status === "DELIVERED" ? before.purchaseConfirmedAt ?? new Date() : null } : {}) } });
     if (parsed.data.status === "CANCELED") await tx.cdekDeliveryJob.updateMany({ where: { shipment: { orderId: before.id }, status: { notIn: ["CANCELED", "FINISHED"] } }, data: { cancelRequestedAt: new Date(), nextAttemptAt: new Date() } });

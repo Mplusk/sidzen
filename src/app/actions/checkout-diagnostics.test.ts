@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("@/lib/yookassa/config", () => ({ getYooKassaConfig: async () => ({ enabled: false }), yookassaReady: () => false }));
 const m = vi.hoisted(() => ({ cart: vi.fn(), config: vi.fn(), verify: vi.fn(), consent: vi.fn(), checkout: vi.fn(), log: vi.fn(), transaction: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: m.transaction } }));
 vi.mock("@/lib/auth", () => ({ getCurrentUser: async () => null }));

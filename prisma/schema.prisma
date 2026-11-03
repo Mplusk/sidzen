@@ -605,6 +605,7 @@ model Order {
   notifications   OrderNotification[]
   telegramJob     TelegramOrderJob?
   fiscalReceipts   FiscalReceipt[]
+  yookassaSettlement YooKassaSettlement?
 
   @@index([status, createdAt])
   @@index([userId, createdAt])
@@ -688,6 +689,28 @@ model FiscalReceipt {
   order           Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
 
   @@unique([orderId, kind])
+  @@index([status, nextAttemptAt])
+}
+
+// One durable, idempotent prepayment-settlement receipt for a YooKassa order.
+model YooKassaSettlement {
+  id String @id @default(uuid())
+  orderId String @unique
+  paymentId String
+  shopId String
+  request String
+  status String @default("PENDING")
+  externalId String? @unique
+  firstAttemptAt DateTime?
+  nextAttemptAt DateTime @default(now())
+  leaseUntil DateTime?
+  attempts Int @default(0)
+  errorCode String?
+  processedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
   @@index([status, nextAttemptAt])
 }
 

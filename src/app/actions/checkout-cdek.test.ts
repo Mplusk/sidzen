@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ cart: vi.fn(), create: vi.fn(), claim: vi.fn(), transaction: vi.fn(), verify: vi.fn(), tariff: vi.fn(), point: vi.fn(), config: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: m.transaction, deliveryMethod: { findFirst: vi.fn() } } }));
+vi.mock("@/lib/yookassa/config", () => ({ getYooKassaConfig: async () => ({ enabled: false }), yookassaReady: () => false }));
 vi.mock("@/lib/auth", () => ({ getCurrentUser: async () => ({ id: "buyer" }) }));
 vi.mock("@/app/actions/cart", () => ({ getCart: m.cart }));
 vi.mock("@/lib/privacy", () => ({ operatorReady: async () => true, verifyDeliveryConsent: vi.fn() }));
