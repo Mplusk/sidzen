@@ -70,12 +70,12 @@ try {
   const missingImage = await request(`/uploads/products/${randomUUID()}.webp`);
   assert.equal(missingImage.status, 404);
   assert(missingImage.headers.get("cache-control")?.includes("no-store"), "Do not cache missing uploads for a year");
-  assert(catalogHtml.includes('role="search"') && catalogHtml.includes('action="/catalog/"') && !catalogHtml.includes('catalog-category-strip'));
+  assert(catalogHtml.includes('role="search"') && catalogHtml.includes('action="/"') && !catalogHtml.includes('catalog-category-strip'));
   const trigger = catalogHtml.match(/<button\b[^>]*class="header-catalog"[^>]*>/)?.[0];
   const menu = catalogHtml.match(/<nav\b[^>]*class="header-catalog-panel"[^>]*>[\s\S]*?<\/nav>/)?.[0];
   assert(trigger?.includes('type="button"') && trigger.includes('aria-expanded="false"'));
   assert(menu && /<nav[^>]*\shidden(?:[\s=>])/.test(menu), "Categories must start closed");
-  assert(menu.includes('aria-label="Категории товаров"') && menu.includes('href="/catalog/"'));
+  assert(menu.includes('aria-label="Категории товаров"') && menu.includes('href="/"'));
   const path = `/catalog/${category.slug}/${product.slug}/`;
   const response = await request(path); assert.equal(response.status, 200);
   let html = await response.text();
@@ -134,7 +134,7 @@ try {
   for (const retired of ['value="quality"', 'value="technology"', 'value="postProcess"', 'id="quality"', 'id="technology"', 'id="postProcess"']) assert(!dictionariesHtml.includes(retired));
   const staleDictionary = actionForm(dictionariesHtml, 'name="kind"'); staleDictionary.set("kind", "quality"); staleDictionary.set("name", "Legacy");
   assert.equal((await request("/admin/catalog/", staleDictionary)).headers.get("location"), "/admin/catalog/?error=invalid");
-  for (const oldPath of ["/technologies/", "/technologies/fdm/"]) assert.equal((await request(oldPath)).headers.get("location"), "/catalog/");
+  for (const oldPath of ["/technologies/", "/technologies/fdm/"]) assert.equal((await request(oldPath)).headers.get("location"), "/");
   const specificationsEditor = editorHtml.match(/<textarea\b[^>]*name="specificationsText"[^>]*>[\s\S]*?<\/textarea>/)?.[0];
   assert(specificationsEditor);
   for (const text of [...Object.keys(adminCodes), ...Object.values(adminCodes)]) assert(specificationsEditor.includes(text), `Administrator lost classification: ${text}`);

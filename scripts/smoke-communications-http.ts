@@ -74,7 +74,7 @@ try {
   const header = catalog.match(/<header class="site-header">[\s\S]*?<\/header>/)?.[0];
   assert(header, "Storefront header must render");
   for (const removed of ['/delivery/', '/contacts/', 'mailto:']) assert(!header.includes(removed));
-  for (const retained of ['header-search', '/catalog/', '/account/', '/cart/']) assert(header.includes(retained));
+  for (const retained of ['header-search', 'href="/"', '/account/', '/cart/']) assert(header.includes(retained));
   console.log("PASS: real HTTP action auth/permission/CSRF, encrypted Telegram configuration, hidden secrets, revision guard, review AI operator confirmation, private alert route, compact header/account navigation, retired data portal/export and preserved footer.");
 } finally {
   await prisma.userRole.createMany({ data: roles, skipDuplicates: true });
