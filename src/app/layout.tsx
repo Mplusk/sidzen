@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   title: { default: "SIDZEN — 3D декор для дома", template: "%s | SIDZEN" },
   description: "Предметы для дома, вдохновлённые природными формами. Декор, свет и полезные детали интерьера с доставкой по России.",
   applicationName: "SIDZEN",
-  alternates: { canonical: "/catalog/" },
+  alternates: { canonical: "/" },
   openGraph: { type: "website", locale: "ru_RU", siteName: "SIDZEN", images: [{ url: "/brand/sidzen-social.png", width: 1200, height: 630, alt: "SIDZEN — 3D декор для дома" }] },
   icons: { icon: [{ url: "/favicon.svg", type: "image/svg+xml" }, { url: "/favicon.ico", sizes: "32x32" }], apple: "/apple-touch-icon.png" },
   manifest: "/manifest.webmanifest",

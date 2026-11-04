@@ -8,7 +8,7 @@ import { pluralRu } from "@/lib/format";
 export async function CatalogView({ category, searchParams }: { category?: { slug: string; name: string; description?: string | null; h1?: string | null }; searchParams: CatalogParams }) {
   const params = normalizeCatalogParams(searchParams);
   const data = await getCatalog({ ...params, category: category?.slug });
-  const base = category ? `/catalog/${category.slug}/` : "/catalog/";
+  const base = category ? `/catalog/${category.slug}/` : "/";
   const makeUrl = (patch: Record<string, string | undefined>) => { const query = new URLSearchParams(); for (const [key, value] of Object.entries({ ...params, ...patch })) if (value) query.set(key, value); return base + (query.size ? "?" + query : ""); };
   const groups = ([ ["material", "Материал", data.materials], ["color", "Цвет", data.colors] ] as const).map(([key, label, options]) => ({ key, label, options: options.map((item) => ({ slug: item.slug, name: item.name, count: item._count.products })) }));
   const chips = groups.flatMap((group) => filterValues(params[group.key]).map((slug) => ({ label: group.options.find((option) => option.slug === slug)?.name ?? slug, href: makeUrl({ [group.key]: filterValues(params[group.key]).filter((value) => value !== slug).join(","), page: undefined }) })));

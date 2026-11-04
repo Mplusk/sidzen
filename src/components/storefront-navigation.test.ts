@@ -8,7 +8,7 @@ it("keeps the header focused on catalog, search and shopping actions", () => {
   const actions = readFileSync(new URL("./header-shopping-actions.tsx", import.meta.url), "utf8");
   for (const retained of ["/account/", "/favorites/", "/cart/"]) expect(actions).toContain(retained);
   const search = readFileSync(new URL("./catalog-search-input.tsx", import.meta.url), "utf8");
-  expect(search).toMatch(/className="[^"]*\bheader-search\b[^"]*"/); expect(search).toContain('action="/catalog/"');
+  expect(search).toMatch(/className="[^"]*\bheader-search\b[^"]*"/); expect(search).toContain('action="/"');
 });
 
 it("removes documents and personal data from both desktop and mobile account navigation", () => {

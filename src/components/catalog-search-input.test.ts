@@ -34,6 +34,7 @@ it("restores URL queries on navigation, reload-like remount, Back/Forward and cl
   await navigate("q=лампа"); expect(input().value).toBe("лампа"); // Forward
   await navigate("q=лампа&sort=price-asc"); expect(input().value).toBe("лампа");
   await navigate(""); expect(input().value).toBe("");
+  await navigate("q=лампа", "/"); expect(input().value).toBe("лампа");
   await navigate("q=unrelated", "/account/"); expect(input().value).toBe("");
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); vi.useRealTimers(); Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView"); });
@@ -55,7 +56,7 @@ it("ignores outdated responses and keeps empty/error recovery and ordinary searc
   expect(container.querySelector('[role="option"]')).toBeNull(); expect(container.textContent).toContain("Ничего не нашли");
   vi.mocked(fetch).mockResolvedValueOnce(new Response("", { status: 503 }));
   await type("ошибка"); await act(async () => { await vi.advanceTimersByTimeAsync(250); });
-  expect(container.textContent).toContain("Поиск по Enter работает"); expect(container.querySelector("form")!.getAttribute("action")).toBe("/catalog/");
+  expect(container.textContent).toContain("Поиск по Enter работает"); expect(container.querySelector("form")!.getAttribute("action")).toBe("/");
   await act(async () => container.querySelector("input")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
   expect(container.querySelector('[role="combobox"]')!.getAttribute("aria-expanded")).toBe("false");
 });

@@ -12,6 +12,7 @@ it("rejects private routes, searches, URLs and arbitrary query parameters", () =
   expect(publicMonitoringPath("/catalog/decor/coral")).toBe("/catalog/decor/coral/");
   expect(publicMonitoringPath("/catalog/%D0%B4%D0%B5%D0%BA%D0%BE%D1%80/")).toBe("/catalog/декор/");
   expect(publicMonitoringPath("/about/")).toBe("/about/");
+  expect(publicMonitoringPath("/")).toBe("/");
 });
 it("rejects cross-origin and missing-origin requests without an identity token", () => {
   vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://sidzen.shop");

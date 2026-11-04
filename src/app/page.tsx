@@ -1,5 +1,1 @@
-import { permanentRedirect } from "next/navigation";
-
-export default function HomePage() {
-  permanentRedirect("/catalog/");
-}
+export { default, generateMetadata } from "@/app/catalog/page";

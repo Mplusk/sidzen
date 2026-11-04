@@ -11,7 +11,7 @@ export function CatalogSearchInput() {
   // The shared header survives navigation. Remount only its search control when
   // the URL changes, so reload, clear, category changes and Back/Forward all
   // restore the committed query without overwriting typing during a render.
-  const initialQuery = pathname === "/catalog" || pathname.startsWith("/catalog/") ? params.get("q")?.slice(0, 120) ?? "" : "";
+  const initialQuery = pathname === "/" || pathname === "/catalog" || pathname.startsWith("/catalog/") ? params.get("q")?.slice(0, 120) ?? "" : "";
   return <CatalogSearchControl key={`${pathname}?${params.toString()}`} initialQuery={initialQuery} />;
 }
 function CatalogSearchControl({ initialQuery }: { initialQuery: string }) {
@@ -43,8 +43,8 @@ function CatalogSearchControl({ initialQuery }: { initialQuery: string }) {
     return () => { alive = false; clearTimeout(timer); clearTimeout(timeout); controller.abort(); };
   }, [query]);
   const expanded = open && query.trim().length >= 2;
-  const all = `/catalog/?q=${encodeURIComponent(query.trim())}`;
-  return <form className="header-search ym-hide-content ym-disable-keys" action="/catalog/" method="get" role="search" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }} onSubmit={event => {
+  const all = `/?q=${encodeURIComponent(query.trim())}`;
+  return <form className="header-search ym-hide-content ym-disable-keys" action="/" method="get" role="search" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }} onSubmit={event => {
     setOpen(false);
     if (expanded && active >= 0 && items[active]) { event.preventDefault(); router.push(items[active].href); }
   }}>

@@ -10,7 +10,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     prisma.product.findMany({ where: { status: "PUBLISHED", type: { in: ["READY", "PARAMETRIC"] } }, select: { slug: true, updatedAt: true, categories: { where: { isPrimary: true }, select: { category: { select: { slug: true } } }, take: 1 } } }),
   ]);
   return [
-    { url: `${base}/catalog/`, lastModified: new Date(), changeFrequency: "daily" as const, priority: 1 },
+    { url: `${base}/`, lastModified: new Date(), changeFrequency: "daily" as const, priority: 1 },
     ...["about", "contacts", "delivery", "materials", "faq"].map((path) => ({ url: `${base}/${path}/`, changeFrequency: "monthly" as const, priority: .5 })),
     ...categories.map((item) => ({ url: `${base}/catalog/${item.slug}/`, lastModified: item.updatedAt, changeFrequency: "weekly" as const, priority: .8 })),
     ...products.map((item) => ({ url: `${base}/catalog/${item.categories[0]?.category.slug ?? "products"}/${item.slug}/`, lastModified: item.updatedAt, changeFrequency: "weekly" as const, priority: .9 })),

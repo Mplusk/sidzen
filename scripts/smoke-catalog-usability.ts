@@ -28,6 +28,14 @@ try {
   const suggestions = await (await fetch(`${base}/api/catalog/suggestions/?q=${prefix}%20%D0%A7%D0%B0%D1%88%D0%B0`)).json();
   assert(suggestions.products.some((row: { id: string }) => row.id === ids[0]));
   assert(!suggestions.products.some((row: { id: string }) => row.id === ids[1]));
+  const home = await fetch(`${base}/`, { redirect: "manual" });
+  assert.equal(home.status, 200, "storefront home must render at /");
+  const homeHtml = await home.text();
+  assert(homeHtml.includes('rel="canonical" href="https://sidzen.shop/"'));
+  const searchOnHome = await (await fetch(`${base}/?q=${prefix}`)).text();
+  assert(searchOnHome.includes(`${prefix}-published`));
+  const legacyCatalog = await fetch(`${base}/catalog/`, { redirect: "manual" });
+  assert.equal(legacyCatalog.status, 200, "existing catalog links remain accessible");
   const html = await (await fetch(`${base}/catalog/${prefix}/?material=pla`)).text();
   assert(html.includes(`${prefix}-published`)); assert(!html.includes(`${prefix}-draft`));
   assert(html.includes('mobile-purchase-bar') === false);

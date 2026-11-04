@@ -59,7 +59,7 @@ export function CatalogMenu({ categories, logo, search, actions }: {
       {actions}
     </div>
     <nav id={id} className="header-catalog-panel" hidden={!open} aria-label="Категории товаров">
-      <Link href="/catalog/" aria-current={pathname === "/catalog/" ? "page" : undefined}>Все товары</Link>
+      <Link href="/" aria-current={pathname === "/" || pathname === "/catalog/" ? "page" : undefined}>Все товары</Link>
       {categories.map(category => <Link key={category.slug} href={`/catalog/${category.slug}/`} aria-current={pathname === `/catalog/${category.slug}/` ? "page" : undefined}>{category.name}</Link>)}
     </nav>
   </div>;

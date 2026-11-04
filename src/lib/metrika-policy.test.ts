@@ -10,8 +10,10 @@ describe("Metrica consent and route policy", () => {
     expect(readMetrikaChoice(storage(JSON.stringify({choice:"rejected",at:now})), now)).toBe("rejected");
     expect(readMetrikaChoice({getItem: () => { throw Error("denied"); }}, now)).toBeNull();
   });
-  it("allows only public pages with no query or fragment", () => {
+  it("allows only public pages and the fixed Yandex debug flag", () => {
+    expect(metrikaPublicUrl("https://sidzen.shop/")).toBe("https://sidzen.shop/");
+    expect(metrikaPublicUrl("https://sidzen.shop/?_ym_debug=2")).toBe("https://sidzen.shop/");
     expect(metrikaPublicUrl("https://sidzen.shop/catalog/item")).toBe("https://sidzen.shop/catalog/item/");
-    for (const url of ["https://sidzen.shop/account/", "https://sidzen.shop/checkout/", "https://sidzen.shop/search/", "https://sidzen.shop/catalog/?q=Иван", "https://sidzen.shop/catalog/#x", "not a URL"]) expect(metrikaPublicUrl(url)).toBeNull();
+    for (const url of ["https://sidzen.shop/account/", "https://sidzen.shop/checkout/", "https://sidzen.shop/search/", "https://sidzen.shop/catalog/?q=Иван", "https://sidzen.shop/?_ym_debug=2&q=Иван", "https://sidzen.shop/?_ym_debug=Иван", "https://sidzen.shop/?_ym_debug=2&_ym_debug=2", "https://sidzen.shop/catalog/#x", "not a URL"]) expect(metrikaPublicUrl(url)).toBeNull();
   });
 });

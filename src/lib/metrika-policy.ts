@@ -20,7 +20,9 @@ export function metrikaPublicUrl(href: string): string | null {
   try {
     const url = new URL(href);
     const path = publicMonitoringPath(url.pathname);
-    // Query strings and fragments can contain personal or order information.
-    return path && !url.search && !url.hash ? `${url.origin}${path}` : null;
+    // Allow only the fixed Yandex debug flag; arbitrary parameters may contain personal data.
+    const params = [...url.searchParams.entries()];
+    const debugOnly = params.length === 1 && params[0][0] === "_ym_debug" && /^[012]$/.test(params[0][1]);
+    return path && (!url.search || debugOnly) && !url.hash ? `${url.origin}${path}` : null;
   } catch { return null; }
 }

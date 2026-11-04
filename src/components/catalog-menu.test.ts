@@ -69,7 +69,7 @@ it("stays open after category selection and route changes until Catalog is press
   expect(panel().querySelector('a[href="/catalog/decor/"]')!.getAttribute("aria-current")).toBe("page");
   route.pathname = "/catalog/"; await render();
   expect(panel().hidden).toBe(false);
-  expect(panel().querySelector('a[href="/catalog/"]')!.getAttribute("aria-current")).toBe("page");
+  expect(panel().querySelector('a[href="/"]')!.getAttribute("aria-current")).toBe("page");
   await toggle(); expect(panel().hidden).toBe(true);
   route.pathname = "/catalog/decor/"; await render(); expect(panel().hidden).toBe(true);
 });
