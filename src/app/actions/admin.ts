@@ -6,12 +6,14 @@ import { join } from "node:path";
 import { Prisma, type Product } from "@prisma/client";
 import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { z } from "zod";
 import { requirePermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { slugify } from "@/lib/format";
 import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { removeUserRole } from "@/lib/user-role-removal";
 import { arrangeProductImages, assertImageCapacity, parseProductForm, storedProductImageName, type ProductGalleryEntry } from "@/lib/product-admin";
 import { guardProductWrite } from "@/lib/marketplaces/sync";
 import { queueDerivedReceipt } from "@/lib/cloudkassir/lifecycle";
@@ -332,6 +334,17 @@ export async function assignRoleAction(formData: FormData) {
   revalidatePath("/admin/users/");
 }
 
+export async function removeRoleAction(formData: FormData) {
+  const actor = await requirePermission(PERMISSIONS.usersWrite);
+  const parsed = z.object({ userId: z.string().min(1).max(200), roleId: z.string().min(1).max(200) }).safeParse({ userId: formData.get("userId"), roleId: formData.get("roleId") });
+  if (!parsed.success) redirect("/admin/users/?error=invalid");
+  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim();
+  const result = await removeUserRole(prisma, { actorId: actor.id, ...parsed.data, ip });
+  if (result !== "removed") redirect(`/admin/users/?error=${result}`);
+  revalidatePath("/admin/users/");
+  redirect("/admin/users/?removed=1");
+}
+
 export async function createArticleAction(formData: FormData) {
   const user = await requirePermission(PERMISSIONS.contentWrite);
   const title = String(formData.get("title") ?? "").trim();
@@ -344,3 +357,4 @@ export async function createArticleAction(formData: FormData) {
   revalidatePath("/blog/");
   redirect("/admin/content/?saved=1");
 }
+

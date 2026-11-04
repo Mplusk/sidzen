@@ -508,6 +508,10 @@ html:has(.admin-shell) { scroll-padding-top: 1rem; }
 .catalog-create-form .button { justify-self: start; }
 .admin-delete-link { border: 0; padding: 0; color: #b52f32; background: transparent; cursor: pointer; font-size: .84rem; }
 .admin-delete-link:disabled { color: var(--muted); cursor: not-allowed; font-weight: 500; }
+.user-role-list { display: grid; gap: 8px; min-width: 12rem; }
+.user-role-item { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.user-role-item .admin-delete-link { min-height: 2.25rem; padding: 4px 6px; }
+.user-role-assign { display: flex; align-items: center; gap: 8px; }
 .client-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 
 .empty-state { padding: 60px 24px; border: 1px dashed #b8bdc2; border-radius: var(--radius); text-align: center; color: var(--muted); }
@@ -1035,3 +1039,4 @@ body:has(.admin-shell) > .site-footer { display: none; }
 .metrika-consent__actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .metrika-consent__actions button { border: 1px solid #6c705d; border-radius: 10px; padding: 10px 14px; background: #fff; color: #4e5444; cursor: pointer; font: inherit; }
 .metrika-consent__actions button:last-child:not(:only-child) { background: #6c705d; color: #fff; }
+
