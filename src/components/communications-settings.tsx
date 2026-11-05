@@ -8,7 +8,7 @@ export async function CommunicationsSettings() {
   const [telegram, reviews, failed] = await Promise.all([getTelegramConfig(), getReviewAiConfig(), prisma.telegramOrderJob.count({ where: { status: { in: ["FAILED", "UNCERTAIN"] }, order: { deletedAt: null } } })]);
   return <div id="communications">
     <section className="content-card"><h2>Telegram · уведомления о новых заказах</h2><p>Создайте бота через @BotFather и отправьте ему /start (или добавьте в свою группу). Введите токен бота и числовой Chat ID получателя. Пароль вашей Telegram-учётки не нужен.</p>
-      <p className="muted">Уведомление содержит только ссылку на заказ. ФИО, телефон, email, адрес и комментарии покупателя остаются в защищённом кабинете на сайте. Токен хранится зашифрованным.</p>
+      <p className="muted">В личный чат бот отправляет номер, товары, город и суммы заказа и доставки. В группе или канале приходит только ссылка на заказ. Имя, контакты, полный адрес и комментарии остаются в защищённом кабинете. Токен хранится зашифрованным.</p>
       <form action={saveTelegramSettings} className="form-grid" autoComplete="off"><input type="hidden" name="revision" value={telegram.revision} />
         <label className="field">Токен бота<input name="token" type="password" autoComplete="new-password" maxLength={150} placeholder={telegram.token ? "Сохранён; пустое поле оставит прежний токен" : "123456789:…"} /></label>
         <label className="field">Chat ID<input name="chatId" defaultValue={telegram.chatId} maxLength={21} placeholder="123456789 или -100… для группы" /><small>Числовой ID чата, не @username и не телефон. Получите через getUpdates вашего бота после /start; не публикуйте URL с токеном.</small></label>
