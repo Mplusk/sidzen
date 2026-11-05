@@ -60,6 +60,7 @@ jobs:
           pnpm exec tsx scripts/smoke-yookassa.ts
           pnpm exec tsx scripts/smoke-social.ts
           pnpm exec tsx scripts/smoke-privacy-retention.ts
+          pnpm exec tsx scripts/smoke-user-management.ts
           pnpm exec tsx scripts/smoke-ozon-applications.ts
           pnpm exec tsx scripts/smoke-cdek-applications.ts
       - run: pnpm build
@@ -298,3 +299,4 @@ jobs:
       - name: Remove relay runner credentials
         if: always()
         run: rm -f -- "${HOME}/.ssh/relay_deploy"
+
