@@ -75,6 +75,7 @@ model User {
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
   lastActiveAt  DateTime            @default(now())
+  lastVisitedAt DateTime?
   roles         UserRole[]
   sessions      Session[]
   addresses     Address[]
