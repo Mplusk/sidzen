@@ -52,11 +52,14 @@ async function seedAccess() {
 
   // Existing owner identities are not renamed or duplicated during a domain move.
   const existingOwner = await prisma.user.findFirst({ where: { roles: { some: { role: { code: "superadmin" } } } }, orderBy: { createdAt: "asc" }, select: { email: true } });
-  const email = (process.env.BOOTSTRAP_ADMIN_EMAIL ?? existingOwner?.email ?? "admin@sidzen.shop").toLowerCase();
+  // Bootstrap only an installation that has no owner; deployments must never
+  // reactivate an archived owner or recreate one deliberately removed later.
+  if (existingOwner) return;
+  const email = (process.env.BOOTSTRAP_ADMIN_EMAIL ?? "admin@sidzen.shop").toLowerCase();
   const password = process.env.BOOTSTRAP_ADMIN_PASSWORD ?? "ChangeMe-3dprinta-2026";
   const admin = await prisma.user.upsert({
     where: { email },
-    update: { isActive: true },
+    update: {},
     create: { email, passwordHash: hashPassword(password), name: "Администратор 3DPRINTA", emailVerified: new Date() },
   });
   const role = await prisma.role.findUniqueOrThrow({ where: { code: "superadmin" } });
@@ -245,3 +248,4 @@ main()
     await prisma.$disconnect();
     process.exit(1);
   });
+

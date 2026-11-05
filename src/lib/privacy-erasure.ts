@@ -17,13 +17,14 @@ export const erasurePlanSchema = z.object({
   modelFiles: z.array(z.string().regex(/^[A-Za-z0-9_-]+\.(?:stl|obj|3mf|step|stp)$/i)),
   modelIds: z.array(id), subjectHash: z.string().length(64), at: z.iso.datetime(),
   reason: z.enum(["administrator", "retention"]), retainedUntil: z.iso.datetime().nullable(),
+  scope: z.enum(["customer", "user"]).default("customer"),
   consentReceipts: z.array(z.object({ purpose: z.string().max(100), version: z.string().max(100), subjectHash: z.string().length(64), at: z.iso.datetime(), text: z.string().max(8000) })).default([]),
 });
 export type ErasurePlan = z.infer<typeof erasurePlanSchema>;
 export const ledgerDirectory = () => process.env.PRIVACY_ERASURE_LEDGER_DIR || join(process.cwd(), "privacy-ledger");
 const ledgerFile = (value: string) => join(ledgerDirectory(), `${z.uuid().parse(value)}.json.enc`);
 export class ErasureError extends Error {
-  constructor(readonly code: "active" | "protected" | "missing" | "storage" | "files-in-use") { super(code); }
+  constructor(readonly code: "active" | "protected" | "missing" | "storage" | "files-in-use" | "forbidden" | "last-superadmin") { super(code); }
 }
 const orderInclude = { payment: true, fiscalReceipts: true, yookassaSettlement: true, shipment: { include: { ozonJob: true, cdekJob: true } } } as const;
 async function lock(tx: Prisma.TransactionClient) {
@@ -33,11 +34,16 @@ async function lock(tx: Prisma.TransactionClient) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412034)`;
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${LOCK})`;
 }
-async function assertCustomer(tx: Prisma.TransactionClient, userId: string | null, actorId?: string) {
+async function assertCustomer(tx: Prisma.TransactionClient, userId: string | null, actorId?: string, scope: "customer" | "user" = "customer") {
   if (!userId) return;
   await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`;
   const user = await tx.user.findUnique({ where: { id: userId }, include: { roles: { include: { role: true } } } });
-  if (user && (actorId === user.id || user.roles.some(row => row.role.code !== "customer"))) throw new ErasureError("protected");
+  if (!user) return;
+  if (actorId === user.id || (scope === "customer" && user.roles.some(row => row.role.code !== "customer"))) throw new ErasureError("protected");
+  if (scope === "user" && user.roles.some(row => row.role.code === "superadmin")) {
+    const others = await tx.user.count({ where: { id: { not: user.id }, isActive: true, roles: { some: { role: { code: "superadmin" } } } } });
+    if (!others) throw new ErasureError("last-superadmin");
+  }
 }
 async function writeLedger(plan: ErasurePlan) {
   await mkdir(ledgerDirectory(), { recursive: true, mode: 0o700 });
@@ -46,7 +52,7 @@ async function writeLedger(plan: ErasurePlan) {
 }
 async function applyPlan(tx: Prisma.TransactionClient, plan: ErasurePlan, actorId?: string, evaluationNow = new Date()) {
   const now = new Date(plan.at), ids = plan.orderIds;
-  await assertCustomer(tx, plan.userId, actorId);
+  await assertCustomer(tx, plan.userId, actorId, plan.scope);
   const orders = await tx.order.findMany({ where: { id: { in: ids } }, include: orderInclude });
   if (orders.some(order => erasureBlocked(order, evaluationNow))) throw new ErasureError("active");
   if (orders.some(order => hasFinancialEvidence(order) && orderRetentionEnd(order) > evaluationNow && (!plan.retainedIds.includes(order.id) || !plan.retainedUntil || orderRetentionEnd(order) > new Date(plan.retainedUntil)))) throw new ErasureError("active");
@@ -117,8 +123,24 @@ export async function eraseClientData(key: string, actorId: string, now = new Da
   await removeErasureFiles(result).catch(() => {}); // durable queue retries physical deletion
   return result;
 }
-async function buildAndApply(tx: Prisma.TransactionClient, userId: string | null, extraIds: string[], reason: "administrator" | "retention", now: Date, actorId?: string) {
-  await assertCustomer(tx, userId, actorId);
+/** User management additionally allows staff accounts, retaining the same privacy safeguards. */
+export async function eraseUserData(userId: string, actorId: string, now = new Date()) {
+  id.parse(userId);
+  if (!rfStorageReady()) throw new ErasureError("storage");
+  const result = await prisma.$transaction(async tx => {
+    await lock(tx);
+    const actor = await tx.user.findUnique({ where: { id: actorId }, include: { roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } } } });
+    const codes = new Set(actor?.roles.flatMap(({ role }) => role.permissions.map(({ permission }) => permission.code)) ?? []);
+    if (!actor?.isActive || (!actor.roles.some(({ role }) => role.code === "superadmin") && !["users.write", "customers.read", "customers.write", "orders.write"].every(code => codes.has(code)))) throw new ErasureError("forbidden");
+    const target = await clientErasureTarget(tx, `account:${userId}`);
+    if (!target || target.userId !== userId) throw new ErasureError("missing");
+    return buildAndApply(tx, userId, target.guestOrderIds, "administrator", now, actorId, "user");
+  }, { isolationLevel: "Serializable", timeout: 20000 });
+  await removeErasureFiles(result).catch(() => {});
+  return result;
+}
+async function buildAndApply(tx: Prisma.TransactionClient, userId: string | null, extraIds: string[], reason: "administrator" | "retention", now: Date, actorId?: string, scope: "customer" | "user" = "customer") {
+  await assertCustomer(tx, userId, actorId, scope);
   const orders = await tx.order.findMany({ where: { OR: [{ id: { in: extraIds } }, ...(userId ? [{ userId }] : [])] }, include: orderInclude });
   if (orders.some(order => erasureBlocked(order, now))) throw new ErasureError("active");
   const orderIds = orders.map(order => order.id);
@@ -129,7 +151,7 @@ async function buildAndApply(tx: Prisma.TransactionClient, userId: string | null
   const retained = orders.filter(order => hasFinancialEvidence(order) && orderRetentionEnd(order) > now);
   const plan = erasurePlanSchema.parse({ id: randomUUID(), userId, orderIds, retainedIds: retained.map(order => order.id),
     reviewFiles: images.map(image => image.fileName), modelFiles: models.map(model => model.storedName), modelIds: models.map(model => model.id),
-    subjectHash: privacySubject("erasure", userId ?? orderIds.join(":")), at: now.toISOString(), reason,
+    subjectHash: privacySubject("erasure", userId ?? orderIds.join(":")), at: now.toISOString(), reason, scope,
     consentReceipts: consents.map(receipt => ({ purpose: receipt.purpose, version: receipt.version, subjectHash: privacySubject("consent-evidence", receipt.subjectHash), at: receipt.createdAt.toISOString(), text: receipt.document && typeof receipt.document === "object" && !Array.isArray(receipt.document) && typeof receipt.document.text === "string" ? receipt.document.text : "" })),
     retainedUntil: retained.length ? new Date(Math.max(...retained.map(order => orderRetentionEnd(order).getTime()))).toISOString() : null,
   });
@@ -182,3 +204,4 @@ export async function pruneErasureEvidence(now: Date) {
     await prisma.privacyErasure.delete({ where: { id: row.id } });
   }
 }
+
