@@ -20,8 +20,8 @@ export async function CdekDeliverySettings() {
       <label className="field">Телефон отправителя<input name="senderPhone" type="tel" maxLength={30} defaultValue={config.senderPhone} /></label>
       <input type="hidden" name="enabled" value={config.enabled ? "on" : ""} />
       <input type="hidden" name="availabilityVersion" value={config.enabled ? "on" : "off"} />
-      <SubmitButton className="button" pendingLabel="Сохраняем…">Сохранить</SubmitButton>
-      <SubmitButton className="button button--outline" name="intent" value="check" pendingLabel="Проверяем…">Проверить авторизацию</SubmitButton>
-    </form>
+      <div className="form-actions"><SubmitButton className="button" pendingLabel="Сохраняем…">Сохранить</SubmitButton>
+      <SubmitButton className="button button--outline" name="intent" value="check" pendingLabel="Проверяем…">Проверить авторизацию</SubmitButton></div>
+</form>
   </section>;
 }

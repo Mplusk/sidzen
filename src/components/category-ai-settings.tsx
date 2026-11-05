@@ -14,9 +14,9 @@ export async function CategoryAiSettings() {
       <label><input type="checkbox" name="enabled" defaultChecked={config.enabled} /> Автоматически определять категории новых товаров</label>
       <label><input type="checkbox" name="allowCreate" defaultChecked={config.allowCreate} /> Создавать новую категорию, если подходящей нет</label>
       <label className="field--full"><input type="checkbox" name="clearKey" /> Удалить сохранённый ключ (сначала выключите автоматическую категоризацию)</label>
-      <SubmitButton className="button" pendingLabel="Сохраняем…">Сохранить</SubmitButton>
-      <SubmitButton className="button button--outline" name="verify" value="yes" pendingLabel="Проверяем…">Проверить и сохранить</SubmitButton>
-    </form>
+      <div className="form-actions"><SubmitButton className="button" pendingLabel="Сохраняем…">Сохранить</SubmitButton>
+      <SubmitButton className="button button--outline" name="verify" value="yes" pendingLabel="Проверяем…">Проверить и сохранить</SubmitButton></div>
+</form>
     {config.checkedAt && <p className="muted">Доступ к модели проверен: {new Date(config.checkedAt).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })} МСК. Проверка ключа не генерирует текст и не создаёт категории.</p>}
     <p><a className="text-link" href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer">Получить ключ DeepSeek →</a></p>
   </section>;
