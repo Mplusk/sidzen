@@ -34,6 +34,8 @@ const results: Record<string, string> = {
   "erasure-failed": "Не удалось завершить удаление. Проверьте журнал удалений и повторите после устранения причины.",
 };
 
+const visitDate = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow" });
+
 export default async function UsersPage({ searchParams }: { searchParams: Promise<{ error?: string; removed?: string; result?: string; view?: string }> }) {
   const actor = await requirePermission("users.write");
   const { error, removed, result, view } = await searchParams;
@@ -43,16 +45,16 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   return <>
     <div className="admin-header"><div><h1>{archived ? "Архив пользователей" : "Пользователи и роли"}</h1></div></div>
     <nav className="user-list-nav" aria-label="Список пользователей"><Link className="button button--outline button--small" href="/admin/users/" aria-current={!archived ? "page" : undefined}>Пользователи</Link><Link className="button button--outline button--small" href="/admin/users/?view=archived" aria-current={archived ? "page" : undefined}>Архив</Link></nav>
+    <p className="muted">Последний известный визит под учётной записью, время московское. Активность обновляется не чаще раза в час; прежние визиты показаны по сохранившимся сеансам.</p>
     {error && <p className="notice notice--danger" role="alert">{errors[error] ?? "Не удалось снять роль. Обновите страницу и попробуйте снова."}</p>}
     {removed === "1" && <p className="notice" role="status">Роль снята.</p>}
     {result && <p className={`notice ${["archived", "restored", "erased", "erased-retained"].includes(result) ? "notice--success" : "notice--danger"}`} role="status">{results[result] ?? "Не удалось выполнить действие. Обновите страницу и повторите."}</p>}
-    {!users.length ? <p className="notice">{archived ? "Архив пуст." : "Пользователей нет."}</p> : <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Пользователь</th><th>Создан</th><th>Заказы</th><th>Роли</th><th>Назначить</th><th>Действия</th></tr></thead><tbody>{users.map((user) => <tr key={user.id}>
+    {!users.length ? <p className="notice">{archived ? "Архив пуст." : "Пользователей нет."}</p> : <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Пользователь</th><th>Создан</th><th>Последний визит</th><th>Заказы</th><th>Роли</th><th>Назначить</th><th>Действия</th></tr></thead><tbody>{users.map((user) => <tr key={user.id}>
       <td><strong>{user.name ?? "Без имени"}</strong><br /><small>{user.email}</small></td>
-      <td>{formatDate(user.createdAt)}</td><td>{user.orders.length}</td>
+      <td>{formatDate(user.createdAt)}</td><td>{user.lastVisitedAt ? <time dateTime={user.lastVisitedAt.toISOString()}>{visitDate.format(user.lastVisitedAt)}</time> : "Нет данных"}</td><td>{user.orders.length}</td>
       <td><div className="user-role-list">{user.roles.length ? user.roles.map(({ role }) => <div className="user-role-item" key={role.id}><span>{role.name}</span>{!archived && <RemoveUserRole userId={user.id} userName={user.email} roleId={role.id} roleName={role.name} />}</div>) : "—"}</div></td>
       <td>{archived ? <span className="muted">После восстановления</span> : <form action={assignRoleAction} className="user-role-assign"><input type="hidden" name="userId" value={user.id} /><select name="roleId" aria-label={`Назначить роль пользователю ${user.email}`}>{roles.map((role) => <option value={role.id} key={role.id}>{role.name}</option>)}</select><SubmitButton className="button button--small" pendingLabel="Сохраняем…">Назначить</SubmitButton></form>}</td>
       <td><ManageUser userId={user.id} email={user.email} archived={archived} canErase={canErase} /></td>
     </tr>)}</tbody></table></div>}
   </>;
 }
-

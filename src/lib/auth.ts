@@ -14,13 +14,17 @@ function tokenHash(token: string) {
 
 export async function createSession(userId: string) {
   const token = randomBytes(32).toString("base64url");
-  await prisma.session.create({
-    data: {
-      userId,
-      tokenHash: tokenHash(token),
-      expiresAt: new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000),
-    },
-  });
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.session.create({
+      data: {
+        userId,
+        tokenHash: tokenHash(token),
+        expiresAt: new Date(now.getTime() + SESSION_MAX_AGE_SECONDS * 1000),
+      },
+    }),
+    prisma.user.updateMany({ where: { id: userId, isActive: true, OR: [{ lastVisitedAt: null }, { lastVisitedAt: { lt: now } }] }, data: { lastVisitedAt: now } }),
+  ]);
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE, token, {
     httpOnly: true,
@@ -60,6 +64,13 @@ export const getCurrentUser = cache(async () => {
     },
   });
   if (!session || session.expiresAt < new Date() || !session.user.isActive) return null;
+  const visitCutoff = new Date(Date.now() - 60 * 60 * 1000);
+  if (!session.user.lastVisitedAt || session.user.lastVisitedAt < visitCutoff) {
+    await prisma.user.updateMany({
+      where: { id: session.user.id, isActive: true, OR: [{ lastVisitedAt: null }, { lastVisitedAt: { lt: visitCutoff } }] },
+      data: { lastVisitedAt: new Date() },
+    });
+  }
   if (session.user.lastActiveAt && session.user.lastActiveAt.getTime() < Date.now() - 86400000) {
     await prisma.user.updateMany({ where: { id: session.user.id, lastActiveAt: { lt: new Date(Date.now() - 86400000) } }, data: { lastActiveAt: new Date() } });
   }
