@@ -20,8 +20,8 @@ export async function CloudKassirSettings() {
       <label className="field--full"><input name="operatorReviewed" type="checkbox" defaultChecked={config.operatorReviewed} /> Проверены договоры с CloudKassir и ОФД, основания передачи email и хранение персональных данных</label>
       <label><input name="clearSecret" type="checkbox" /> Удалить секрет</label>
       <label><input name="enabled" type="checkbox" defaultChecked={config.enabled} /> Разрешить автоматические чеки для новых платежей</label>
-      <SubmitButton className="button" pendingLabel="Сохраняем…">Сохранить CloudKassir</SubmitButton><SubmitButton className="button button--outline" name="intent" value="check" pendingLabel="Проверяем…">Проверить кассу и сохранить</SubmitButton>
-    </form>
+      <div className="form-actions"><SubmitButton className="button" pendingLabel="Сохраняем…">Сохранить CloudKassir</SubmitButton><SubmitButton className="button button--outline" name="intent" value="check" pendingLabel="Проверяем…">Проверить кассу и сохранить</SubmitButton></div>
+</form>
     <p>После включения выберите в настройках Точки «CloudKassir · АУСН Доходы · без НДС». В CloudKassir включите уведомление Receipt: POST, формат «ключ=значение», адрес <code>https://sidzen.shop/api/fiscal/cloudkassir/</code>. Проверяется Content-HMAC. Без уведомлений работает фоновая проверка.</p>
     <p className="muted">Чек предоплаты — после подтверждения оплаты Точкой. Полный расчёт — при подтверждении фактической передачи товара покупателю, а не при отправке в ПВЗ. Полный возврат — после подтверждения возврата банком. Частичные возвраты требуют ручного оформления в кассе. Отключение новых чеков не прекращает обработку уже возникших обязательств. Не включайте параллельную фискализацию в банке.</p>
   </section>;

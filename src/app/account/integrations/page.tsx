@@ -75,9 +75,12 @@ function DeliveryForm({ method }: { method?: { id: string; name: string; descrip
 export default async function IntegrationsPage({ searchParams }: { searchParams: Promise<{ result?: string }> }) {
   await requirePermission("settings.write");
   const [config, methods, params] = await Promise.all([getTochkaConfig(), prisma.deliveryMethod.findMany({ where: { deletedAt: null }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }), searchParams]);
-  return <>
-    <h1>Подключения магазина</h1><p className="notice">Управляйте оплатой, чеками и способами доставки магазина.</p>
+  return <div className="integrations-page">
+    <h1>Подключения магазина</h1><p className="muted">Управляйте оплатой, чеками и способами доставки магазина.</p>
     <p><Link className="text-link" href="/account/marketplaces/">Подключить Ozon / Wildberries и синхронизировать товары →</Link></p>
+    <nav className="integrations-nav" aria-label="Разделы подключений">
+      <a href="#yookassa-online">Оплата</a><a href="#ozon-delivery">Ozon Доставка</a><a href="#cdek-delivery">СДЭК</a><a href="#category-ai">DeepSeek</a><a href="#communications">Уведомления</a>
+    </nav>
     {params.result && messages[params.result] && <p role="status" className="content-card">{messages[params.result]}</p>}
     <YooKassaSettings />
     <details className="content-card"><summary>Архивные платёжные интеграции — только для ранее созданных заказов</summary><p className="muted">Настройки и проверка старых обязательств сохранены. Даже включённая здесь интеграция не добавляет способы оплаты к новым заявкам.</p>
@@ -95,8 +98,8 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
         <label><input type="checkbox" name="sbp" defaultChecked={config.sbp} /> СБП</label>
         <label><input type="checkbox" name="externalReceiptsConfirmed" defaultChecked={config.externalReceiptsConfirmed} /> При выборе собственной кассы подтверждаю выдачу всех необходимых чеков самостоятельно</label>
         <label><input type="checkbox" name="enabled" defaultChecked={config.enabled} /> Принимать онлайн-платежи</label>
-        <SubmitButton className="button" pendingLabel="Сохраняем…">Сохранить</SubmitButton><SubmitButton className="button button--outline" name="intent" value="check" pendingLabel="Проверяем…">Проверить и сохранить</SubmitButton>
-      </form>
+        <div className="form-actions"><SubmitButton className="button" pendingLabel="Сохраняем…">Сохранить</SubmitButton><SubmitButton className="button button--outline" name="intent" value="check" pendingLabel="Проверяем…">Проверить и сохранить</SubmitButton></div>
+</form>
       <p className="muted">При включении проверяем доступ и торговую точку без списания денег. Пустое поле сохраняет прежний ключ. «Сохранить» с выключенной оплатой позволяет сохранить незавершённые настройки. Отключение запрещает создание новых платёжных ссылок, но сохраняет проверку уже созданных.</p>
       <p>Для быстрых уведомлений подпишите своё приложение на событие <code>acquiringInternetPayment</code> методом Create Webhook (право ManageWebhookData), URL: <code>https://sidzen.shop/api/payments/tochka/</code>. Подпись уведомлений проверяется. Без вебхука сайт сверяет платежи в фоне примерно раз в минуту и при возвращении покупателя.</p>
       <p><a className="text-link" href="https://developers.tochka.com/docs/tochka-api/opisanie-metodov/platyozhnye-ssylki" target="_blank" rel="noreferrer">Документация Точки и права API →</a></p>
@@ -111,5 +114,5 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
     {!methods.length && <p className="notice">Другие способы доставки не добавлены. При включённом Ozon покупателю доступна только Ozon Доставка.</p>}
     {methods.map((method) => <section className="content-card" key={method.id}><h3>{method.name} · {method.active ? "включён" : "выключен"}</h3>{method.code === "cdek" && <p className="notice">Этот старый фиксированный способ не отображается при оформлении. Подключите СДЭК API выше для расчёта тарифа.</p>}<DeliveryForm method={{ ...method, basePrice: Number(method.basePrice) }} /><AdminDeleteDelivery id={method.id} name={method.name} /></section>)}
     <section className="content-card"><h3>Новый способ доставки</h3><DeliveryForm /></section>
-  </>;
+  </div>;
 }

@@ -25,11 +25,11 @@ export async function OzonDeliverySettings() {
       <label className="field">Подготовка к отгрузке, дней<input name="dispatchDays" type="number" min="1" max="30" step="1" defaultValue={config.dispatchDays} /><small>Для изделий под заказ учитывается также срок изготовления товара.</small></label>
       <input type="hidden" name="enabled" value={config.enabled ? "on" : ""} />
       <input type="hidden" name="availabilityVersion" value={config.enabled ? "on" : "off"} />
-      <SubmitButton className="button" pendingLabel="Сохраняем…">Сохранить Delivery API</SubmitButton>
+      <div className="form-actions"><SubmitButton className="button" pendingLabel="Сохраняем…">Сохранить Delivery API</SubmitButton>
       <SubmitButton className="button button--outline" name="intent" value="check" pendingLabel="Проверяем…">Проверить подключение</SubmitButton>
       <SubmitButton className="button button--outline" name="intent" value="methods" pendingLabel="Загружаем…">Загрузить методы отгрузки</SubmitButton>
-      <SubmitButton className="button button--outline" name="intent" value="points" pendingLabel="Загружаем…">Обновить список ПВЗ</SubmitButton>
-    </form>
+      <SubmitButton className="button button--outline" name="intent" value="points" pendingLabel="Загружаем…">Обновить список ПВЗ</SubmitButton></div>
+</form>
     {!!config.methods?.length && <p className="muted">Методы Ozon: {config.methods.map(method => `${method.name} · ID ${method.shipment_method_id} · ${method.status === "active" ? "активен" : method.status}`).join("; ")}.</p>}
     <p>ПВЗ в справочнике: {count}. {sync ? `Обновление: ${{ PENDING: "в очереди", RUNNING: "загружается", SUCCEEDED: "завершено", FAILED: "ошибка — проверьте доступ и повторите обновление" }[sync.status] || sync.status}. Обработано страниц: ${sync.pages}.` : "После подключения список загрузится в фоне."}</p>
     <p className="muted">Проверка не создаёт отправлений. Доставка пока подключается до ПВЗ и постаматов, без курьера. Для покупателя доставка бесплатная. Тариф и страховку Ozon оплачивает магазин; эти расходы сохраняются отдельно от суммы заказа. Нужен зарегистрированный на Ozon номер покупателя. В каждом товаре заполните вес и размеры упаковки. Каждая единица товара оформляется отдельной посылкой; объединение в одну коробку не выполняется.</p>
