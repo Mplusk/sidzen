@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { mergeGuestFavorites } from "@/lib/favorites-merge";
+import { claimGuestOrders } from "@/lib/guest-order-claims";
 
 export const SESSION_COOKIE = "3dp_session";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
@@ -35,6 +36,8 @@ export async function createSession(userId: string) {
   });
   // A temporary wishlist failure must not prevent a successful sign-in.
   await mergeGuestFavorites(userId).catch(() => {});
+  // Only signed grants from this browser can attach an unowned guest order.
+  await claimGuestOrders(userId).catch(() => {});
 }
 
 export async function destroySession() {
