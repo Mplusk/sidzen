@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ find: vi.fn(), update: vi.fn(), shipment: vi.fn(), config: vi.fn(), privacy: vi.fn(), create: vi.fn(), order: vi.fn(), cancel: vi.fn() }));
-vi.mock("@/lib/prisma", () => ({ prisma: { cdekDeliveryJob: { findFirst: m.find, updateMany: m.update }, shipment: { updateMany: m.shipment } } }));
+vi.mock("@/lib/prisma", () => ({ prisma: { cdekDeliveryJob: { findFirst: m.find, updateMany: m.update }, shipment: { updateMany: m.shipment }, $transaction: (callback: (tx: unknown) => unknown) => callback({ cdekDeliveryJob: { updateMany: m.update }, shipment: { updateMany: m.shipment } }) } }));
 vi.mock("@/lib/privacy", () => ({ operatorReady: m.privacy }));
 vi.mock("./cdek-config", () => ({ getCdekConfig: m.config }));
 vi.mock("./cdek-client", async original => ({ ...await original<typeof import("./cdek-client")>(), CdekDeliveryClient: class { createOrder = m.create; order = m.order; deleteOrder = m.cancel; } }));
