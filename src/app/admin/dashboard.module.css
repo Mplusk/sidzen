@@ -1,0 +1,13 @@
+.orders { min-width: 0; }
+.heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem 2rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+.heading h2 { margin: 0; }
+.heading p { margin: .4rem 0 0; }
+.tabs { display: flex; gap: .5rem; flex-wrap: wrap; }
+.table td { vertical-align: top; }
+.table td:first-child { min-width: 12rem; max-width: 20rem; white-space: normal; overflow-wrap: anywhere; }
+.table td:nth-child(4) { min-width: 12rem; max-width: 20rem; white-space: normal; }
+.detail { display: block; margin-top: .35rem; color: var(--muted); font-size: .8rem; line-height: 1.4; }
+.attention { display: block; margin-top: .4rem; color: #9a4d00; font-size: .8rem; font-weight: 600; }
+.empty { padding: 1.5rem 0; color: var(--muted); }
+.pagination { display: flex; align-items: center; gap: .75rem; margin-top: 1rem; flex-wrap: wrap; }
+.footnote { margin: 1rem 0 0; color: var(--muted); font-size: .8rem; }

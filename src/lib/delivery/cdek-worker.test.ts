@@ -48,4 +48,15 @@ describe("CDEK shipment queue", () => {
     m.order.mockRejectedValue(new CdekDeliveryError("not-found")); await processCdekJob();
     expect(m.update).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "CANCELED" }) }));
   });
+  it("records the latest confirmed delivery, but does not archive a failed delivery", async () => {
+    const job = fixture(); job.status = "CREATED"; job.remoteId = uuid; m.find.mockResolvedValue(job);
+    m.order.mockResolvedValue({ entity: { uuid, statuses: [{ code: "DELIVERED", date_time: "2030-01-02T12:00:00Z" }, { code: "ACCEPTED", date_time: "2030-01-01T12:00:00Z" }] }, requests: [{ type: "CREATE", state: "SUCCESSFUL" }] });
+    await processCdekJob();
+    expect(m.shipment).toHaveBeenCalledWith(expect.objectContaining({ data: { deliveredAt: new Date("2030-01-02T12:00:00Z") } }));
+    m.shipment.mockClear();
+    m.order.mockResolvedValue({ entity: { uuid, statuses: [{ code: "DELIVERED", date_time: "2030-01-01T12:00:00Z" }, { code: "NOT_DELIVERED", date_time: "2030-01-02T12:00:00Z" }] }, requests: [{ type: "CREATE", state: "SUCCESSFUL" }] });
+    await processCdekJob(); expect(m.shipment).not.toHaveBeenCalled();
+    m.order.mockResolvedValue({ entity: { uuid, statuses: [{ code: "DELIVERED", date_time: "2030-01-01T12:00:00Z" }, { code: "NOT_DELIVERED" }] }, requests: [{ type: "CREATE", state: "SUCCESSFUL" }] });
+    await processCdekJob(); expect(m.shipment).not.toHaveBeenCalled();
+  });
 });
