@@ -6,7 +6,7 @@ import { FavoriteButton } from "@/components/favorite-button";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { normalizePageTitle } from "@/lib/seo";
+import { normalizePageTitle, primaryVisibleCategorySlug, searchDescription } from "@/lib/seo";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { JsonLd } from "@/components/json-ld";
 import { ProductPurchaseForm } from "@/components/product-purchase-form";
@@ -23,15 +23,17 @@ type Params = Promise<{ category: string; product: string }>;
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { product: slug, category } = await params;
-  const product = await prisma.product.findUnique({ where: { slug }, include: { images: { orderBy: { sortOrder: "asc" }, take: 1 } } });
+  const product = await prisma.product.findUnique({ where: { slug }, include: { images: { orderBy: { sortOrder: "asc" }, take: 1 }, categories: { include: { category: true } } } });
   if (!product || product.status !== "PUBLISHED" || (product.type !== "READY" && product.type !== "PARAMETRIC")) return { title: "Товар не найден", robots: { index: false } };
   const title = normalizePageTitle(product.title ?? product.name);
+  const description = searchDescription(product.metaDescription, product.shortDescription, product.description);
+  const canonicalCategory = primaryVisibleCategorySlug(product.categories) ?? category;
   return {
     title,
-    description: product.metaDescription ?? product.shortDescription,
-    alternates: { canonical: product.canonical ?? `/catalog/${category}/${product.slug}/` },
+    description,
+    alternates: { canonical: product.canonical ?? `/catalog/${canonicalCategory}/${product.slug}/` },
     robots: product.robots,
-    openGraph: { title, description: product.metaDescription ?? product.shortDescription ?? undefined, images: product.images[0] ? [{ url: product.images[0].path, alt: product.images[0].alt }] : undefined },
+    openGraph: { title, description, images: product.images[0] ? [{ url: product.images[0].path, alt: product.images[0].alt }] : undefined },
   };
 }
 
@@ -68,10 +70,10 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
     "@type": "Product",
     name: product.name,
     image: product.images.map((item) => `https://sidzen.shop${item.path}`),
-    description: product.shortDescription,
+    description: searchDescription(product.shortDescription, product.description),
     sku: product.sku,
     brand: { "@type": "Brand", name: "SIDZEN" },
-    offers: { "@type": "Offer", url: `https://sidzen.shop/catalog/${category.slug}/${product.slug}/`, priceCurrency: "RUB", price: defaultPrice, availability: product.stock > 0 ? "https://schema.org/InStock" : product.madeToOrder ? "https://schema.org/PreOrder" : "https://schema.org/OutOfStock" },
+    offers: { "@type": "Offer", url: `https://sidzen.shop/catalog/${primaryVisibleCategorySlug(product.categories) ?? category.slug}/${product.slug}/`, priceCurrency: "RUB", price: defaultPrice, availability: product.stock > 0 ? "https://schema.org/InStock" : product.madeToOrder ? "https://schema.org/PreOrder" : "https://schema.org/OutOfStock" },
     ...(reviewCount ? { aggregateRating: { "@type": "AggregateRating", ratingValue: rating.toFixed(1), reviewCount } } : {}),
   };
   const specs = productSpecificationRows(product);
