@@ -17,7 +17,7 @@ describe("Ozon delivery outbox", () => {
     vi.resetAllMocks(); mocks.find.mockResolvedValue(fixture()); mocks.claim.mockResolvedValue({ count: 1 });
     mocks.privacy.mockResolvedValue(true);
     mocks.config.mockResolvedValue({ clientId: "app", clientSecret: "synthetic-secret" });
-    mocks.transaction.mockImplementation(callback => callback({ ozonDeliveryJob: { updateMany: mocks.claim }, shipment: { update: mocks.shipment } }));
+    mocks.transaction.mockImplementation(callback => callback({ ozonDeliveryJob: { updateMany: mocks.claim }, shipment: { update: mocks.shipment, updateMany: mocks.shipment } }));
     mocks.json.mockResolvedValue({ order_number: "test-only", postings: [{ request_id: 1, posting_number: "p1" }, { request_id: 2, posting_number: "p2" }] });
     mocks.call.mockResolvedValue(new Response(null));
   });
@@ -67,6 +67,18 @@ describe("Ozon delivery outbox", () => {
     mocks.json.mockResolvedValue({ postings: [{ posting_number: "p1", status: "canceled", status_changed_at: "2030-01-01T12:00:00Z" }] });
     await refreshOzonJob(job.id);
     expect(mocks.claim).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "REVIEW", error: "partial" }) }));
+  });
+  it("archives only when every known Ozon parcel is delivered", async () => {
+    const job = fixture(); job.status = "CREATED"; job.response = { order_number: "test-only", postings: [{ request_id: 1, posting_number: "p1" }, { request_id: 2, posting_number: "p2" }] }; mocks.find.mockResolvedValue(job);
+    mocks.json.mockResolvedValue({ postings: [{ posting_number: "p1", status: "delivered", status_changed_at: "2030-01-01T12:00:00Z" }, { posting_number: "p2", status: "delivered", status_changed_at: "2030-01-02T12:00:00Z" }] });
+    await refreshOzonJob(job.id);
+    expect(mocks.shipment).toHaveBeenCalledWith({ where: { id: job.shipmentId, deliveredAt: null }, data: { deliveredAt: new Date("2030-01-02T12:00:00Z") } });
+    mocks.shipment.mockClear();
+    mocks.json.mockResolvedValue({ postings: [{ posting_number: "p1", status: "delivered", status_changed_at: "2030-01-01T12:00:00Z" }, { posting_number: "p2", status: "canceled", status_changed_at: "2030-01-02T12:00:00Z" }] });
+    await refreshOzonJob(job.id); expect(mocks.shipment).not.toHaveBeenCalled();
+    job.status = "REVIEW";
+    mocks.json.mockResolvedValue({ postings: ["p1", "p2"].map(posting_number => ({ posting_number, status: "delivered", status_changed_at: "2030-01-01T12:00:00Z" })) });
+    await refreshOzonJob(job.id); expect(mocks.shipment).not.toHaveBeenCalled();
   });
   it("does not send when another worker owns the lease or credentials changed", async () => {
     mocks.claim.mockResolvedValueOnce({ count: 0 }); await processOzonJob(); expect(mocks.json).not.toHaveBeenCalled();

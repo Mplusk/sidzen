@@ -7,7 +7,7 @@ import { getCdekConfig } from "./cdek-config";
 
 const unlocked = () => ({ OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date() } }] });
 const requestSchema = z.object({ type: z.string(), state: z.string(), request_uuid: z.string().optional() });
-const orderSchema = z.object({ entity: z.object({ uuid: z.uuid().optional(), cdek_number: z.union([z.string(), z.number()]).optional(), statuses: z.array(z.object({ code: z.string() })).optional() }).optional(), requests: z.array(requestSchema).optional() });
+const orderSchema = z.object({ entity: z.object({ uuid: z.uuid().optional(), cdek_number: z.union([z.string(), z.number()]).optional(), statuses: z.array(z.object({ code: z.string(), date_time: z.string().nullish() })).optional() }).optional(), requests: z.array(requestSchema).optional() });
 const acceptedSchema = z.object({ entity: z.object({ uuid: z.uuid() }), requests: z.array(requestSchema).optional() });
 
 /** CDEK accepts writes asynchronously. Never retry an uncertain create: type 2
@@ -57,9 +57,20 @@ export async function processCdekJob() {
       await save({ status: "CANCELING", nextAttemptAt: later(), error: null });
       return true;
     }
-    const statuses = current.entity?.statuses?.map(value => value.code) ?? [];
-    const finished = statuses.some(value => ["DELIVERED", "NOT_DELIVERED"].includes(value));
-    await save({ status: finished ? "FINISHED" : "CREATED", nextAttemptAt: new Date(Date.now() + 3600000), error: null });
+    const statuses = current.entity?.statuses ?? [];
+    const dated = statuses.flatMap(value => {
+      const time = value.date_time && /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value.date_time) ? Date.parse(value.date_time) : NaN;
+      return Number.isFinite(time) ? [{ code: value.code, time }] : [];
+    }).sort((a, b) => b.time - a.time);
+    // A missing timestamp makes ordering uncertain; never infer receipt from an older event.
+    const latest = dated.length === statuses.length ? dated[0] : undefined;
+    const finished = latest ? ["DELIVERED", "NOT_DELIVERED"].includes(latest.code) : statuses.some(value => ["DELIVERED", "NOT_DELIVERED"].includes(value.code));
+    await prisma.$transaction(async tx => {
+      const saved = await tx.cdekDeliveryJob.updateMany({ where: { id: job.id, lockToken }, data: { status: finished ? "FINISHED" : "CREATED", ...(latest ? { deliveryStatus: latest.code, deliveryStatusChangedAt: new Date(latest.time) } : {}), nextAttemptAt: new Date(Date.now() + 3600000), error: null, lockToken: null, lockedUntil: null } });
+      if (saved.count && latest?.code === "DELIVERED") {
+        await tx.shipment.updateMany({ where: { id: job.shipmentId, deliveredAt: null, cdekJob: { is: { status: "FINISHED", cancelRequestedAt: null } }, order: { deletedAt: null, status: { notIn: ["CANCELED", "REFUNDED"] } } }, data: { deliveredAt: new Date(latest.time) } });
+      }
+    });
     if (!finished) await prisma.cdekDeliveryJob.updateMany({ where: { id: job.id, status: "CREATED", cancelRequestedAt: { not: null } }, data: { nextAttemptAt: new Date() } });
   } catch (error) {
     if (job.status === "CANCELING" && error instanceof CdekDeliveryError && error.code === "not-found") { await save({ status: "CANCELED", error: null }); return true; }

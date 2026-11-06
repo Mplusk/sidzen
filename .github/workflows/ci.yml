@@ -50,6 +50,7 @@ jobs:
           DATABASE_URL: postgresql://postgres:ci-qa-only@127.0.0.1:5432/shop_qa
         run: |
           pnpm prisma migrate deploy
+          pnpm exec tsx scripts/smoke-dashboard-orders.ts
           pnpm exec tsx scripts/smoke-retired-manufacturing.ts
           pnpm exec tsx scripts/smoke-pickup-search-index.ts
           pnpm exec tsx scripts/smoke-marketplaces.ts
@@ -299,4 +300,3 @@ jobs:
       - name: Remove relay runner credentials
         if: always()
         run: rm -f -- "${HOME}/.ssh/relay_deploy"
-

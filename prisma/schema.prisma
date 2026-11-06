@@ -578,6 +578,7 @@ model Order {
   number          String              @unique
   userId          String?
   status          OrderStatus         @default(NEW)
+  statusChangedAt DateTime?
   kind            String              @default("ORDER")
   deletedAt       DateTime?
   personalDataErasedAt DateTime?
@@ -738,6 +739,8 @@ model CdekDeliveryJob {
   request Json
   remoteId String? @unique
   status String @default("PENDING")
+  deliveryStatus String?
+  deliveryStatusChangedAt DateTime?
   error String?
   attempts Int @default(0)
   lockedUntil DateTime?

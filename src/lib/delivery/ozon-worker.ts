@@ -104,7 +104,14 @@ export async function refreshOzonJob(id?: string) {
     const statuses = statusesSchema.parse(await api.json("/v1/posting/info", { posting_numbers: created.postings.map(value => value.posting_number) }));
     if (statuses.postings.length !== created.postings.length || created.postings.some(posting => statuses.postings.filter(row => row.posting_number === posting.posting_number).length !== 1)) throw new OzonDeliveryError("partial");
     const finished = statuses.postings.every(value => ["delivered", "canceled"].includes(value.status));
-    await prisma.ozonDeliveryJob.updateMany({ where: { id: job.id, lockToken }, data: { response: asJson({ ...created, statuses: statuses.postings }), status: job.status === "REVIEW" ? "REVIEW" : finished ? statuses.postings.every(value => value.status === "canceled") ? "CANCELED" : "FINISHED" : "CREATED", error: job.status === "REVIEW" ? "partial" : null, nextAttemptAt: new Date(Date.now() + 300000), lockToken: null, lockedUntil: null } });
+    await prisma.$transaction(async tx => {
+      const saved = await tx.ozonDeliveryJob.updateMany({ where: { id: job.id, lockToken, cancelRequestedAt: null }, data: { response: asJson({ ...created, statuses: statuses.postings }), status: job.status === "REVIEW" ? "REVIEW" : finished ? statuses.postings.every(value => value.status === "canceled") ? "CANCELED" : "FINISHED" : "CREATED", error: job.status === "REVIEW" ? "partial" : null, nextAttemptAt: new Date(Date.now() + 300000), lockToken: null, lockedUntil: null } });
+      // A partial creation or a canceled parcel cannot prove delivery of the order.
+      if (saved.count && job.status !== "REVIEW" && statuses.postings.every(value => value.status === "delivered")) {
+        const deliveredAt = new Date(Math.max(...statuses.postings.map(value => new Date(value.status_changed_at).getTime())));
+        await tx.shipment.updateMany({ where: { id: job.shipmentId, deliveredAt: null }, data: { deliveredAt } });
+      }
+    });
   } catch (error) {
     await writeDiagnostic("delivery.status.failed", { stage: "status", reason: error instanceof OzonDeliveryError ? error.code : "provider" });
     await prisma.ozonDeliveryJob.updateMany({ where: { id: job.id, lockToken }, data: { error: error instanceof OzonDeliveryError ? error.code : "provider", nextAttemptAt: new Date(Date.now() + 600000), lockToken: null, lockedUntil: null } });
