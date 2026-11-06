@@ -65,10 +65,12 @@ export async function processCdekJob() {
     // A missing timestamp makes ordering uncertain; never infer receipt from an older event.
     const latest = dated.length === statuses.length ? dated[0] : undefined;
     const finished = latest ? ["DELIVERED", "NOT_DELIVERED"].includes(latest.code) : statuses.some(value => ["DELIVERED", "NOT_DELIVERED"].includes(value.code));
-    const saved = await save({ status: finished ? "FINISHED" : "CREATED", ...(latest ? { deliveryStatus: latest.code, deliveryStatusChangedAt: new Date(latest.time) } : {}), nextAttemptAt: new Date(Date.now() + 3600000), error: null });
-    if (saved.count && latest?.code === "DELIVERED") {
-      await prisma.shipment.updateMany({ where: { id: job.shipmentId, deliveredAt: null, cdekJob: { is: { status: "FINISHED", cancelRequestedAt: null } }, order: { deletedAt: null, status: { notIn: ["CANCELED", "REFUNDED"] } } }, data: { deliveredAt: new Date(latest.time) } });
-    }
+    await prisma.$transaction(async tx => {
+      const saved = await tx.cdekDeliveryJob.updateMany({ where: { id: job.id, lockToken }, data: { status: finished ? "FINISHED" : "CREATED", ...(latest ? { deliveryStatus: latest.code, deliveryStatusChangedAt: new Date(latest.time) } : {}), nextAttemptAt: new Date(Date.now() + 3600000), error: null, lockToken: null, lockedUntil: null } });
+      if (saved.count && latest?.code === "DELIVERED") {
+        await tx.shipment.updateMany({ where: { id: job.shipmentId, deliveredAt: null, cdekJob: { is: { status: "FINISHED", cancelRequestedAt: null } }, order: { deletedAt: null, status: { notIn: ["CANCELED", "REFUNDED"] } } }, data: { deliveredAt: new Date(latest.time) } });
+      }
+    });
     if (!finished) await prisma.cdekDeliveryJob.updateMany({ where: { id: job.id, status: "CREATED", cancelRequestedAt: { not: null } }, data: { nextAttemptAt: new Date() } });
   } catch (error) {
     if (job.status === "CANCELING" && error instanceof CdekDeliveryError && error.code === "not-found") { await save({ status: "CANCELED", error: null }); return true; }
