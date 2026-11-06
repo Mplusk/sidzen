@@ -9,10 +9,10 @@ export async function generateMetadata({ params, searchParams }: { params: Promi
   const { category: slug } = await params;
   const category = await prisma.category.findUnique({ where: { slug } });
   if (!category?.visible) return {};
-  const params = await searchParams;
+  const query = await searchParams;
   const base = `/catalog/${category.slug}/`;
-  const { canonical, filtered } = catalogIndexing(base, params);
-  const outOfRange = !filtered && canonical.includes("?page=") && Number(params.page) > (await getCatalog({ category: category.slug, page: params.page })).pages;
+  const { canonical, filtered } = catalogIndexing(base, query);
+  const outOfRange = !filtered && canonical.includes("?page=") && Number(query.page) > (await getCatalog({ category: category.slug, page: query.page })).pages;
   return { title: normalizePageTitle(category.title ?? category.name), description: category.metaDescription ?? category.description, alternates: { canonical: outOfRange ? base : canonical }, robots: filtered || outOfRange ? { index: false, follow: true } : category.robots };
 }
 
