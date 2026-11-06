@@ -37,7 +37,7 @@ export default async function AdminOrderPage({ params, searchParams }: { params:
     {order.deletedAt && <p className="notice">Удалён из рабочего списка. История сохранена для сверки; <Link className="text-link" href="/admin/orders/?view=deleted">вернуться к удалённым заказам</Link>.</p>}
     {application && <p className="notice">Покупатель отправил заявку без оплаты. Свяжитесь с ним по контактам ниже. Отправление Ozon создаётся автоматически при подаче заявки; оплату и кассовые чеки сайт не создаёт.</p>}
     {query.saved && <p className="notice notice--success">Статус сохранён.</p>}
-    {query.owner && ownershipMessages[query.owner] && <p className={`notice ${["linked", "already"].includes(query.owner) ? "notice--success" : "notice--danger"}`} role="status">{ownershipMessages[query.owner]}</p>}
+    {query.owner && Object.hasOwn(ownershipMessages, query.owner) && <p className={`notice ${["linked", "already"].includes(query.owner) ? "notice--success" : "notice--danger"}`} role="status">{ownershipMessages[query.owner]}</p>}
     {query.yookassa && <p role="status" className={`notice ${query.yookassa === "error" ? "notice--danger" : "notice--success"}`}>{query.yookassa === "error" ? "Платёж не подтверждён. Проверьте его ID и номер заказа в кабинете ЮKassa." : "Платёж сверён с ЮKassa. Его статус показан ниже."}</p>}
     {query.cdek && <p role="status" className={`notice ${query.cdek === "error" ? "notice--danger" : "notice--success"}`}>{query.cdek === "error" ? "Не удалось подтвердить соответствие отправления СДЭК этой заявке. Проверьте UUID и состав посылок." : "Сверка отправления СДЭК поставлена в очередь."}</p>}
     {query.retention === "saved" && <p role="status" className="notice notice--success">Срок хранения обновлён.</p>}
