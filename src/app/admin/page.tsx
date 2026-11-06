@@ -8,11 +8,11 @@ import { requirePermission } from "@/lib/auth";
 import { PERMISSIONS } from "@/lib/permissions";
 import { orderStatus } from "@/lib/order-status";
 import { dashboardDelivery } from "@/lib/dashboard-delivery";
+import { receivedOrdersWhere } from "@/lib/dashboard-orders";
 import styles from "./dashboard.module.css";
 
 export const metadata: Metadata = { title: "Дашборд управления", robots: { index: false, follow: false } };
 const pageSize = 25;
-const receivedWhere: Prisma.OrderWhereInput = { OR: [{ status: "DELIVERED" }, { status: { notIn: ["CANCELED", "REFUNDED"] }, shipment: { is: { deliveredAt: { not: null } } } }] };
 const dateTime = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow" });
 function DateValue({ date }: { date: Date | null }) { return date ? <time dateTime={date.toISOString()}>{dateTime.format(date)} МСК</time> : <>Нет данных</>; }
 
@@ -34,11 +34,11 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
     prisma.redirect.count({ where: { active: false } }),
     prisma.order.count({ where: fiscalAttentionWhere() }),
   ]);
-  const where: Prisma.OrderWhereInput = { deletedAt: null, ...(archived ? receivedWhere : { NOT: receivedWhere }) };
+  const where: Prisma.OrderWhereInput = { deletedAt: null, ...(archived ? receivedOrdersWhere : { NOT: receivedOrdersWhere }) };
   const [orders, total, needsConfirmation] = canReadOrders ? await Promise.all([
     prisma.order.findMany({ where, include: { shipment: { include: { ozonJob: true, cdekJob: true } } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: (page - 1) * pageSize, take: pageSize }),
     prisma.order.count({ where }),
-    prisma.order.count({ where: { deletedAt: null, status: { notIn: ["DELIVERED", "CANCELED", "REFUNDED"] }, shipment: { is: { deliveredAt: { not: null } } } } }),
+    prisma.order.count({ where: { deletedAt: null, status: { notIn: ["DELIVERED", "CANCELED", "REFUNDED"] }, shipment: { is: { deliveredAt: { not: null } } }, AND: [receivedOrdersWhere] } }),
   ]) : [[], 0, 0];
   const base = archived ? "/admin/?view=received" : "/admin/?view=active";
   return <>
@@ -56,7 +56,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
         {orders.length ? <div className="data-table-wrap"><table className={`data-table ${styles.table}`}><thead><tr><th scope="col">Заказ</th><th scope="col">Создан</th><th scope="col">Статус заказа</th><th scope="col">Доставка</th><th scope="col">{archived ? "Получение" : "Сумма"}</th></tr></thead><tbody>{orders.map(order => {
           const delivery = dashboardDelivery(order.shipment);
           const received = order.shipment?.deliveredAt ?? (order.status === "DELIVERED" ? order.purchaseConfirmedAt ?? order.statusChangedAt : null);
-          return <tr key={order.id}><td><Link className="text-link" href={`/admin/orders/${encodeURIComponent(order.number)}/`}><strong>{order.number}</strong></Link><span className={styles.detail}>{order.kind === "APPLICATION" ? "Заявка" : "Заказ"} · {order.customerName}</span></td><td><DateValue date={order.createdAt} /></td><td><span className="status">{orderStatus(order.status)}</span><span className={styles.detail}>Изменён: <DateValue date={order.statusChangedAt} /></span></td><td><span>{delivery.label}</span><span className={styles.detail}>Изменён: <DateValue date={delivery.changedAt} /></span></td><td>{archived ? <><DateValue date={received} /><span className={styles.detail}>{order.shipment?.deliveredAt ? "По данным службы доставки" : "Дата подтверждения получения"}</span>{order.status !== "DELIVERED" && <span className={styles.attention}>Требует подтверждения</span>}</> : formatPrice(order.total)}</td></tr>;
+          return <tr key={order.id}><td><Link className="text-link" href={`/admin/orders/${encodeURIComponent(order.number)}/`}><strong>{order.number}</strong></Link><span className={styles.detail}>{order.kind === "APPLICATION" ? "Заявка" : "Заказ"} · {order.customerName}</span></td><td><DateValue date={order.createdAt} /></td><td><span className="status">{orderStatus(order.status)}</span><span className={styles.detail}>Изменён: <DateValue date={order.statusChangedAt} /></span>{!archived && order.status === "DELIVERED" && <span className={styles.attention}>Проверьте статус доставки</span>}</td><td><span>{delivery.label}</span><span className={styles.detail}>Изменён: <DateValue date={delivery.changedAt} /></span></td><td>{archived ? <><DateValue date={received} /><span className={styles.detail}>{order.shipment?.deliveredAt ? "По данным службы доставки" : "Дата подтверждения получения"}</span>{order.status !== "DELIVERED" && <span className={styles.attention}>Требует подтверждения</span>}</> : formatPrice(order.total)}</td></tr>;
         })}</tbody></table></div> : <p className={styles.empty}>{page > 1 ? "На этой странице заказов нет." : archived ? "Полученных заказов пока нет." : "Текущих заявок и заказов пока нет."}</p>}
         {(page > 1 || page * pageSize < total) && <div className={styles.pagination}>{page > 1 && <Link className="button button--outline button--small" href={`${base}&page=${page - 1}`}>← Назад</Link>}<span>Страница {page}</span>{page * pageSize < total && <Link className="button button--outline button--small" href={`${base}&page=${page + 1}`}>Далее →</Link>}</div>}
         <p className={styles.footnote}>Время указано по Москве. Для прошлых заказов даты, которые нельзя достоверно восстановить, не отображаются.</p>
