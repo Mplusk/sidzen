@@ -33,7 +33,7 @@ BEGIN
   IF TG_OP = 'INSERT' THEN
     NEW."statusChangedAt" := COALESCE(NEW."statusChangedAt", NEW."createdAt");
   ELSIF NEW."status" IS DISTINCT FROM OLD."status" THEN
-    NEW."statusChangedAt" := CURRENT_TIMESTAMP;
+    NEW."statusChangedAt" := CURRENT_TIMESTAMP AT TIME ZONE 'UTC';
   END IF;
   RETURN NEW;
 END;
@@ -41,3 +41,4 @@ $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER order_status_changed_at BEFORE INSERT OR UPDATE OF "status" ON "Order"
 FOR EACH ROW EXECUTE FUNCTION sidzen_order_status_changed_at();
+
