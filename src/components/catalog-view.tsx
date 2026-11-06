@@ -4,6 +4,7 @@ import { CatalogFilters } from "@/components/catalog-filters";
 import { JsonLd } from "@/components/json-ld";
 import { getCatalog, normalizeCatalogParams, type CatalogParams } from "@/lib/catalog";
 import { filterValues } from "@/lib/catalog-search";
+import { primaryVisibleCategorySlug } from "@/lib/seo";
 import { pluralRu } from "@/lib/format";
 export async function CatalogView({ category, searchParams }: { category?: { slug: string; name: string; description?: string | null; h1?: string | null }; searchParams: CatalogParams }) {
   const params = normalizeCatalogParams(searchParams);
@@ -14,7 +15,7 @@ export async function CatalogView({ category, searchParams }: { category?: { slu
   const chips = groups.flatMap((group) => filterValues(params[group.key]).map((slug) => ({ label: group.options.find((option) => option.slug === slug)?.name ?? slug, href: makeUrl({ [group.key]: filterValues(params[group.key]).filter((value) => value !== slug).join(","), page: undefined }) })));
   for (const [key, label] of [["q", "Поиск"], ["min", "Цена от"], ["max", "Цена до"], ["availability", "Наличие"]] as const) if (params[key]) chips.push({ label: label + ": " + (key === "availability" ? "в наличии" : params[key]), href: makeUrl({ [key]: undefined, page: undefined }) });
   return <>
-    <JsonLd data={{ "@context": "https://schema.org", "@type": "ItemList", numberOfItems: data.count, itemListElement: data.products.map((product, index) => ({ "@type": "ListItem", position: (data.page - 1) * data.pageSize + index + 1, name: product.name, url: `https://sidzen.shop/catalog/${(product.categories.find((item) => item.isPrimary) ?? product.categories[0])?.category.slug ?? "products"}/${product.slug}/` })) }} />
+    <JsonLd data={{ "@context": "https://schema.org", "@type": "ItemList", numberOfItems: data.count, itemListElement: data.products.map((product, index) => ({ "@type": "ListItem", position: (data.page - 1) * data.pageSize + index + 1, name: product.name, url: `https://sidzen.shop/catalog/${primaryVisibleCategorySlug(product.categories) ?? "products"}/${product.slug}/` })) }} />
     <h1 className="visually-hidden">{category?.h1 ?? category?.name ?? "Каталог изделий"}</h1>
     <div className="container catalog-shell">
       <CatalogFilters base={base} params={params} groups={groups} count={data.count} />
