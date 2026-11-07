@@ -6,7 +6,7 @@ describe("delivery prerequisites and deadline", () => {
   it("accepts only complete Russian phone numbers and explains every prerequisite", () => {
     expect(deliveryCheckIssue("+7 (999) 123-45-67", "42", true, true)).toBe("");
     expect(deliveryCheckIssue("89991234567", "42", true, true)).toBe("");
-    for (const phone of ["", "+7", "+7 (999) 123", "+1 (999) 123-45-67", "+799912345678"]) expect(deliveryCheckIssue(phone, "42", true, true)).toContain("телефон");
+    for (const phone of ["", "+7", "+7 (999) 123", "+1 (999) 123-45-67", "+799912345678", "+7 (000) 000-00-00", "+7 (495) 123-45-67"]) expect(deliveryCheckIssue(phone, "42", true, true)).toContain("телефон");
     expect(deliveryCheckIssue("89991234567", "", true, true)).toContain("пункт");
     expect(deliveryCheckIssue("89991234567", "42", false, true)).toContain("согласие");
     expect(deliveryCheckIssue("89991234567", "42", true, false)).toContain("упаковки");

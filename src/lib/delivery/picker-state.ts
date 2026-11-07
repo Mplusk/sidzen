@@ -1,8 +1,8 @@
-import { normalizePhone } from "@/lib/checkout-validation";
+import { isRussianMobilePhone } from "@/lib/checkout-validation";
 
 export function deliveryCheckIssue(phone: string, point: string, consent: boolean, packingReady: boolean) {
   if (!packingReady) return "Для товара ещё не заполнены вес и размеры упаковки. Выберите другую доставку или обратитесь в магазин.";
-  if (!/^\+7\d{10}$/.test(normalizePhone(phone))) return "Заполните телефон получателя полностью: +7 и 10 цифр. Нужен номер, зарегистрированный на Ozon.";
+  if (!isRussianMobilePhone(phone)) return "Укажите телефон получателя: российский мобильный номер в формате +7 (9XX) XXX-XX-XX. Затем проверьте доставку в Ozon.";
   if (!point) return "Выберите пункт выдачи на карте или в списке.";
   if (!consent) return "Отметьте отдельное согласие на передачу номера Ozon над кнопкой проверки.";
   return "";

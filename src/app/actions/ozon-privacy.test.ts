@@ -28,6 +28,11 @@ describe("Ozon phone transfer consent boundary", () => {
     m.ready.mockResolvedValue(false); await quoteOzonDelivery("+79991234567", "8", true);
     expect(m.point).not.toHaveBeenCalled(); expect(m.checkout).not.toHaveBeenCalled(); expect(m.record).not.toHaveBeenCalled();
   });
+  it("rejects an invalid mobile number before recording consent or contacting Ozon", async () => {
+    const result = await quoteOzonDelivery("+70000000000", "8", true);
+    expect(result).toMatchObject({ reason: "recipient" });
+    expect(m.point).not.toHaveBeenCalled(); expect(m.checkout).not.toHaveBeenCalled(); expect(m.record).not.toHaveBeenCalled();
+  });
   it("stores evidence before phone transfer and binds returned quote to its receipt", async () => {
     const result = await quoteOzonDelivery("+79991234567", "8", true);
     expect(result).toMatchObject({ cost: 0, address: "QA point" });

@@ -79,7 +79,7 @@ describe("delivery verification interaction", () => {
   it("supports list selection, reduced motion, and clearing the selection", async () => {
     vi.mocked(matchMedia).mockReturnValue({ matches: true } as MediaQueryList);
     await choosePoint(); expect(scroll).toHaveBeenCalledWith({ behavior: "instant", block: "start" });
-    expect(container.querySelector(".ozon-point-confirmation")?.classList.contains("notice--success")).toBe(true);
+    expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain("ещё не проверены");
     await act(async () => { const select = container.querySelector("select")!; select.value = ""; select.dispatchEvent(new Event("change", { bubbles: true })); }); await flushFrames();
     expect(container.querySelector(".ozon-point-confirmation")).toBeNull(); expect(scroll).toHaveBeenCalledTimes(1);
     expect(button("Выбрать на карте")).toBeTruthy();
@@ -127,6 +127,20 @@ describe("delivery verification interaction", () => {
     expect(container.querySelector<HTMLInputElement>('input[name="ozonQuote"]')!.value).toBe("");
     expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
     expect(container.querySelector("select")!.value).toBe("42"); expect(container.textContent).not.toContain("Проверка действительна");
+  });
+  it("shows an invalid mobile phone at the field and does not check it with Ozon", async () => {
+    await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, total: 240 }], methods: [], user: { name: "Покупатель", email: "buyer@example.test", phone: "" }, ozonDelivery: true })));
+    const input = container.querySelector<HTMLInputElement>('[name="phone"]')!;
+    await inputValue(input, "70000000000");
+    await act(async () => { input.focus(); input.dispatchEvent(new FocusEvent("focusout", { bubbles: true })); });
+    expect(input.validity.patternMismatch).toBe(true);
+    expect(input.parentElement?.textContent).toContain("российский мобильный номер");
+    await choosePoint(); await consent();
+    expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain("Доставка и телефон ещё не проверены");
+    expect(m.quote).not.toHaveBeenCalled();
+    await click("Проверить доставку");
+    expect(m.quote).not.toHaveBeenCalled();
+    expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
   });
   it("offers to edit the single phone when Ozon cannot confirm it, preserving the selection and consent", async () => {
     await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, total: 240 }], methods: [], user: { name: "Покупатель", email: "buyer@example.test", phone: "" }, ozonDelivery: true })));
