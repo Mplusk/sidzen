@@ -77,7 +77,7 @@ export function OzonDeliveryPicker({ phone, onEditPhone, onQuote, packingReady =
     {pending === "quote" && <p className="notice" role="status">Проверяем доступность ПВЗ и срок доставки в Ozon… При временном сбое повторим автоматически. Обычно это быстро, но проверка может занять около 45 секунд.</p>}
     {message && <p className="notice" role="alert" id="ozon-check-message">{message}</p>}
     {message && recipientError && <button type="button" className="text-link" onClick={onEditPhone}>Изменить телефон получателя</button>}
-    {quote && quote.phone === phone && quote.verificationRevision === verificationRevision && <p className="notice notice--success" role="status"><strong>Доставка бесплатная · 0 ₽</strong><br />{quote.address}<br />Примерно {quote.days} дн. в пути после отгрузки. Проверка действительна 15 минут.</p>}
+    {quote && quote.phone === phone && quote.verificationRevision === verificationRevision && <p className="notice notice--success" role="status"><strong>Доставка бесплатная · 0 ₽</strong><br />Ozon подтвердил доступность доставки для этого номера.<br />{quote.address}<br />Примерно {quote.days} дн. в пути после отгрузки. Проверка действительна 15 минут.</p>}
     </div>
   </div>;
 }
