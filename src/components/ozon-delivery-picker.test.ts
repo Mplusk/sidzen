@@ -49,25 +49,22 @@ describe("delivery verification interaction", () => {
     await render();
   });
   afterEach(async () => { await act(async () => root.unmount()); container.remove(); Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView"); vi.unstubAllGlobals(); vi.useRealTimers(); });
-  it("selects a typed address suggestion, opens its map and confirms the next step without a delivery quote", async () => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    await inputValue(container.querySelector<HTMLInputElement>('.ozon-point-search input')!, "Туристская");
-    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
-    await act(async () => container.querySelector<HTMLButtonElement>('[role="option"]')!.click());
-    await flushFrames();
-    expect(container.querySelector("select")!.value).toBe("42");
-    expect(button("Изменить на карте")).toBeTruthy();
-    expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain(point.address);
-    expect(scroll).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
-    expect(m.quote).not.toHaveBeenCalled(); expect(m.order).not.toHaveBeenCalled();
+  it("asks for a city and selects a point in the map dialog", async () => {
+    expect(container.querySelector(".ozon-search-field label")?.textContent).toBe("Город");
+    await inputValue(container.querySelector<HTMLInputElement>('.ozon-point-search input')!, "Санкт-Петербург");
+    expect(fetch).not.toHaveBeenCalled();
+    await click("Найти ПВЗ на карте");
+    expect(container.querySelector("dialog")).toBeTruthy();
+    expect(container.querySelector("select")).toBeNull();
+    expect(container.querySelector(".ozon-point-confirmation")).toBeNull();
   });
   it("confirms a map selection and scrolls/focuses the next step without submitting or opening a keyboard", async () => {
     await inputValue(container.querySelector<HTMLInputElement>(".ozon-point-search input")!, "Туристская"); await click("Найти ПВЗ на карте");
     await click("Выбрать этот ПВЗ");
-    expect(container.querySelector("select")!.value).toBe("");
+    expect(container.querySelector(".ozon-point-confirmation")).toBeNull();
     expect(m.quote).not.toHaveBeenCalled();
     await click("Выбрать пункт"); await flushFrames();
-    expect(container.querySelector("select")!.value).toBe("42");
+    expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain(point.address);
     expect(container.querySelector("dialog")).toBeNull();
     expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain(point.address);
     expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain("телефон");
@@ -76,20 +73,20 @@ describe("delivery verification interaction", () => {
     expect(m.quote).not.toHaveBeenCalled(); expect(m.order).not.toHaveBeenCalled();
     await click("Изменить на карте"); await click("Выбрать пункт"); await flushFrames(); expect(scroll).toHaveBeenCalledTimes(2);
   });
-  it("supports list selection, reduced motion, and clearing the selection", async () => {
+  it("uses reduced motion and clears the selection when the city changes", async () => {
     vi.mocked(matchMedia).mockReturnValue({ matches: true } as MediaQueryList);
     await choosePoint(); expect(scroll).toHaveBeenCalledWith({ behavior: "instant", block: "start" });
     expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain("ещё не проверены");
-    await act(async () => { const select = container.querySelector("select")!; select.value = ""; select.dispatchEvent(new Event("change", { bubbles: true })); }); await flushFrames();
+    await inputValue(container.querySelector<HTMLInputElement>(".ozon-point-search input")!, "Омск"); await flushFrames();
     expect(container.querySelector(".ozon-point-confirmation")).toBeNull(); expect(scroll).toHaveBeenCalledTimes(1);
-    expect(button("Выбрать на карте")).toBeTruthy();
+    expect(button("Найти ПВЗ на карте")).toBeTruthy();
   });
   it("invalidates a checked quote on a different selection without sending the phone automatically", async () => {
     const other = { ...point, id: "43", address: "QA другой ПВЗ" };
     vi.mocked(fetch).mockResolvedValue(Response.json({ points: [point, other] }));
     phone = "+7 (999) 123-45-67"; await render(); await choosePoint(); await consent(); await click("Проверить доставку");
     await click("Изменить на карте"); await act(async () => container.querySelector<HTMLButtonElement>('button[data-point="43"]')!.click()); await click("Выбрать пункт"); await flushFrames();
-    expect(container.querySelector("select")!.value).toBe("43"); expect(onQuote).toHaveBeenLastCalledWith(null);
+    expect(onQuote).toHaveBeenLastCalledWith(null);
     expect(container.textContent).not.toContain("Проверка действительна"); expect(m.quote).toHaveBeenCalledTimes(1);
     expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain(other.address);
   });
@@ -104,12 +101,12 @@ describe("delivery verification interaction", () => {
     await click("Проверить доставку");
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("телефон"); expect(m.quote).not.toHaveBeenCalled();
     phone = "+7 (999) 123-45-67"; await render();
-    expect(container.querySelector("select")!.value).toBe("42"); expect(container.querySelector<HTMLInputElement>('input[name="ozonConsent"]')!.checked).toBe(true);
+    expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain(point.address); expect(container.querySelector<HTMLInputElement>('input[name="ozonConsent"]')!.checked).toBe(true);
     await click("Проверить доставку"); expect(m.quote).toHaveBeenCalledWith(phone, "42", true);
     expect(onQuote).toHaveBeenLastCalledWith(result); expect(container.textContent).toContain("Доставка бесплатная · 0 ₽");
     expect(container.textContent).toContain("Ozon подтвердил доступность доставки для этого номера.");
     phone = "+7 (999) 123-45-68"; await render();
-    expect(container.textContent).not.toContain("Проверка действительна"); expect(container.textContent).not.toContain("Ozon подтвердил доступность доставки для этого номера."); expect(container.querySelector("select")!.value).toBe("42");
+    expect(container.textContent).not.toContain("Проверка действительна"); expect(container.textContent).not.toContain("Ozon подтвердил доступность доставки для этого номера."); expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain(point.address);
   });
   it("uses one recipient phone for Ozon and keeps the pickup point when it changes", async () => {
     await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, revision: "2030-01-01T00:00:00.000Z", total: 240 }], methods: [], user: { name: "", email: "", phone: "" }, ozonDelivery: true })));
@@ -119,7 +116,7 @@ describe("delivery verification interaction", () => {
     expect(container.querySelector<HTMLInputElement>('input[name="delivery"]')!.value).toBe("ozon-delivery");
     await inputValue(container.querySelector<HTMLInputElement>('[name="phone"]')!, "89991234567");
     expect(container.querySelector<HTMLInputElement>('input[name="phone"]')!.value).toBe("+7 (999) 123-45-67");
-    expect(container.querySelector("select")!.value).toBe("42"); expect(container.querySelector<HTMLInputElement>('input[name="ozonConsent"]')!.checked).toBe(true);
+    expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain(point.address); expect(container.querySelector<HTMLInputElement>('input[name="ozonConsent"]')!.checked).toBe(true);
     expect(container.querySelectorAll('input[type="tel"]')).toHaveLength(1);
     await click("Проверить доставку"); expect(container.querySelector<HTMLInputElement>('input[name="ozonQuote"]')!.value).toBe(result.token);
     expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(false);
@@ -127,7 +124,7 @@ describe("delivery verification interaction", () => {
     expect(container.querySelector<HTMLInputElement>('[name="phone"]')!.value).toBe("+7 (999) 123-45-68");
     expect(container.querySelector<HTMLInputElement>('input[name="ozonQuote"]')!.value).toBe("");
     expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
-    expect(container.querySelector("select")!.value).toBe("42"); expect(container.textContent).not.toContain("Проверка действительна");
+    expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain(point.address); expect(container.textContent).not.toContain("Проверка действительна");
   });
   it("shows an invalid mobile phone at the field and does not check it with Ozon", async () => {
     await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, revision: "2030-01-01T00:00:00.000Z", total: 240 }], methods: [], user: { name: "Покупатель", email: "buyer@example.test", phone: "" }, ozonDelivery: true })));
@@ -154,7 +151,7 @@ describe("delivery verification interaction", () => {
     expect(document.activeElement).toBe(container.querySelector('[name="phone"]'));
     await inputValue(container.querySelector<HTMLInputElement>('[name="phone"]')!, "89991234568");
     expect(container.querySelector('[role="alert"]')).toBeNull();
-    expect(container.querySelector("select")!.value).toBe("42");
+    expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain(point.address);
     expect(container.querySelector<HTMLInputElement>('input[name="ozonConsent"]')!.checked).toBe(true);
     await click("Проверить доставку");
     expect(m.quote).toHaveBeenLastCalledWith("+7 (999) 123-45-68", "42", true);
@@ -177,7 +174,7 @@ describe("delivery verification interaction", () => {
     expect(m.refresh).toHaveBeenCalled();
     expect(container.querySelector<HTMLInputElement>('[name="ozonQuote"]')!.value).toBe("");
     expect(container.querySelector<HTMLInputElement>('[name="name"]')!.value).toBe("Покупатель");
-    expect(container.querySelector("select")!.value).toBe("42");
+    expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain(point.address);
   });
   it("ignores a delayed Ozon response for the previous cart after a new quote succeeds", async () => {
     m.cart.mockResolvedValue({});
@@ -213,12 +210,12 @@ describe("delivery verification interaction", () => {
     expect(container.querySelector<HTMLTextAreaElement>('[name="comment"]')!.value).toBe("Позвоните вечером");
     expect(container.querySelector<HTMLInputElement>('[name="legal"]')!.checked).toBe(true);
     expect(container.querySelector<HTMLInputElement>('[name="ozonConsent"]')!.checked).toBe(true);
-    expect(container.querySelector('select')!.value).toBe("42");
+    expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain(point.address);
     m.order.mockResolvedValueOnce({ error: "ozon-expired" });
     await act(async () => container.querySelector<HTMLFormElement>('.checkout-form')!.requestSubmit());
     expect(m.order).toHaveBeenCalledTimes(2);
     expect(container.querySelector<HTMLInputElement>('[name="ozonQuote"]')!.value).toBe("");
-    expect(container.querySelector('select')!.value).toBe("42");
+    expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain(point.address);
     expect(container.querySelector<HTMLInputElement>('[name="ozonConsent"]')!.checked).toBe(true);
     expect(container.querySelector<HTMLInputElement>('[name="name"]')!.value).toBe("Тестовый покупатель");
     await click("Проверить доставку");
