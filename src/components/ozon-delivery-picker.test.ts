@@ -147,6 +147,23 @@ describe("delivery verification interaction", () => {
     expect(container.querySelector<HTMLInputElement>('[name="name"]')!.value).toBe("Покупатель");
     expect(container.querySelector("select")!.value).toBe("42");
   });
+  it("ignores a delayed Ozon response for the previous cart after a new quote succeeds", async () => {
+    m.cart.mockResolvedValue({});
+    let finishOld!: (value: unknown) => void;
+    m.quote.mockReturnValueOnce(new Promise(resolve => { finishOld = resolve; }));
+    await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, total: 240 }], methods: [], user: { name: "Покупатель", email: "buyer@example.test", phone: "" }, ozonDelivery: true })));
+    await inputValue(container.querySelector<HTMLInputElement>('[name="phone"]')!, "89991234567");
+    await choosePoint(); await consent(); await click("Проверить доставку");
+    expect(button("Проверяем доставку").disabled).toBe(true);
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Увеличить количество: Fixture"]')!.click());
+    expect(button("Проверить доставку").disabled).toBe(false);
+    expect(container.querySelector<HTMLInputElement>('[name="ozonQuote"]')!.value).toBe("");
+    await click("Проверить доставку");
+    expect(container.querySelector<HTMLInputElement>('[name="ozonQuote"]')!.value).toBe(result.token);
+    await act(async () => finishOld({ ...result, token: "outdated-quote", days: 99 }));
+    expect(container.querySelector<HTMLInputElement>('[name="ozonQuote"]')!.value).toBe(result.token);
+    expect(container.textContent).not.toContain("99 дн.");
+  });
   it("preserves contacts, comment, consent and selected PVZ after a server error and retries in place", async () => {
     m.order.mockResolvedValue({ error: "ozon-transport" });
     await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, total: 240 }], methods: [], user: { name: "", email: "", phone: "" }, ozonDelivery: true })));

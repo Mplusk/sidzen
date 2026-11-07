@@ -55,10 +55,12 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
   const router = useRouter();
   const [cartPending, updateCart] = useTransition();
   const [cartError, setCartError] = useState("");
-  const [ozonQuote, setOzonQuote] = useState<DeliveryQuoteView | null>(null);
+  const [quoteRevision, setQuoteRevision] = useState(0);
+  const [ozonQuoteEntry, setOzonQuoteEntry] = useState<{ revision: number; value: DeliveryQuoteView | null }>({ revision: 0, value: null });
+  const ozonQuote = ozonQuoteEntry.revision === quoteRevision ? ozonQuoteEntry.value : null;
+  const setOzonQuote = (value: DeliveryQuoteView | null) => setOzonQuoteEntry(previous => previous.revision > quoteRevision ? previous : { revision: quoteRevision, value });
   const [cdekQuote, setCdekQuote] = useState<CdekQuoteView | null>(null);
   const [cdekRevision, setCdekRevision] = useState(0);
-  const [quoteRevision, setQuoteRevision] = useState(0);
   const [state, formAction, pending] = useActionState(createOrderWithState, {} as CheckoutActionState);
   const [lastActionState, setLastActionState] = useState(state);
   if (lastActionState !== state) {
@@ -73,8 +75,8 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
   const currentError = state.error ?? error, currentReference = state.reference ?? reference;
   const [delivery, setDelivery] = useState(ozonDelivery ? "ozon-delivery" : cdekDelivery ? "cdek-delivery" : methods[0]?.code ?? "");
   const [phone, setPhone] = useState(phoneMask(user.phone));
-  const changePhone = (value: string) => { const next = phoneMask(value); setPhone(next); if (next !== phone) setOzonQuote(null); };
-  const changeDelivery = (code: string) => { setDelivery(code); setOzonQuote(null); setCdekQuote(null); };
+  const changePhone = (value: string) => { const next = phoneMask(value); setPhone(next); if (next !== phone) { setOzonQuote(null); setQuoteRevision(value => value + 1); } };
+  const changeDelivery = (code: string) => { setDelivery(code); setOzonQuote(null); setQuoteRevision(value => value + 1); setCdekQuote(null); };
   const changeQuantity = (id: string, current: number, next: number) => {
     if (pending || cartPending) return;
     setCartError(""); setOzonQuote(null); setCdekQuote(null); setQuoteRevision(value => value + 1); setCdekRevision(value => value + 1);
