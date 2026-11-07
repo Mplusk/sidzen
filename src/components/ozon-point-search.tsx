@@ -4,10 +4,11 @@ import { useId, useRef, useState, useEffect } from "react";
 import type { PickupPoint } from "@/lib/delivery/points";
 
 type Results = { points: PickupPoint[]; truncated?: boolean };
-export function OzonPointSearch({ onReset, onResults, onSelect }: {
+export function OzonPointSearch({ onReset, onResults, onSelect, onOpenMap }: {
   onReset: () => void;
   onResults: (points: PickupPoint[], truncated: boolean) => void;
   onSelect: (id: string) => void;
+  onOpenMap?: () => void;
 }) {
   const id = useId();
   const [query, setQuery] = useState("");
@@ -45,7 +46,7 @@ export function OzonPointSearch({ onReset, onResults, onSelect }: {
       const result = await response.json() as Results;
       if (version !== generation.current) return;
       if (mode === "suggest") { setSuggestions(result); setActive(-1); }
-      else { setOpen(false); onResults(result.points, !!result.truncated); }
+      else { setOpen(false); onResults(result.points, !!result.truncated); if (result.points.length) onOpenMap?.(); }
       if (!result.points.length) setMessage("ПВЗ не найдены. Попробуйте название города и часть улицы, например «Омск Бульвар». Проверьте написание.");
     } catch (error) {
       if (version !== generation.current) return;

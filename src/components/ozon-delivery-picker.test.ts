@@ -3,9 +3,11 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const m = vi.hoisted(() => ({ quote: vi.fn(), order: vi.fn() }));
+const m = vi.hoisted(() => ({ quote: vi.fn(), order: vi.fn(), cart: vi.fn(), refresh: vi.fn() }));
 vi.mock("@/app/actions/ozon-delivery", () => ({ quoteOzonDelivery: m.quote }));
 vi.mock("@/app/actions/checkout", () => ({ createOrderAction: m.order, createOrderWithState: m.order }));
+vi.mock("@/app/actions/checkout-cart", () => ({ updateCheckoutCartItem: m.cart }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: m.refresh }) }));
 vi.mock("next/dynamic", () => ({ default: () => ({ points, selected, onSelect }: { points: { id: string }[]; selected: string; onSelect: (id: string) => void }) => createElement("div", null, ...points.map(point => createElement("button", { key: point.id, type: "button", "data-point": point.id, "aria-pressed": selected === point.id, onClick: () => onSelect(point.id) }, selected === point.id ? "✓ ПВЗ выбран" : "Выбрать этот ПВЗ"))) }));
 import { OzonDeliveryPicker } from "./ozon-delivery-picker";
 import { CheckoutForm } from "./checkout-form";
@@ -27,7 +29,8 @@ async function inputValue(input: HTMLInputElement, value: string) {
 async function choosePoint() {
   await inputValue(container.querySelector<HTMLInputElement>(".ozon-point-search input")!, "Туристская");
   await click("Найти ПВЗ на карте");
-  await act(async () => { const select = container.querySelector("select")!; select.value = "42"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+  await click("Выбрать этот ПВЗ");
+  await click("Выбрать пункт");
   await flushFrames();
 }
 async function consent() { await act(async () => container.querySelector<HTMLInputElement>('input[name="ozonConsent"]')!.click()); }
@@ -53,22 +56,25 @@ describe("delivery verification interaction", () => {
     await act(async () => container.querySelector<HTMLButtonElement>('[role="option"]')!.click());
     await flushFrames();
     expect(container.querySelector("select")!.value).toBe("42");
-    expect(button("ПВЗ выбран").getAttribute("aria-pressed")).toBe("true");
+    expect(button("Изменить на карте")).toBeTruthy();
     expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain(point.address);
     expect(scroll).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
     expect(m.quote).not.toHaveBeenCalled(); expect(m.order).not.toHaveBeenCalled();
   });
   it("confirms a map selection and scrolls/focuses the next step without submitting or opening a keyboard", async () => {
     await inputValue(container.querySelector<HTMLInputElement>(".ozon-point-search input")!, "Туристская"); await click("Найти ПВЗ на карте");
-    await click("Выбрать этот ПВЗ"); await flushFrames();
+    await click("Выбрать этот ПВЗ");
+    expect(container.querySelector("select")!.value).toBe("");
+    expect(m.quote).not.toHaveBeenCalled();
+    await click("Выбрать пункт"); await flushFrames();
     expect(container.querySelector("select")!.value).toBe("42");
-    expect(button("ПВЗ выбран").getAttribute("aria-pressed")).toBe("true");
+    expect(container.querySelector("dialog")).toBeNull();
     expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain(point.address);
     expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain("телефон");
     expect(document.activeElement).toBe(container.querySelector(".ozon-recipient-step"));
     expect(scroll).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
     expect(m.quote).not.toHaveBeenCalled(); expect(m.order).not.toHaveBeenCalled();
-    await click("ПВЗ выбран"); await flushFrames(); expect(scroll).toHaveBeenCalledTimes(2);
+    await click("Изменить на карте"); await click("Выбрать пункт"); await flushFrames(); expect(scroll).toHaveBeenCalledTimes(2);
   });
   it("supports list selection, reduced motion, and clearing the selection", async () => {
     vi.mocked(matchMedia).mockReturnValue({ matches: true } as MediaQueryList);
@@ -76,20 +82,20 @@ describe("delivery verification interaction", () => {
     expect(container.querySelector(".ozon-point-confirmation")?.classList.contains("notice--success")).toBe(true);
     await act(async () => { const select = container.querySelector("select")!; select.value = ""; select.dispatchEvent(new Event("change", { bubbles: true })); }); await flushFrames();
     expect(container.querySelector(".ozon-point-confirmation")).toBeNull(); expect(scroll).toHaveBeenCalledTimes(1);
-    expect(button("Выбрать этот ПВЗ").getAttribute("aria-pressed")).toBe("false");
+    expect(button("Выбрать на карте")).toBeTruthy();
   });
   it("invalidates a checked quote on a different selection without sending the phone automatically", async () => {
     const other = { ...point, id: "43", address: "QA другой ПВЗ" };
     vi.mocked(fetch).mockResolvedValue(Response.json({ points: [point, other] }));
     phone = "+7 (999) 123-45-67"; await render(); await choosePoint(); await consent(); await click("Проверить доставку");
-    await act(async () => container.querySelector<HTMLButtonElement>('button[data-point="43"]')!.click()); await flushFrames();
+    await click("Изменить на карте"); await act(async () => container.querySelector<HTMLButtonElement>('button[data-point="43"]')!.click()); await click("Выбрать пункт"); await flushFrames();
     expect(container.querySelector("select")!.value).toBe("43"); expect(onQuote).toHaveBeenLastCalledWith(null);
     expect(container.textContent).not.toContain("Проверка действительна"); expect(m.quote).toHaveBeenCalledTimes(1);
     expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain(other.address);
   });
   it("cancels pending scrolling when the picker unmounts", async () => {
     await inputValue(container.querySelector<HTMLInputElement>(".ozon-point-search input")!, "Туристская"); await click("Найти ПВЗ на карте");
-    await click("Выбрать этот ПВЗ"); expect(frames.size).toBe(1);
+    await click("Выбрать этот ПВЗ"); await click("Выбрать пункт"); expect(frames.size).toBe(1);
     await act(async () => root.render(null)); expect(frames.size).toBe(0); expect(scroll).not.toHaveBeenCalled();
   });
   it("explains the missing phone instead of silently disabling the button; keeps the selected PVZ and consent", async () => {
@@ -127,6 +133,19 @@ describe("delivery verification interaction", () => {
     expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
     expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')!.textContent).toBe("Доставка временно недоступна");
     expect(m.quote).not.toHaveBeenCalled();
+  });
+  it("invalidates a delivery quote when the cart quantity changes and keeps contact details", async () => {
+    m.cart.mockResolvedValue({});
+    await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, total: 240 }], methods: [], user: { name: "Покупатель", email: "buyer@example.test", phone: "" }, ozonDelivery: true })));
+    await inputValue(container.querySelector<HTMLInputElement>('[name="phone"]')!, "89991234567");
+    await choosePoint(); await consent(); await click("Проверить доставку");
+    expect(container.querySelector<HTMLInputElement>('[name="ozonQuote"]')!.value).toBe(result.token);
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Увеличить количество: Fixture"]')!.click());
+    expect(m.cart).toHaveBeenCalledWith("fixture", 1, 2);
+    expect(m.refresh).toHaveBeenCalled();
+    expect(container.querySelector<HTMLInputElement>('[name="ozonQuote"]')!.value).toBe("");
+    expect(container.querySelector<HTMLInputElement>('[name="name"]')!.value).toBe("Покупатель");
+    expect(container.querySelector("select")!.value).toBe("42");
   });
   it("preserves contacts, comment, consent and selected PVZ after a server error and retries in place", async () => {
     m.order.mockResolvedValue({ error: "ozon-transport" });
@@ -182,6 +201,6 @@ describe("delivery verification interaction", () => {
     const locate = vi.fn(); Object.defineProperty(navigator, "geolocation", { configurable: true, value: { getCurrentPosition: locate } });
     await choosePoint(); expect(locate).not.toHaveBeenCalled();
     expect(fetch).toHaveBeenCalledWith("/api/delivery/ozon/points/?q=%D0%A2%D1%83%D1%80%D0%B8%D1%81%D1%82%D1%81%D0%BA%D0%B0%D1%8F", expect.objectContaining({ cache: "no-store" }));
-    expect(container.textContent).not.toContain("рядом со мной"); expect(container.textContent).toContain("Скрыть карту");
+    expect(container.textContent).not.toContain("рядом со мной"); expect(container.textContent).toContain("Изменить на карте");
   });
 });

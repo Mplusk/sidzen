@@ -1,0 +1,70 @@
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); align-items: start; gap: 24px; margin-top: 28px; }
+.main { display: grid; min-width: 0; gap: 16px; }
+.panel, .summary { min-width: 0; padding: 24px; border: 1px solid var(--line); border-radius: 16px; background: var(--white); }
+.panelHeading { display: flex; align-items: start; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; margin-bottom: 20px; }
+.panelHeading h2 { margin: 0; font-size: 1.25rem; }
+.panelHeading p { margin: .35rem 0 0; color: var(--muted); font-size: .875rem; }
+.panelHeading > a { min-height: 36px; font-size: .875rem; }
+.items { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.item { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 16px 0; border-top: 1px solid var(--line); }
+.itemImage, .itemPlaceholder { width: 76px; height: 76px; border-radius: 10px; object-fit: contain; background: var(--paper); }
+.itemInfo { display: grid; min-width: 0; gap: 3px; }
+.itemInfo strong { font-size: .9375rem; line-height: 1.4; overflow-wrap: anywhere; }
+.itemInfo small { color: var(--muted); font-size: .78rem; line-height: 1.35; overflow-wrap: anywhere; }
+.itemActions { display: flex; align-items: center; gap: 16px; }
+.quantity { display: inline-grid; grid-template-columns: 36px 36px 36px; align-items: center; min-height: 40px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); text-align: center; }
+.quantity button, .remove { display: grid; place-items: center; min-width: 36px; min-height: 38px; padding: 0; border: 0; border-radius: 8px; color: var(--ink); background: transparent; cursor: pointer; }
+.quantity button:hover:not(:disabled), .remove:hover:not(:disabled) { background: var(--paper-2); }
+.quantity button:disabled, .remove:disabled { opacity: .45; cursor: not-allowed; }
+.quantity span, .itemTotal { font-variant-numeric: tabular-nums; }
+.itemTotal { min-width: 66px; white-space: nowrap; text-align: right; }
+.remove { color: var(--muted); }
+.contacts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.contacts :global(.field) { min-width: 0; }
+.hint { margin: 14px 0 0; color: var(--muted); font-size: .8125rem; }
+.methods { display: grid; gap: 10px; margin: 0; padding: 0; border: 0; }
+.method { display: grid; grid-template-columns: 18px 88px minmax(0, 1fr) auto; align-items: center; gap: 14px; min-width: 0; min-height: 78px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); cursor: pointer; }
+.method:has(input:checked) { border-color: var(--sage); background: #f2f2ea; }
+.method input { width: 18px; height: 18px; margin: 0; accent-color: var(--sage); }
+.carrierLogo { display: flex; align-items: center; min-width: 0; }
+.carrierLogo img { display: block; width: 83px; height: auto; max-height: 28px; object-fit: contain; }
+.methodIcon { display: grid; place-items: center; width: 44px; height: 44px; color: var(--sage); }
+.methodText { display: grid; min-width: 0; gap: 3px; }
+.methodText strong { font-size: .9375rem; }
+.methodText small { color: var(--muted); font-size: .8rem; line-height: 1.4; overflow-wrap: anywhere; }
+.methodPrice { font-size: .875rem; white-space: nowrap; }
+.comment { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+.comment summary { min-height: 36px; color: var(--sage); font-size: .875rem; font-weight: 500; cursor: pointer; }
+.comment :global(.field) { margin-top: 10px; }
+.comment small { color: var(--muted); font-size: .78rem; }
+.sidebar { position: sticky; top: calc(var(--header-offset) + 18px); min-width: 0; }
+.summary { display: grid; gap: 14px; }
+.summaryKicker { margin: 0; color: var(--muted); font-size: .8125rem; }
+.total { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.total h2 { margin: 0; font-size: 1.15rem; }
+.total > strong { font-size: 1.45rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.summaryLine { display: flex; justify-content: space-between; gap: 16px; font-size: .9rem; }
+.summaryLine span { color: var(--muted); }
+.summaryLine strong { text-align: right; }
+.summary :global(.checkout-consent) { margin: 4px 0 0; }
+.submit { width: 100%; }
+.summaryNote { margin: 0; color: var(--muted); font-size: .78rem; line-height: 1.5; }
+@media (max-width: 1000px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .sidebar { position: static; }
+}
+@media (max-width: 700px) {
+  .panel, .summary { padding: 20px; }
+  .contacts { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .item { grid-template-columns: 64px minmax(0, 1fr); gap: 12px; }
+  .itemImage, .itemPlaceholder { width: 64px; height: 64px; }
+  .itemActions { grid-column: 2; justify-content: space-between; gap: 8px; }
+  .method { grid-template-columns: 18px 68px minmax(0, 1fr); gap: 10px; }
+  .carrierLogo img { width: 64px; }
+  .methodPrice { grid-column: 3; }
+}
+@media (max-width: 380px) {
+  .panel, .summary { padding: 16px; }
+  .quantity { grid-template-columns: 32px 30px 32px; }
+  .quantity button { min-width: 32px; }
+}

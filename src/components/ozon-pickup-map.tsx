@@ -10,7 +10,7 @@ function showSelection(button: HTMLButtonElement, selected: boolean) {
   button.setAttribute("aria-pressed", String(selected));
 }
 
-export default function OzonPickupMap({ points, selected, onSelect, carrier = "Ozon" }: { points: PickupPoint[]; selected: string; onSelect: (id: string) => void; carrier?: string }) {
+export default function OzonPickupMap({ points, selected, onSelect, carrier = "Ozon", openPopupOnSelect = true }: { points: PickupPoint[]; selected: string; onSelect: (id: string) => void; carrier?: string; openPopupOnSelect?: boolean }) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markersRef = useRef(new Map<string, L.Marker>());
@@ -42,7 +42,7 @@ export default function OzonPickupMap({ points, selected, onSelect, carrier = "O
       button.onclick = () => { showSelection(button, true); selectRef.current(point.id); };
       buttonsRef.current.set(point.id, button);
       content.append(title, address, button);
-      const marker = L.marker([point.latitude, point.longitude], { title: `ПВЗ: ${point.address}`, alt: `ПВЗ: ${point.address}`, icon: L.divIcon({ className: "ozon-map-pin", html: '<span aria-hidden="true">●</span>', iconSize: [28, 36], iconAnchor: [14, 36] }) }).bindPopup(content).addTo(map);
+      const marker = L.marker([point.latitude, point.longitude], { title: `ПВЗ: ${point.address}`, alt: `ПВЗ: ${point.address}`, icon: L.divIcon({ className: `ozon-map-pin ${carrier === "Ozon" ? "ozon-map-pin--ozon" : "ozon-map-pin--cdek"}`, html: '<span aria-hidden="true">●</span>', iconSize: [28, 36], iconAnchor: [14, 36] }) }).bindPopup(content).addTo(map);
       markersRef.current.set(point.id, marker);
       return marker;
     });
@@ -51,16 +51,16 @@ export default function OzonPickupMap({ points, selected, onSelect, carrier = "O
     const markerIndex = markersRef.current;
     const buttonIndex = buttonsRef.current;
     return () => { for (const marker of markers) marker.remove(); markerIndex.clear(); buttonIndex.clear(); };
-  }, [points]);
+  }, [points, carrier]);
   useEffect(() => {
     const point = points.find(point => point.id === selected);
     for (const [id, marker] of markersRef.current) marker.getElement()?.classList.toggle("ozon-map-pin--selected", id === selected);
     for (const [id, button] of buttonsRef.current) showSelection(button, id === selected);
     if (point && hasPointCoordinates(point)) {
       mapRef.current?.panTo([point.latitude, point.longitude]);
-      markersRef.current.get(point.id)?.openPopup();
+      if (openPopupOnSelect) markersRef.current.get(point.id)?.openPopup();
     }
-  }, [points, selected]);
+  }, [points, selected, openPopupOnSelect]);
   const focused = initialMapPoints(points).length;
   return <div className="ozon-map-wrapper"><div ref={container} className="ozon-pickup-map" role="region" aria-label={`Карта пунктов выдачи ${carrier}`} />{focused < points.filter(hasPointCoordinates).length && <p className="muted">Карта открыта в районе большинства найденных ПВЗ. Пункты в других районах тоже доступны: выберите адрес в списке — карта перейдёт к нему.</p>}{tileError && <p className="muted" role="status">Подложка карты временно недоступна. ПВЗ можно выбрать по метке или из списка ниже.</p>}</div>;
 }
