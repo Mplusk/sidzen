@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
-import { receivedOrdersWhere } from "../src/lib/dashboard-orders";
+import { archivedOrdersWhere, receivedOrdersWhere } from "../src/lib/dashboard-orders";
 import { dashboardDelivery } from "../src/lib/dashboard-delivery";
 
 const db = new URL(process.env.DATABASE_URL || "");
@@ -33,18 +33,24 @@ try {
   const confirmedCdek = await order("SHIPPED", cdek("FINISHED", "DELIVERED", new Date("2030-01-01T12:00:00Z")));
   const previouslyConfirmed = await order("DELIVERED", ozon("FINISHED", "delivered"));
   const deliveredButStale = await order("DELIVERED", ozon("CREATED", "on_way", new Date("2029-01-01T12:00:00Z")));
-  const deleted = await order("NEW");
+  const canceled = await order("CANCELED");
+  const canceledInTransit = await order("CANCELED", ozon("CREATED", "on_way"));
+  const canceledCdek = await order("CANCELED", cdek("CANCELED", "NOT_DELIVERED"));
+  const refunded = await order("REFUNDED", ozon("FINISHED", "delivered", new Date("2030-01-01T12:00:00Z")));
+  const deleted = await order("CANCELED");
   await prisma.order.update({ where: { id: deleted.id }, data: { deletedAt: new Date() } });
 
-  const [current, archived] = await Promise.all([
-    prisma.order.findMany({ where: { id: { in: ids }, deletedAt: null, NOT: receivedOrdersWhere }, select: { id: true } }),
+  const [current, archived, received] = await Promise.all([
+    prisma.order.findMany({ where: { id: { in: ids }, deletedAt: null, NOT: archivedOrdersWhere }, select: { id: true } }),
+    prisma.order.findMany({ where: { id: { in: ids }, deletedAt: null, ...archivedOrdersWhere }, select: { id: true } }),
     prisma.order.findMany({ where: { id: { in: ids }, deletedAt: null, ...receivedOrdersWhere }, select: { id: true } }),
   ]);
-  assert.deepEqual(new Set(current.map(row => row.id)), new Set([inTransit.id, conflictingOzon.id, newOrder.id, conflictingCdek.id, deliveredButStale.id]));
-  assert.deepEqual(new Set(archived.map(row => row.id)), new Set([confirmedManually.id, confirmedOzon.id, confirmedCdek.id, previouslyConfirmed.id]));
+  assert.deepEqual(new Set(current.map(row => row.id)), new Set([inTransit.id, conflictingOzon.id, newOrder.id, conflictingCdek.id, deliveredButStale.id, refunded.id]));
+  assert.deepEqual(new Set(archived.map(row => row.id)), new Set([confirmedManually.id, confirmedOzon.id, confirmedCdek.id, previouslyConfirmed.id, canceled.id, canceledInTransit.id, canceledCdek.id]));
+  assert.deepEqual(new Set(received.map(row => row.id)), new Set([confirmedManually.id, confirmedOzon.id, confirmedCdek.id, previouslyConfirmed.id]));
   assert.equal(dashboardDelivery(inTransit.shipment).label, "Ozon: В пути");
   assert.equal(dashboardDelivery(conflictingCdek.shipment).label, "СДЭК: Не вручено");
-  console.log("PASS dashboard: in-transit and conflicting shipments remain visible, confirmed receipts are archived, deleted orders are excluded.");
+  console.log("PASS dashboard: canceled and received orders are archived; in-transit orders remain visible; deleted orders are excluded.");
 } finally {
   await prisma.order.deleteMany({ where: { id: { in: ids } } });
   await prisma.$disconnect();

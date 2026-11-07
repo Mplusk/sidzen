@@ -19,3 +19,9 @@ export const receivedOrdersWhere: Prisma.OrderWhereInput = {
     ] },
   ],
 };
+
+// Canceled orders belong in the archive even when a carrier cancellation is
+// still pending; the dashboard must continue to show that carrier status.
+export const archivedOrdersWhere: Prisma.OrderWhereInput = {
+  OR: [{ status: "CANCELED" }, receivedOrdersWhere],
+};
