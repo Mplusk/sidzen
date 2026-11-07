@@ -112,7 +112,7 @@ describe("delivery verification interaction", () => {
     expect(container.textContent).not.toContain("Проверка действительна"); expect(container.textContent).not.toContain("Ozon подтвердил доступность доставки для этого номера."); expect(container.querySelector("select")!.value).toBe("42");
   });
   it("uses one recipient phone for Ozon and keeps the pickup point when it changes", async () => {
-    await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, total: 240 }], methods: [], user: { name: "", email: "", phone: "" }, ozonDelivery: true })));
+    await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, revision: "2030-01-01T00:00:00.000Z", total: 240 }], methods: [], user: { name: "", email: "", phone: "" }, ozonDelivery: true })));
     expect(container.querySelector('[name="payment"]')).toBeNull(); expect(container.textContent).not.toContain("По счёту");
     await choosePoint(); await consent();
     expect(container.querySelectorAll('input[name="delivery"]')).toHaveLength(1);
@@ -130,7 +130,7 @@ describe("delivery verification interaction", () => {
     expect(container.querySelector("select")!.value).toBe("42"); expect(container.textContent).not.toContain("Проверка действительна");
   });
   it("shows an invalid mobile phone at the field and does not check it with Ozon", async () => {
-    await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, total: 240 }], methods: [], user: { name: "Покупатель", email: "buyer@example.test", phone: "" }, ozonDelivery: true })));
+    await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, revision: "2030-01-01T00:00:00.000Z", total: 240 }], methods: [], user: { name: "Покупатель", email: "buyer@example.test", phone: "" }, ozonDelivery: true })));
     const input = container.querySelector<HTMLInputElement>('[name="phone"]')!;
     await inputValue(input, "70000000000");
     await act(async () => { input.focus(); input.dispatchEvent(new FocusEvent("focusout", { bubbles: true })); });
@@ -144,7 +144,7 @@ describe("delivery verification interaction", () => {
     expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
   });
   it("offers to edit the single phone when Ozon cannot confirm it, preserving the selection and consent", async () => {
-    await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, total: 240 }], methods: [], user: { name: "Покупатель", email: "buyer@example.test", phone: "" }, ozonDelivery: true })));
+    await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, revision: "2030-01-01T00:00:00.000Z", total: 240 }], methods: [], user: { name: "Покупатель", email: "buyer@example.test", phone: "" }, ozonDelivery: true })));
     await inputValue(container.querySelector<HTMLInputElement>('[name="phone"]')!, "89991234567");
     await choosePoint(); await consent();
     m.quote.mockResolvedValueOnce({ error: "Ozon не подтвердил доставку для этого номера. Проверьте его или укажите другой номер, зарегистрированный в Ozon.", reason: "recipient" });
@@ -168,12 +168,12 @@ describe("delivery verification interaction", () => {
   });
   it("invalidates a delivery quote when the cart quantity changes and keeps contact details", async () => {
     m.cart.mockResolvedValue({});
-    await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, total: 240 }], methods: [], user: { name: "Покупатель", email: "buyer@example.test", phone: "" }, ozonDelivery: true })));
+    await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, revision: "2030-01-01T00:00:00.000Z", total: 240 }], methods: [], user: { name: "Покупатель", email: "buyer@example.test", phone: "" }, ozonDelivery: true })));
     await inputValue(container.querySelector<HTMLInputElement>('[name="phone"]')!, "89991234567");
     await choosePoint(); await consent(); await click("Проверить доставку");
     expect(container.querySelector<HTMLInputElement>('[name="ozonQuote"]')!.value).toBe(result.token);
     await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Увеличить количество: Fixture"]')!.click());
-    expect(m.cart).toHaveBeenCalledWith("fixture", 1, 2);
+    expect(m.cart).toHaveBeenCalledWith("fixture", 1, 2, "2030-01-01T00:00:00.000Z");
     expect(m.refresh).toHaveBeenCalled();
     expect(container.querySelector<HTMLInputElement>('[name="ozonQuote"]')!.value).toBe("");
     expect(container.querySelector<HTMLInputElement>('[name="name"]')!.value).toBe("Покупатель");
@@ -183,7 +183,7 @@ describe("delivery verification interaction", () => {
     m.cart.mockResolvedValue({});
     let finishOld!: (value: unknown) => void;
     m.quote.mockReturnValueOnce(new Promise(resolve => { finishOld = resolve; }));
-    await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, total: 240 }], methods: [], user: { name: "Покупатель", email: "buyer@example.test", phone: "" }, ozonDelivery: true })));
+    await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, revision: "2030-01-01T00:00:00.000Z", total: 240 }], methods: [], user: { name: "Покупатель", email: "buyer@example.test", phone: "" }, ozonDelivery: true })));
     await inputValue(container.querySelector<HTMLInputElement>('[name="phone"]')!, "89991234567");
     await choosePoint(); await consent(); await click("Проверить доставку");
     expect(button("Проверяем доставку").disabled).toBe(true);
@@ -198,7 +198,7 @@ describe("delivery verification interaction", () => {
   });
   it("preserves contacts, comment, consent and selected PVZ after a server error and retries in place", async () => {
     m.order.mockResolvedValue({ error: "ozon-transport" });
-    await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, total: 240 }], methods: [], user: { name: "", email: "", phone: "" }, ozonDelivery: true })));
+    await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, revision: "2030-01-01T00:00:00.000Z", total: 240 }], methods: [], user: { name: "", email: "", phone: "" }, ozonDelivery: true })));
     await inputValue(container.querySelector<HTMLInputElement>('[name="name"]')!, "Тестовый покупатель");
     await inputValue(container.querySelector<HTMLInputElement>('[name="email"]')!, "buyer@example.test");
     await inputValue(container.querySelector<HTMLInputElement>('[name="phone"]')!, "89991234567");
