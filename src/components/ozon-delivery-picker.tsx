@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { quoteOzonDelivery } from "@/app/actions/ozon-delivery";
-import { hasPointCoordinates, type PickupPoint } from "@/lib/delivery/points";
+import type { PickupPoint } from "@/lib/delivery/points";
 import { deliveryCheckIssue, withDeliveryDeadline } from "@/lib/delivery/picker-state";
 import { OzonPointSearch } from "@/components/ozon-point-search";
 import { PickupPointDialog } from "@/components/pickup-point-dialog";
@@ -55,19 +55,15 @@ export function OzonDeliveryPicker({ phone, onEditPhone, onQuote, packingReady =
     } catch { if (version === revision.current && phoneRef.current === requestedPhone) setMessage("Ozon не ответил на проверку доставки. Повторите попытку или выберите другой способ доставки."); }
     finally { if (version === revision.current) setPending(null); }
   }
-  const mapped = points.filter(hasPointCoordinates).length;
   const checkIssue = deliveryCheckIssue(phone, point, consent, packingReady);
   return <div className="ozon-delivery-picker">
     <p className="ozon-free-delivery"><strong>Бесплатная доставка Ozon</strong><span>Расходы на перевозку и страховку оплачивает магазин.</span></p>
     {!packingReady && <p className="notice notice--danger">Для одного из товаров магазин ещё не указал вес и размеры упакованной посылки. Проверка Ozon недоступна — выберите другую доставку или обратитесь в магазин.</p>}
-    <p className="muted">Выберите ПВЗ или постамат на карте. Номер получателя должен быть зарегистрирован на Ozon. С вашего согласия передадим его Ozon для проверки доставки и срока получения.</p>
-    <OzonPointSearch onReset={() => { setMapOpen(false); setPoint(""); setPoints([]); setTruncated(false); clearQuote(); }} onResults={(values, more) => { clearQuote(); setPoints(values); setPoint(""); setTruncated(more); }} onSelect={selectPoint} onOpenMap={() => setMapOpen(true)} />
+    <OzonPointSearch onReset={() => { setMapOpen(false); setPoint(""); setPoints([]); setTruncated(false); clearQuote(); }} onResults={(values, more) => { clearQuote(); setPoints(values); setPoint(""); setTruncated(more); }} onOpenMap={() => setMapOpen(true)} />
     {!!points.length && <>
       <div className="ozon-map-toolbar"><span>Найдено пунктов: {points.length}{truncated ? "+" : ""}</span><button type="button" className="text-link" aria-haspopup="dialog" onClick={() => setMapOpen(true)}>{point ? "Изменить на карте" : "Выбрать на карте"}</button></div>
       {mapOpen && <PickupPointDialog points={points} selected={point} carrier="Ozon" onSelect={selectPoint} onClose={() => setMapOpen(false)} />}
-      {mapped < points.length && <p className="muted">{mapped === 0 ? "Координаты пока недоступны. Выберите пункт из списка." : "Пункты без координат доступны в списке адресов."}</p>}
-      {truncated && <p className="muted">Показана часть найденных пунктов. Уточните улицу или нажмите «Найти ПВЗ на карте», чтобы расширить список.</p>}
-      <label className="field"><span>Пункт выдачи — можно выбрать на карте или в списке</span><select value={point} onChange={event => selectPoint(event.target.value)}><option value="">Выберите пункт выдачи</option>{points.map(value => <option key={value.id} value={value.id}>{value.address}{value.type === "postamat" ? " · постамат" : ""}</option>)}</select></label>
+      {truncated && <p className="muted">Показана часть найденных пунктов для этого города.</p>}
     </>}
     <div ref={nextStep} className="ozon-recipient-step" tabIndex={-1} aria-label="Телефон получателя и проверка доставки">
     {point && <div className="notice ozon-point-confirmation" role="status"><strong>Пункт выдачи выбран</strong><span>{points.find(value => value.id === point)?.address}</span>{!quote && <small>Доставка и телефон ещё не проверены. Подтвердите согласие и нажмите «Проверить доставку» ниже.</small>}</div>}
