@@ -72,6 +72,18 @@ describe("public Ozon PVZ map directory", () => {
     expect(m.find.mock.calls[0][0].values.at(-1)).toBe(9);
     expect(m.info).not.toHaveBeenCalled(); expect(m.update).not.toHaveBeenCalled();
   });
+  it("suggests distinct matching localities instead of pickup addresses", async () => {
+    m.find.mockResolvedValue([
+      { ...point, address: "Россия, Адыгея Республика, Тахтамукайский Район, Яблоновский, улица Андрухаева, 53" },
+      { ...point, address: "Россия, Адыгея Республика, Яблоновский, улица Гагарина, 1" },
+      { ...point, address: "Россия, Краснодарский край, город Яблоновка, улица Ленина, 3" },
+      { ...point, address: "Россия, Омск, улица Яблоневая, 2" },
+    ]);
+    const response = await GET(new Request("https://sidzen.shop/api/delivery/ozon/points/?q=яблон&view=cities"));
+    expect(await response.json()).toEqual({ cities: ["Яблоновский", "Яблоновка"] });
+    expect(m.find.mock.calls[0][0].values.at(-1)).toBe(501);
+    expect(m.info).not.toHaveBeenCalled(); expect(m.update).not.toHaveBeenCalled();
+  });
   it("ignores punctuation-only searches without accessing the database", async () => {
     expect(await (await GET(new Request("https://sidzen.shop/api/delivery/ozon/points/?q=%25__"))).json()).toEqual({ points: [] });
     expect(m.find).not.toHaveBeenCalled();

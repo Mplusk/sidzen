@@ -29,6 +29,33 @@ describe("city search for the pickup map", () => {
     expect(fetch).toHaveBeenCalledWith("/api/delivery/ozon/points/?q=%D0%9E%D0%BC%D1%81%D0%BA", expect.objectContaining({ cache: "no-store" }));
     expect(results).toHaveBeenCalledWith(points, false); expect(openMap).toHaveBeenCalledOnce();
   });
+  it("suggests cities while typing and selects one without choosing a pickup point", async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ cities: ["Яблоновский", "Яблоновка"] }));
+    await type("яблон");
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(container.querySelectorAll('[role="option"]')).toHaveLength(2);
+    expect(openMap).not.toHaveBeenCalled(); expect(results).not.toHaveBeenCalled();
+    await act(async () => input().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })));
+    await act(async () => input().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+    expect(input().value).toBe("Яблоновский");
+    expect(container.querySelector('[role="listbox"]')).toBeNull();
+    expect(openMap).not.toHaveBeenCalled();
+    await search();
+    expect(vi.mocked(fetch).mock.calls.at(-1)?.[0]).toContain(encodeURIComponent("Яблоновский"));
+    expect(openMap).toHaveBeenCalledOnce();
+  });
+  it("does not display late suggestions after the user changes the city", async () => {
+    vi.useFakeTimers();
+    let finish!: (value: Response) => void;
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    await type("яблон");
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    const signal = vi.mocked(fetch).mock.calls[0][1]!.signal!;
+    await type("Омск"); expect(signal.aborted).toBe(true);
+    await act(async () => finish(Response.json({ cities: ["Яблоновский"] })));
+    expect(container.textContent).not.toContain("Яблоновский");
+  });
   it("ignores a stale response after editing the city", async () => {
     let finish!: (value: Response) => void;
     vi.mocked(fetch).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
