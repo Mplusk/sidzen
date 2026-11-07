@@ -15,5 +15,6 @@ describe("checkout validation", () => {
     const order = { ...input, delivery: "ozon-delivery", city: "", address: "", ozonQuote: "signed-quote" };
     expect(checkoutSchema.safeParse(order).success).toBe(false);
     expect(checkoutSchema.safeParse({ ...order, ozonConsent: "on" }).success).toBe(true);
+    expect(checkoutSchema.safeParse({ ...order, ozonConsent: "on", phone: "+7 (000) 000-00-00" }).success).toBe(false);
   });
 });

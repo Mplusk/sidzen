@@ -9,7 +9,7 @@ import { requirePermission } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
 import { encryptSecret } from "@/lib/integration-secrets";
 import { getCart } from "@/app/actions/cart";
-import { normalizePhone } from "@/lib/checkout-validation";
+import { isRussianMobilePhone, normalizePhone } from "@/lib/checkout-validation";
 import { OzonDeliveryClient, OzonDeliveryError, positiveId } from "@/lib/delivery/ozon-client";
 import { deliveryConfigFingerprint, getOzonDeliveryConfig, OZON_DELIVERY_SETTING, ozonDeliveryConfigSchema, requireOzonDelivery } from "@/lib/delivery/ozon-config";
 import { buildOzonPostings, cartDeliveryFingerprint, signOzonQuote } from "@/lib/delivery/ozon-quote";
@@ -71,6 +71,7 @@ export async function saveOzonDelivery(form: FormData) {
 export async function quoteOzonDelivery(phoneInput: string, pointInput: string, consentAccepted: boolean = false) {
   // This check must precede even OAuth / point-info calls, not just the UI button.
   if (consentAccepted !== true) return { error: "Для передачи номера Ozon необходимо отдельное согласие на расчёт доставки." };
+  if (!isRussianMobilePhone(phoneInput)) return { error: "Укажите российский мобильный номер в формате +7 (9XX) XXX-XX-XX и повторите проверку доставки.", reason: "recipient" as const };
   if (!await operatorReady()) return { error: "Для расчёта нужны сведения оператора и подтверждение размещения базы данных в России. Расчёт временно недоступен." };
   const ip = (await headers()).get("x-forwarded-for")?.split(",")[0] || "unknown";
   if (!rateLimit(`ozon-quote:${ip}`, 15, 60000).allowed) return { error: "Слишком много расчётов. Повторите через минуту." };
@@ -78,7 +79,6 @@ export async function quoteOzonDelivery(phoneInput: string, pointInput: string, 
   let selectedPointId: number | undefined;
   try {
     const phone = normalizePhone(phoneInput); const id = positiveId.parse(Number(pointInput));
-    if (!/^\+7\d{10}$/.test(phone)) throw new OzonDeliveryError("recipient");
     const [cart, config] = await Promise.all([getCart(), getOzonDeliveryConfig()]);
     requireOzonDelivery(config);
     if (!cart?.items.length || cart.items.some(item => !item.available)) throw new OzonDeliveryError("cart");
