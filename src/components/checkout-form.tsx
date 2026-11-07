@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { startTransition, useActionState, useState, useTransition } from "react";
+import { startTransition, useActionState, useRef, useState, useTransition } from "react";
 import { createOrderWithState } from "@/app/actions/checkout";
 import { updateCheckoutCartItem } from "@/app/actions/checkout-cart";
 import type { CheckoutActionState } from "@/lib/checkout-action-state";
@@ -30,7 +30,7 @@ const deliveryErrors: Record<string, string> = {
   "ozon-consent": "Согласие на проверку Ozon отсутствует, отозвано или устарело. Подтвердите его и повторите расчёт.",
   "ozon-transport": "Ozon не ответил на повторную проверку. Повторите расчёт чуть позже.",
   "ozon-provider": "Ozon вернул ошибку при повторной проверке доставки. Повторите расчёт или обратитесь в магазин.",
-  "ozon-recipient": "Ozon не подтвердил доставку получателю. Проверьте, что телефон зарегистрирован на Ozon.",
+  "ozon-recipient": "Ozon не подтвердил доставку для этого номера. Проверьте его или укажите другой номер, зарегистрированный в Ozon.",
   "ozon-unavailable": "Ozon не подтвердил доставку всех товаров в этот ПВЗ. Попробуйте другой пункт.",
   "ozon-price": "Ozon изменил расходы магазина на перевозку. Проверьте доставку заново; для вас она остаётся бесплатной.",
   "ozon-disabled": "Доставка Ozon временно выключена магазином. Повторите позже.",
@@ -53,6 +53,8 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
   onlinePayment?: boolean;
 }) {
   const router = useRouter();
+  const phoneInput = useRef<HTMLInputElement>(null);
+  const editPhone = () => { phoneInput.current?.focus({ preventScroll: true }); phoneInput.current?.scrollIntoView({ block: "center", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" }); };
   const [cartPending, updateCart] = useTransition();
   const [cartError, setCartError] = useState("");
   const [quoteRevision, setQuoteRevision] = useState(0);
@@ -62,20 +64,21 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
   const [cdekQuote, setCdekQuote] = useState<CdekQuoteView | null>(null);
   const [cdekRevision, setCdekRevision] = useState(0);
   const [state, formAction, pending] = useActionState(createOrderWithState, {} as CheckoutActionState);
+  const [dismissedRecipientError, setDismissedRecipientError] = useState<CheckoutActionState | null>(null);
   const [lastActionState, setLastActionState] = useState(state);
   if (lastActionState !== state) {
     setLastActionState(state);
-    if (state.error && /^ozon-(expired|cart|config|phone|signature|consent|unavailable|price)$/.test(state.error)) {
+    if (state.error && /^ozon-(expired|cart|config|phone|signature|consent|unavailable|price|recipient)$/.test(state.error)) {
       setOzonQuote(null); setQuoteRevision(value => value + 1);
     }
     if (state.error === "cdek") { setCdekQuote(null); setCdekRevision(value => value + 1); }
   }
   const [contact, setContact] = useState({ name: user.name, email: user.email, city: "", address: "", postalCode: "", comment: "", legal: false });
   const update = (key: "name" | "email" | "city" | "address" | "postalCode" | "comment", value: string) => setContact(previous => ({ ...previous, [key]: value }));
-  const currentError = state.error ?? error, currentReference = state.reference ?? reference;
+  const currentError = dismissedRecipientError === state ? undefined : state.error ?? error, currentReference = state.reference ?? reference;
   const [delivery, setDelivery] = useState(ozonDelivery ? "ozon-delivery" : cdekDelivery ? "cdek-delivery" : methods[0]?.code ?? "");
   const [phone, setPhone] = useState(phoneMask(user.phone));
-  const changePhone = (value: string) => { const next = phoneMask(value); setPhone(next); if (next !== phone) { setOzonQuote(null); setQuoteRevision(value => value + 1); } };
+  const changePhone = (value: string) => { const next = phoneMask(value); setPhone(next); if (next !== phone) { if (currentError === "ozon-recipient") setDismissedRecipientError(state); setOzonQuote(null); setQuoteRevision(value => value + 1); } };
   const changeDelivery = (code: string) => { setDelivery(code); setOzonQuote(null); setQuoteRevision(value => value + 1); setCdekQuote(null); };
   const changeQuantity = (id: string, current: number, next: number) => {
     if (pending || cartPending) return;
@@ -96,7 +99,7 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
   // Dispatch explicitly so expected server errors leave entered fields intact.
   return <form action={formAction} onSubmit={event => { event.preventDefault(); if (pending || cartPending) return; const data = new FormData(event.currentTarget); startTransition(() => formAction(data)); }} className={`checkout-form ${styles.layout}`}>
     <div className={styles.main}>
-      {currentError && <div className="notice notice--danger" role="alert" tabIndex={-1}><p>{deliveryErrors[currentError] ?? (currentError === "price" ? "Цена или условия доставки изменились. Проверьте обновлённую сумму и отправьте заявку заново." : "Проверьте контактные данные, адрес и согласие с условиями.")}</p>{state.fields && <ul>{Object.entries(state.fields).map(([key, messages]) => <li key={key}>{({ name: "ФИО", email: "Email", phone: "Телефон", address: "Адрес", legal: "Согласие", ozonQuote: "Пункт выдачи" } as Record<string, string>)[key] ?? key}: {messages.join(". ")}</li>)}</ul>}{currentReference && /^[a-f0-9-]{36}$/i.test(currentReference) && <small>Код обращения: {currentReference}</small>}<p>Введённые данные остались в форме.</p></div>}
+      {currentError && <div className="notice notice--danger" role="alert" tabIndex={-1}><p>{deliveryErrors[currentError] ?? (currentError === "price" ? "Цена или условия доставки изменились. Проверьте обновлённую сумму и отправьте заявку заново." : "Проверьте контактные данные, адрес и согласие с условиями.")}</p>{currentError === "ozon-recipient" && <button type="button" className="text-link" onClick={editPhone}>Изменить телефон получателя</button>}{state.fields && <ul>{Object.entries(state.fields).map(([key, messages]) => <li key={key}>{({ name: "ФИО", email: "Email", phone: "Телефон", address: "Адрес", legal: "Согласие", ozonQuote: "Пункт выдачи" } as Record<string, string>)[key] ?? key}: {messages.join(". ")}</li>)}</ul>}{currentReference && /^[a-f0-9-]{36}$/i.test(currentReference) && <small>Код обращения: {currentReference}</small>}<p>Введённые данные остались в форме.</p></div>}
       <input type="hidden" name="paymentMode" value={onlinePayment ? "online" : "application"} />
 
       <section className={styles.panel} aria-labelledby="checkout-products">
@@ -113,7 +116,7 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
         <div className={styles.panelHeading}><div><h2 id="checkout-recipient">Получатель</h2><p>Контакты для связи и доставки</p></div></div>
         <div className={styles.contacts}>
           <label className="field"><span>Имя и фамилия *</span><ValidatedInput aria-label="ФИО получателя" name="name" autoComplete="name" value={contact.name} onChange={event => update("name", event.target.value)} required minLength={2} maxLength={120} /></label>
-          <label className="field"><span>Телефон *</span><ValidatedInput aria-label="Телефон" name="phone" type="tel" autoComplete="tel" inputMode="tel" value={phone} onChange={event => changePhone(event.target.value)} placeholder="+7 (999) 123-45-67" pattern="\+7 \([0-9]{3}\) [0-9]{3}-[0-9]{2}-[0-9]{2}" required /></label>
+          <label className="field"><span>Телефон *</span><ValidatedInput ref={phoneInput} aria-label="Телефон" name="phone" type="tel" autoComplete="tel" inputMode="tel" value={phone} onChange={event => changePhone(event.target.value)} placeholder="+7 (999) 123-45-67" pattern="\+7 \([0-9]{3}\) [0-9]{3}-[0-9]{2}-[0-9]{2}" required /></label>
           <label className="field"><span>Электронная почта *</span><ValidatedInput aria-label="Email" name="email" type="email" autoComplete="email" value={contact.email} onChange={event => update("email", event.target.value)} required /></label>
         </div>
         <p className={styles.hint}>Регистрация не обязательна. На почту придёт информация о {onlinePayment ? "заказе и чек" : "заявке"}.</p>
@@ -126,7 +129,7 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
           {cdekDelivery && <label className={styles.method}><input type="radio" name="delivery" value="cdek-delivery" checked={isCdek} onChange={() => changeDelivery("cdek-delivery")} required /><span className={styles.carrierLogo}><Image src="/brand/cdek.svg" alt="" width={83} height={24} /></span><span className={styles.methodText}><strong>СДЭК</strong><small>{cdekQuote ? `${cdekQuote.daysMin}–${cdekQuote.daysMax} дн. после отгрузки` : "Доставка в пункт выдачи"}</small></span><strong className={styles.methodPrice}>{cdekQuote ? formatPrice(cdekQuote.cost) : "По тарифу"}</strong></label>}
           {methods.map(method => <label className={styles.method} key={method.code}><input type="radio" name="delivery" value={method.code} checked={delivery === method.code} onChange={() => changeDelivery(method.code)} required /><span className={styles.methodIcon} aria-hidden="true">{method.code === "pickup" ? <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10c0 2 3 2 4 0 1 2 3 2 5 0 1 2 4 2 5 0 1 2 4 2 4 0M9 20v-6h6v6" /></svg> : <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 5h11v11H3zM14 9h4l3 3v4h-7M7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm11 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" /></svg>}</span><span className={styles.methodText}><strong>{method.name}</strong>{method.description && <small>{method.description}</small>}</span><strong className={styles.methodPrice}>Бесплатно</strong></label>)}
         </fieldset>
-        {isOzon && <><OzonDeliveryPicker phone={phone} onPhoneChange={changePhone} onQuote={setOzonQuote} packingReady={packingReady} verificationRevision={quoteRevision} /><input type="hidden" name="ozonQuote" value={ozonQuote?.token ?? ""} /></>}
+        {isOzon && <><OzonDeliveryPicker phone={phone} onEditPhone={editPhone} onQuote={setOzonQuote} packingReady={packingReady} verificationRevision={quoteRevision} /><input type="hidden" name="ozonQuote" value={ozonQuote?.token ?? ""} /></>}
         {isCdek && <><CdekDeliveryPicker key={cdekRevision} onQuote={setCdekQuote} /><input type="hidden" name="cdekQuote" value={cdekQuote?.token ?? ""} /></>}
         {delivery && delivery !== "pickup" && !isOzon && !isCdek && <div className="form-grid"><label className="field"><span>Город *</span><input name="city" autoComplete="address-level2" value={contact.city} onChange={event => update("city", event.target.value)} required minLength={2} maxLength={120} /></label><label className="field"><span>Индекс{delivery === "russian-post" ? " *" : ""}</span><input name="postalCode" autoComplete="postal-code" value={contact.postalCode} onChange={event => update("postalCode", event.target.value)} inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required={delivery === "russian-post"} placeholder="6 цифр" /></label><label className="field field--full"><span>Улица, дом, квартира или пункт выдачи *</span><input name="address" autoComplete="street-address" value={contact.address} onChange={event => update("address", event.target.value)} required minLength={4} maxLength={300} /></label></div>}
         {delivery === "pickup" && <p className={styles.hint}>Место и время самовывоза согласуем при подтверждении заказа.</p>}

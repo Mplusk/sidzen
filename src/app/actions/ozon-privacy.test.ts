@@ -41,6 +41,12 @@ describe("Ozon phone transfer consent boundary", () => {
     m.postings.mockImplementation(() => { throw new OzonDeliveryError("packaging"); }); m.record.mockClear();
     expect(await quoteOzonDelivery("+79991234567", "8", true)).toEqual({ error: expect.stringContaining("упаковки") }); expect(m.record).not.toHaveBeenCalled(); expect(m.checkout).not.toHaveBeenCalled();
   });
+  it("identifies recipient rejection without misclassifying other delivery failures", async () => {
+    m.checkout.mockRejectedValue(new OzonDeliveryError("recipient"));
+    expect(await quoteOzonDelivery("+79991234567", "8", true)).toEqual({ error: expect.stringContaining("укажите другой номер"), reason: "recipient" });
+    m.checkout.mockRejectedValue(new OzonDeliveryError("unavailable"));
+    expect(await quoteOzonDelivery("+79991234567", "8", true)).toEqual({ error: expect.stringContaining("Не удалось рассчитать") });
+  });
   it("reuses one consent record and the same recipient/parcel data on retry", async () => {
     m.checkout.mockRejectedValueOnce(new OzonDeliveryError("transport"));
     const result = await quoteOzonDelivery("+79991234567", "8", true);

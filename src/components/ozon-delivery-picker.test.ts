@@ -16,11 +16,11 @@ const point = { id: "42", name: "Ozon", address: "Санкт-Петербург,
 const result = { token: "signed-fixture", cost: 0, days: 3, address: point.address };
 let root: Root, container: HTMLDivElement;
 let phone = "", packingReady = true;
-const onQuote = vi.fn(), onPhoneChange = vi.fn();
+const onQuote = vi.fn(), onEditPhone = vi.fn();
 const scroll = vi.fn();
 let frames: Map<number, FrameRequestCallback>;
 async function flushFrames() { await act(async () => { for (const [id, callback] of frames) { frames.delete(id); callback(0); } }); }
-const render = async () => act(async () => root.render(createElement(OzonDeliveryPicker, { phone, onPhoneChange, onQuote, packingReady })));
+const render = async () => act(async () => root.render(createElement(OzonDeliveryPicker, { phone, onEditPhone, onQuote, packingReady })));
 const button = (text: string) => [...container.querySelectorAll("button")].find(value => value.textContent?.includes(text))!;
 async function click(text: string) { await act(async () => button(text).click()); }
 async function inputValue(input: HTMLInputElement, value: string) {
@@ -110,23 +110,40 @@ describe("delivery verification interaction", () => {
     phone = "+7 (999) 123-45-68"; await render();
     expect(container.textContent).not.toContain("Проверка действительна"); expect(container.querySelector("select")!.value).toBe("42");
   });
-  it("synchronizes both phone fields in the real checkout without remounting the pickup picker", async () => {
+  it("uses one recipient phone for Ozon and keeps the pickup point when it changes", async () => {
     await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, total: 240 }], methods: [], user: { name: "", email: "", phone: "" }, ozonDelivery: true })));
     expect(container.querySelector('[name="payment"]')).toBeNull(); expect(container.textContent).not.toContain("По счёту");
     await choosePoint(); await consent();
     expect(container.querySelectorAll('input[name="delivery"]')).toHaveLength(1);
     expect(container.querySelector<HTMLInputElement>('input[name="delivery"]')!.value).toBe("ozon-delivery");
-    await inputValue(container.querySelector<HTMLInputElement>('.ozon-delivery-picker input[type="tel"]')!, "89991234567");
+    await inputValue(container.querySelector<HTMLInputElement>('[name="phone"]')!, "89991234567");
     expect(container.querySelector<HTMLInputElement>('input[name="phone"]')!.value).toBe("+7 (999) 123-45-67");
     expect(container.querySelector("select")!.value).toBe("42"); expect(container.querySelector<HTMLInputElement>('input[name="ozonConsent"]')!.checked).toBe(true);
-    expect(container.querySelectorAll('input[name="phone"]')).toHaveLength(1);
+    expect(container.querySelectorAll('input[type="tel"]')).toHaveLength(1);
     await click("Проверить доставку"); expect(container.querySelector<HTMLInputElement>('input[name="ozonQuote"]')!.value).toBe(result.token);
     expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(false);
     await inputValue(container.querySelector<HTMLInputElement>('input[name="phone"]')!, "89991234568");
-    expect(container.querySelector<HTMLInputElement>('.ozon-delivery-picker input[type="tel"]')!.value).toBe("+7 (999) 123-45-68");
+    expect(container.querySelector<HTMLInputElement>('[name="phone"]')!.value).toBe("+7 (999) 123-45-68");
     expect(container.querySelector<HTMLInputElement>('input[name="ozonQuote"]')!.value).toBe("");
     expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
     expect(container.querySelector("select")!.value).toBe("42"); expect(container.textContent).not.toContain("Проверка действительна");
+  });
+  it("offers to edit the single phone when Ozon cannot confirm it, preserving the selection and consent", async () => {
+    await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, total: 240 }], methods: [], user: { name: "Покупатель", email: "buyer@example.test", phone: "" }, ozonDelivery: true })));
+    await inputValue(container.querySelector<HTMLInputElement>('[name="phone"]')!, "89991234567");
+    await choosePoint(); await consent();
+    m.quote.mockResolvedValueOnce({ error: "Ozon не подтвердил доставку для этого номера. Проверьте его или укажите другой номер, зарегистрированный в Ozon.", reason: "recipient" });
+    await click("Проверить доставку");
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("укажите другой номер");
+    await click("Изменить телефон получателя");
+    expect(document.activeElement).toBe(container.querySelector('[name="phone"]'));
+    await inputValue(container.querySelector<HTMLInputElement>('[name="phone"]')!, "89991234568");
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.querySelector("select")!.value).toBe("42");
+    expect(container.querySelector<HTMLInputElement>('input[name="ozonConsent"]')!.checked).toBe(true);
+    await click("Проверить доставку");
+    expect(m.quote).toHaveBeenLastCalledWith("+7 (999) 123-45-68", "42", true);
+    expect(container.querySelector<HTMLInputElement>('[name="ozonQuote"]')!.value).toBe(result.token);
   });
   it("does not offer to place an order if the last delivery method is removed and Ozon is off", async () => {
     await act(async () => root.render(createElement(CheckoutForm, { items: [], methods: [], user: { name: "", email: "", phone: "" }, ozonDelivery: false })));
@@ -191,6 +208,15 @@ describe("delivery verification interaction", () => {
     expect(container.querySelector<HTMLInputElement>('[name="name"]')!.value).toBe("Тестовый покупатель");
     await click("Проверить доставку");
     expect(container.querySelector<HTMLInputElement>('[name="ozonQuote"]')!.value).toBe(result.token);
+    m.order.mockResolvedValueOnce({ error: "ozon-recipient" });
+    await act(async () => container.querySelector<HTMLFormElement>('.checkout-form')!.requestSubmit());
+    expect(container.querySelector<HTMLInputElement>('[name="ozonQuote"]')!.value).toBe("");
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("укажите другой номер");
+    await click("Изменить телефон получателя");
+    expect(document.activeElement).toBe(container.querySelector('[name="phone"]'));
+    expect(container.querySelector<HTMLInputElement>('input[name="ozonConsent"]')!.checked).toBe(true);
+    await inputValue(container.querySelector<HTMLInputElement>('[name="phone"]')!, "89991234568");
+    expect(container.querySelector('[role="alert"]')).toBeNull();
   });
   it("does not send data without separate consent or valid packaging", async () => {
     phone = "+7 (999) 123-45-67"; await render(); await choosePoint(); await click("Проверить доставку");
