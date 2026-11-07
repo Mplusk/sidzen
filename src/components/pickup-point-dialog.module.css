@@ -12,6 +12,10 @@
 .map :global(.ozon-pickup-map) { height: min(520px, 56dvh); min-height: 300px; }
 .map :global(.ozon-map-pin--ozon:not(.ozon-map-pin--selected)) { background: #005bff; }
 .map :global(.ozon-map-pin--cdek:not(.ozon-map-pin--selected)) { background: #008b46; }
+.map :global(.pickup-cluster) { display: grid; place-items: center; border: 3px solid #fff; border-radius: 50%; color: #fff; font-size: .875rem; font-weight: 700; box-shadow: 0 2px 7px rgb(32 34 29 / 30%); }
+.map :global(.pickup-cluster--ozon) { background: #005bce; }
+.map :global(.pickup-cluster--cdek) { background: #00783c; }
+.map :global(.pickup-cluster:focus-visible) { outline: 3px solid var(--ink); outline-offset: 2px; }
 .mapLoading { display: grid; place-items: center; min-height: 300px; padding: 1rem; border-radius: 12px; color: var(--muted); background: var(--paper); text-align: center; }
 .list { display: grid; align-content: start; gap: 8px; max-height: min(520px, 56dvh); overflow: auto; overscroll-behavior: contain; }
 .point { display: grid; gap: 4px; width: 100%; padding: 13px 14px; border: 1px solid transparent; border-radius: 10px; color: var(--ink); background: var(--paper); text-align: left; cursor: pointer; }
