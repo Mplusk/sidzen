@@ -107,8 +107,9 @@ describe("delivery verification interaction", () => {
     expect(container.querySelector("select")!.value).toBe("42"); expect(container.querySelector<HTMLInputElement>('input[name="ozonConsent"]')!.checked).toBe(true);
     await click("Проверить доставку"); expect(m.quote).toHaveBeenCalledWith(phone, "42", true);
     expect(onQuote).toHaveBeenLastCalledWith(result); expect(container.textContent).toContain("Доставка бесплатная · 0 ₽");
+    expect(container.textContent).toContain("Ozon подтвердил доступность доставки для этого номера.");
     phone = "+7 (999) 123-45-68"; await render();
-    expect(container.textContent).not.toContain("Проверка действительна"); expect(container.querySelector("select")!.value).toBe("42");
+    expect(container.textContent).not.toContain("Проверка действительна"); expect(container.textContent).not.toContain("Ozon подтвердил доступность доставки для этого номера."); expect(container.querySelector("select")!.value).toBe("42");
   });
   it("uses one recipient phone for Ozon and keeps the pickup point when it changes", async () => {
     await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, total: 240 }], methods: [], user: { name: "", email: "", phone: "" }, ozonDelivery: true })));
