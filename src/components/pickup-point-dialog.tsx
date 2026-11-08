@@ -52,7 +52,7 @@ export function PickupPointDialog({ points, selected, carrier, onSelect, onClose
             <p className={styles.selectedAddress}>{chosen.address}</p>
             {chosen.workTime && <p className={styles.hours}><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>{chosen.workTime}</p>}
           </section>}
-          <div className={styles.listHeading}><h3>Пункты выдачи</h3><span>{points.length}</span></div>
+          <div className={styles.listHeading}><h3>Пункты выдачи</h3></div>
           <div id={listId} className={styles.list}>
           {points.slice(0, visibleCount).map(point => <button key={point.id} type="button" className={styles.point} aria-pressed={point.id === highlighted} onClick={() => setHighlighted(point.id)}>
             <span className={styles.pointTop}><span>{point.name || `Пункт ${carrier}`}</span><span className={styles.radio} aria-hidden="true">{point.id === highlighted && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="m5 12 4 4L19 6" /></svg>}</span></span><strong>{point.address}</strong>{point.workTime && <small>{point.workTime}</small>}
