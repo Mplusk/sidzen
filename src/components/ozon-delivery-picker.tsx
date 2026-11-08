@@ -61,7 +61,7 @@ export function OzonDeliveryPicker({ phone, onEditPhone, onQuote, packingReady =
     {!packingReady && <p className="notice notice--danger">Для одного из товаров магазин ещё не указал вес и размеры упакованной посылки. Проверка Ozon недоступна — выберите другую доставку или обратитесь в магазин.</p>}
     <OzonPointSearch onReset={() => { setMapOpen(false); setPoint(""); setPoints([]); setTruncated(false); clearQuote(); }} onResults={(values, more) => { clearQuote(); setPoints(values); setPoint(""); setTruncated(more); }} onOpenMap={() => setMapOpen(true)} />
     {!!points.length && <>
-      <div className="ozon-map-toolbar"><span>Найдено пунктов: {points.length}{truncated ? "+" : ""}</span><button type="button" className="text-link" aria-haspopup="dialog" onClick={() => setMapOpen(true)}>{point ? "Изменить на карте" : "Выбрать на карте"}</button></div>
+      <div className="ozon-map-toolbar"><button type="button" className="text-link" aria-haspopup="dialog" onClick={() => setMapOpen(true)}>{point ? "Изменить на карте" : "Выбрать на карте"}</button></div>
       {mapOpen && <PickupPointDialog points={points} selected={point} carrier="Ozon" onSelect={selectPoint} onClose={() => setMapOpen(false)} />}
       {truncated && <p className="muted">Показана часть найденных пунктов для этого города.</p>}
     </>}
