@@ -12,12 +12,9 @@ import { CloudKassirSettings } from "@/components/cloudkassir-settings";
 import { CategoryAiSettings } from "@/components/category-ai-settings";
 import { CommunicationsSettings } from "@/components/communications-settings";
 import { YooKassaSettings } from "@/components/yookassa-settings";
-import { YandexMapsSettings } from "@/components/yandex-maps-settings";
 
 export const metadata: Metadata = { title: "Подключения магазина", robots: { index: false, follow: false } };
 const messages: Record<string, string> = {
-  "maps-saved": "Настройки Яндекс Карт сохранены.", "maps-invalid": "Проверьте ключ JavaScript API Яндекс Карт.",
-  "maps-rate": "Слишком много изменений. Повторите через минуту.", "maps-changed": "Настройки изменились параллельно. Обновите страницу и повторите.",
   "yookassa-rate": "Слишком много проверок ЮKassa. Повторите через минуту.", "yookassa-invalid": "Проверьте идентификатор магазина и секретный ключ ЮKassa.",
   "yookassa-receipts": "Подтвердите подключение чеков и налоговые настройки в ЮKassa.", "yookassa-connection": "ЮKassa не подтвердила рабочее подключение. Проверьте ключи и статус магазина.",
   "yookassa-changed": "Настройки изменились или остались платежи для сверки. Обновите страницу.", "yookassa-checked": "Подключение ЮKassa проверено и настройки сохранены; платёж не проводился.", "yookassa-saved": "Настройки ЮKassa сохранены.",
@@ -111,7 +108,6 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
     </details>
     <OzonDeliverySettings />
     <CdekDeliverySettings />
-    <YandexMapsSettings />
     <CategoryAiSettings />
     <CommunicationsSettings />
     <h2>Другие способы доставки</h2><p className="muted">Управляйте способами с фиксированными тарифами. Эти способы не используют API перевозчика. Ozon Delivery API подключается отдельно выше. Способ можно отключить или удалить с подтверждением — старые заказы не меняются.</p>
