@@ -4,6 +4,7 @@ import { prisma } from "../src/lib/prisma";
 import { claimRun, processRun } from "../src/lib/marketplaces/sync";
 import { catalogInvalidationToken } from "../src/lib/marketplaces/cache-token";
 import { cancelOzonJob, processOzonJob, refreshOzonJob, syncOzonPointsPage } from "../src/lib/delivery/ozon-worker";
+import { scheduleOzonDirectoryRefresh } from "../src/lib/delivery/ozon-directory-schedule";
 import { processCdekJob } from "../src/lib/delivery/cdek-worker";
 import { pruneTransientPersonalData } from "../src/lib/privacy-maintenance";
 import { prunePersonalDataRetention } from "../src/lib/privacy-retention";
@@ -90,6 +91,22 @@ async function privacyRetentionLoop() {
   }
 }
 const retention = privacyRetentionLoop();
+// Public-directory refresh must not wait for a long marketplace import. One
+// awaited loop handles both the nightly schedule and all pages of manual jobs.
+async function pickupDirectoryLoop() {
+  let nextScheduleCheck = 0;
+  while (!stopping) {
+    try {
+      if (Date.now() >= nextScheduleCheck) {
+        nextScheduleCheck = Date.now() + 60_000;
+        await scheduleOzonDirectoryRefresh();
+      }
+      if (!stopping) await syncOzonPointsPage();
+    } catch { await writeDiagnostic("delivery.points.failed", { stage: "points", reason: "temporary" }).catch(() => {}); }
+    if (!stopping) await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+}
+const pickupDirectory = pickupDirectoryLoop();
 console.log("Marketplace, delivery and independent financial queues ready.");
 try {
   while (!stopping) {
@@ -118,7 +135,6 @@ try {
       await cancelOzonJob();
       await processOzonJob();
       await refreshOzonJob();
-      await syncOzonPointsPage();
       await processCdekJob();
       await new Promise((resolve) => setTimeout(resolve, 2000));
     } catch {
@@ -127,4 +143,4 @@ try {
       await new Promise((resolve) => setTimeout(resolve, 5000));
     }
   }
-} finally { stopping = true; clearInterval(pulse); await Promise.all([finances, categories, reviews, telegram, retention]); await prisma.$disconnect(); }
+} finally { stopping = true; clearInterval(pulse); await Promise.all([finances, categories, reviews, telegram, retention, pickupDirectory]); await prisma.$disconnect(); }

@@ -75,7 +75,7 @@ export function OzonPointSearch({ onReset, onResults, onOpenMap }: {
     onReset(); setBusy(true); setLoaded(0); setMessage("");
     try {
       const all = new Map<string, PickupPoint>();
-      const baseUrl = `/api/delivery/ozon/points/?q=${encodeURIComponent(query.trim())}`;
+      const baseUrl = `/api/delivery/ozon/points/?q=${encodeURIComponent(query.trim())}&view=map`;
       let offset = 0;
       let scope: string | undefined;
       while (true) {
@@ -84,7 +84,7 @@ export function OzonPointSearch({ onReset, onResults, onOpenMap }: {
         const deadline = setTimeout(() => controller.abort(), 15000);
         let result: Results;
         try {
-          const response = await fetch(baseUrl + (offset ? `&offset=${offset}` : ""), { cache: "no-store", signal: controller.signal });
+          const response = await fetch(baseUrl + (offset ? `&offset=${offset}` : ""), { cache: "no-cache", signal: controller.signal });
           if (!response.ok) throw new Error(response.status === 429 ? "rate-limit" : "points");
           result = await response.json() as Results;
         } finally { clearTimeout(deadline); }

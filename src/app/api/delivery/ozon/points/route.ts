@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { deliveryConfigFingerprint, getOzonDeliveryConfig } from "@/lib/delivery/ozon-config";
@@ -7,26 +8,50 @@ import type { PickupPoint } from "@/lib/delivery/points";
 import { pointSearchTerms } from "@/lib/delivery/point-search";
 import { pointSearchSql } from "@/lib/delivery/point-search-sql";
 import { destinationCity } from "@/lib/delivery/destination-city";
+import { pointMapCache } from "@/lib/delivery/point-map-cache";
 
 export async function GET(request: Request) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
-  if (!rateLimit(`ozon-points:${ip}`, 60, 60000).allowed) return Response.json({ error: "Слишком много запросов." }, { status: 429 });
+  if (!rateLimit(`ozon-points:${ip}`, 60, 60000).allowed) return Response.json({ error: "Слишком много запросов." }, { status: 429, headers: { "Cache-Control": "private, no-store" } });
   const url = new URL(request.url); const search = (url.searchParams.get("q") || "").trim();
   const cities = url.searchParams.get("view") === "cities";
   const empty = cities ? { cities: [] } : { points: [] };
-  if (search.length < 2 || search.length > 120) return Response.json(empty);
+  if (search.length < 2 || search.length > 120) return Response.json(empty, { headers: { "Cache-Control": "private, no-store" } });
   const terms = pointSearchTerms(search);
-  if (!terms.length) return Response.json(empty);
+  if (!terms.length) return Response.json(empty, { headers: { "Cache-Control": "private, no-store" } });
   const suggest = url.searchParams.get("view") === "suggest";
+  const map = url.searchParams.get("view") === "map";
   const rawOffset = url.searchParams.get("offset") ?? "0";
   if (!/^\d{1,7}$/.test(rawOffset) || Number(rawOffset) > 1000000) {
-    return Response.json({ error: "Некорректная страница поиска." }, { status: 400 });
+    return Response.json({ error: "Некорректная страница поиска." }, { status: 400, headers: { "Cache-Control": "private, no-store" } });
   }
   const offset = cities || suggest ? 0 : Number(rawOffset);
-  const limit = cities ? 500 : suggest ? 8 : 200;
+  const limit = cities ? 500 : suggest ? 8 : map ? 5000 : 200;
   const config = await getOzonDeliveryConfig();
   if (!config.enabled || !config.shipmentMethodId || !config.checkedAt) {
-    return offset ? Response.json({ error: "Настройки доставки изменились. Повторите поиск." }, { status: 409 }) : Response.json(empty);
+    return offset ? Response.json({ error: "Настройки доставки изменились. Повторите поиск." }, { status: 409, headers: { "Cache-Control": "private, no-store" } }) : Response.json(empty, { headers: { "Cache-Control": "private, no-store" } });
+  }
+  if (map) {
+    try {
+      // Check the current integration and sync identity on every request, even
+      // a conditional browser request. A new/finished refresh gets a new key.
+      const sync = await prisma.ozonDeliverySync.findUnique({ where: { id: "ozon" }, select: { generation: true, status: true } });
+      const scope = createHash("sha256").update(JSON.stringify([deliveryConfigFingerprint(config), sync?.generation ?? null, sync?.status ?? null])).digest("hex");
+      const key = JSON.stringify([scope, terms, offset, limit]);
+      const methodId = BigInt(config.shipmentMethodId);
+      const payload = await pointMapCache.get(key, async () => {
+        // Map opening never waits for Ozon or writes coordinates. The worker
+        // updates public points in the background; checkout verifies availability.
+        const rows = await prisma.$queryRaw<PickupPoint[]>(pointSearchSql(config.clientId, methodId, terms, limit + 1, offset));
+        const truncated = rows.length > limit;
+        return JSON.stringify({ points: rows.slice(0, limit), truncated, nextOffset: truncated ? offset + limit : null, scope });
+      });
+      const headers = { "Cache-Control": "private, no-cache", "ETag": payload.etag, "Content-Type": "application/json; charset=utf-8" };
+      const matches = request.headers.get("if-none-match")?.split(",").some(value => value.trim() === "*" || value.trim().replace(/^W\//, "") === payload.etag);
+      return new Response(matches ? null : payload.body, { status: matches ? 304 : 200, headers });
+    } catch {
+      return Response.json({ error: "Не удалось загрузить пункты. Повторите поиск." }, { status: 503, headers: { "Cache-Control": "private, no-store" } });
+    }
   }
   // All values are bound parameters. Do not interpolate user input as SQL.
   const rows = await prisma.$queryRaw<PickupPoint[]>(pointSearchSql(config.clientId, BigInt(config.shipmentMethodId), terms, limit + 1, offset));

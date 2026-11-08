@@ -255,7 +255,7 @@ describe("delivery verification interaction", () => {
   it("never requests device location and retains manual map search", async () => {
     const locate = vi.fn(); Object.defineProperty(navigator, "geolocation", { configurable: true, value: { getCurrentPosition: locate } });
     await choosePoint(); expect(locate).not.toHaveBeenCalled();
-    expect(fetch).toHaveBeenCalledWith("/api/delivery/ozon/points/?q=%D0%A2%D1%83%D1%80%D0%B8%D1%81%D1%82%D1%81%D0%BA%D0%B0%D1%8F", expect.objectContaining({ cache: "no-store" }));
+    expect(fetch).toHaveBeenCalledWith("/api/delivery/ozon/points/?q=%D0%A2%D1%83%D1%80%D0%B8%D1%81%D1%82%D1%81%D0%BA%D0%B0%D1%8F&view=map", expect.objectContaining({ cache: "no-cache" }));
     expect(container.textContent).not.toContain("рядом со мной"); expect(container.textContent).toContain("Изменить на карте");
   });
 });

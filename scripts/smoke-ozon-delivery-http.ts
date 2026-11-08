@@ -146,6 +146,19 @@ try {
   assert.equal(new Set(receivedPoints.map(point => point.id)).size, paginationPoints.length, "Pagination must not repeat point IDs");
   assert.equal(new Set(receivedPoints.map(point => point.address)).size, paginationPoints.length, "Every fixture address must appear once");
   assert.deepEqual(new Map(receivedPoints.map(point => [point.id, point.address])), new Map(paginationPoints.map(point => [point.id, point.address])), "Real HTTP pagination must return every fixture point with its correct address");
+  const mapUrl = `/api/delivery/ozon/points/?q=${encodeURIComponent(paginationCity)}&view=map`;
+  const mapResponse = await request(mapUrl, undefined, false);
+  assert.equal(mapResponse.status, 200);
+  assert.equal(mapResponse.headers.get("cache-control"), "private, no-cache");
+  const mapEtag = mapResponse.headers.get("etag");
+  assert.match(mapEtag || "", /^"[a-f0-9]{64}"$/);
+  const mapPage = await mapResponse.json();
+  assert.equal(mapPage.truncated, false); assert.equal(mapPage.nextOffset, null);
+  assert.match(mapPage.scope, /^[a-f0-9]{64}$/);
+  assert.equal(mapPage.points.length, 230, "The fast map must return the whole city in one batch");
+  assert.deepEqual(new Map(mapPage.points.map((point: { id: string; address: string }) => [point.id, point.address])), new Map(paginationPoints.map(point => [point.id, point.address])));
+  const unchanged = await fetch(new URL(mapUrl, base), { headers: { "If-None-Match": mapEtag! }, signal: AbortSignal.timeout(15000), redirect: "manual" });
+  assert.equal(unchanged.status, 304); assert.equal(await unchanged.text(), "");
   for (const query of ["Мос qa", "QA, Москва 1", "Москва _QA% 1"]) {
     const found = await (await request(`/api/delivery/ozon/points/?q=${encodeURIComponent(query)}`, undefined, false)).json();
     assert.deepEqual(found.points.map((point: { id: string }) => point.id), [pointId], "Partial words, separators and order must not hide the matched PVZ or expose another client");
