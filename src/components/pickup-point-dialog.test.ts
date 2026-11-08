@@ -87,7 +87,8 @@ describe("pickup point dialog", () => {
     const directory = manyPoints();
     await act(async () => root.render(createElement(PickupPointDialog, { points: directory, selected: "", carrier: "Ozon", onSelect, onClose })));
     expect(map.render.mock.lastCall?.[0].points).toBe(directory);
-    expect(container.querySelector("aside h3")?.nextElementSibling?.textContent).toBe("235");
+    expect(container.querySelector("aside h3")?.textContent).toBe("Пункты выдачи");
+    expect(container.querySelector("aside h3")?.nextElementSibling).toBeNull();
     expect(pointButtons()).toHaveLength(100);
     const listId = showMore()!.getAttribute("aria-controls");
     expect(document.getElementById(listId!)?.contains(pointButtons()[0])).toBe(true);
