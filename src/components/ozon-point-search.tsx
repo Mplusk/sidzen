@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { PickupPoint } from "@/lib/delivery/points";
 
-type Results = { points: PickupPoint[]; truncated?: boolean };
+type Results = { points: PickupPoint[]; truncated?: boolean; nextOffset?: number | null; scope?: string };
 
 export function OzonPointSearch({ onReset, onResults, onOpenMap }: {
   onReset: () => void;
@@ -13,6 +13,7 @@ export function OzonPointSearch({ onReset, onResults, onOpenMap }: {
   const id = useId();
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(0);
   const [message, setMessage] = useState("");
   const [cities, setCities] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
@@ -60,6 +61,7 @@ export function OzonPointSearch({ onReset, onResults, onOpenMap }: {
     }, 300);
   }
   function choose(city: string) {
+    cancel(); setBusy(false); setLoaded(0);
     cancelSuggestions(); setSuggesting(false); setQuery(city); setCities([]); setOpen(false); setActive(-1); setMessage(""); onReset();
   }
 
@@ -70,21 +72,41 @@ export function OzonPointSearch({ onReset, onResults, onOpenMap }: {
     const version = generation.current;
     const controller = new AbortController();
     request.current = controller;
-    const deadline = setTimeout(() => controller.abort(), 15000);
-    onReset(); setBusy(true); setMessage("");
+    onReset(); setBusy(true); setLoaded(0); setMessage("");
     try {
-      const response = await fetch(`/api/delivery/ozon/points/?q=${encodeURIComponent(query.trim())}`, { cache: "no-store", signal: controller.signal });
-      if (!response.ok) throw new Error(response.status === 429 ? "rate-limit" : "points");
-      const result = await response.json() as Results;
-      if (version !== generation.current) return;
-      onResults(result.points, !!result.truncated);
-      if (result.points.length) onOpenMap();
+      const all = new Map<string, PickupPoint>();
+      const baseUrl = `/api/delivery/ozon/points/?q=${encodeURIComponent(query.trim())}`;
+      let offset = 0;
+      let scope: string | undefined;
+      while (true) {
+        // Each bounded page gets its own deadline; a large city may take longer
+        // than one request. Editing the city still aborts the entire search.
+        const deadline = setTimeout(() => controller.abort(), 15000);
+        let result: Results;
+        try {
+          const response = await fetch(baseUrl + (offset ? `&offset=${offset}` : ""), { cache: "no-store", signal: controller.signal });
+          if (!response.ok) throw new Error(response.status === 429 ? "rate-limit" : "points");
+          result = await response.json() as Results;
+        } finally { clearTimeout(deadline); }
+        if (version !== generation.current) return;
+        if (controller.signal.aborted) throw new Error("timeout");
+        if (!offset) scope = result.scope;
+        else if (result.scope !== scope) throw new Error("directory-changed");
+        for (const point of result.points) all.set(point.id, point);
+        setLoaded(all.size);
+        if (!result.truncated) break;
+        const next = result.nextOffset;
+        if (typeof next !== "number" || !Number.isSafeInteger(next) || next <= offset || next > 1000000) throw new Error("pagination");
+        offset = next;
+      }
+      const points = [...all.values()];
+      onResults(points, false);
+      if (points.length) onOpenMap();
       else setMessage("Пункты выдачи не найдены. Проверьте название города и попробуйте ещё раз.");
     } catch (error) {
       if (version !== generation.current) return;
       setMessage(error instanceof Error && error.message === "rate-limit" ? "Слишком много запросов. Подождите немного и повторите поиск." : "Не удалось загрузить пункты. Нажмите «Найти ПВЗ на карте», чтобы повторить поиск.");
     } finally {
-      clearTimeout(deadline);
       if (version === generation.current) { setBusy(false); request.current = null; }
     }
   }
@@ -116,9 +138,9 @@ export function OzonPointSearch({ onReset, onResults, onOpenMap }: {
           </div>
         </div>}
       </div>
-      <button type="button" className="button button--outline" onClick={() => void search()} disabled={busy || query.trim().length < 2} aria-busy={busy}>{busy ? "Ищем ПВЗ…" : "Найти ПВЗ на карте"}</button>
+      <button type="button" className="button button--outline" onClick={() => void search()} disabled={busy || query.trim().length < 2} aria-busy={busy}>{busy ? "Загружаем ПВЗ…" : "Найти ПВЗ на карте"}</button>
     </div>
-    <p className="ozon-search-help muted" id={`${id}-help`}>Введите не менее двух букв.</p>
+    <p className="ozon-search-help muted" id={`${id}-help`} role="status">{busy ? `Загружено пунктов: ${loaded}. Собираем все результаты города…` : "Введите не менее двух букв."}</p>
     <p className="sr-only" id={`${id}-status`} role="status">{suggesting ? "Ищем города…" : open && cities.length ? `Вариантов города: ${cities.length}. Используйте стрелки и Enter для выбора.` : ""}</p>
     {message && <p className="notice" role="alert">{message}</p>}
   </div>;

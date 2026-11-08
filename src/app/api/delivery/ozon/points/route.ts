@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
-import { getOzonDeliveryConfig } from "@/lib/delivery/ozon-config";
+import { deliveryConfigFingerprint, getOzonDeliveryConfig } from "@/lib/delivery/ozon-config";
 import { OzonDeliveryClient } from "@/lib/delivery/ozon-client";
 import { hasPointCoordinates } from "@/lib/delivery/points";
 import type { PickupPoint } from "@/lib/delivery/points";
@@ -18,11 +18,18 @@ export async function GET(request: Request) {
   const terms = pointSearchTerms(search);
   if (!terms.length) return Response.json(empty);
   const suggest = url.searchParams.get("view") === "suggest";
+  const rawOffset = url.searchParams.get("offset") ?? "0";
+  if (!/^\d{1,7}$/.test(rawOffset) || Number(rawOffset) > 1000000) {
+    return Response.json({ error: "Некорректная страница поиска." }, { status: 400 });
+  }
+  const offset = cities || suggest ? 0 : Number(rawOffset);
   const limit = cities ? 500 : suggest ? 8 : 200;
   const config = await getOzonDeliveryConfig();
-  if (!config.enabled || !config.shipmentMethodId || !config.checkedAt) return Response.json(empty);
+  if (!config.enabled || !config.shipmentMethodId || !config.checkedAt) {
+    return offset ? Response.json({ error: "Настройки доставки изменились. Повторите поиск." }, { status: 409 }) : Response.json(empty);
+  }
   // All values are bound parameters. Do not interpolate user input as SQL.
-  const rows = await prisma.$queryRaw<PickupPoint[]>(pointSearchSql(config.clientId, BigInt(config.shipmentMethodId), terms, limit + 1));
+  const rows = await prisma.$queryRaw<PickupPoint[]>(pointSearchSql(config.clientId, BigInt(config.shipmentMethodId), terms, limit + 1, offset));
   if (cities) {
     const normalize = (value: string) => value.toLocaleLowerCase("ru").replaceAll("ё", "е").replace(/\s+/g, " ").trim();
     const prefix = normalize(search);
@@ -58,5 +65,8 @@ export async function GET(request: Request) {
       }
     } catch { /* Directory selection still works if the map refresh is unavailable. */ }
   }
-  return Response.json({ points: points.filter(point => !inactive.has(point.id)), truncated: rows.length > limit }, { headers: { "Cache-Control": "private, no-store" } });
+  const truncated = rows.length > limit;
+  // Advance over the raw page, including any inactive points removed above.
+  // Stable address/id ordering lets the map load the complete city directory.
+  return Response.json({ points: points.filter(point => !inactive.has(point.id)), truncated, nextOffset: !suggest && truncated ? offset + limit : null, scope: deliveryConfigFingerprint(config) }, { headers: { "Cache-Control": "private, no-store" } });
 }
