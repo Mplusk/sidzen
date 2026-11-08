@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { pointSearchPattern, pointSearchQuery } from "./point-search";
 
-export function pointSearchSql(clientId: string, methodId: bigint, terms: string[], limit: number) {
+export function pointSearchSql(clientId: string, methodId: bigint, terms: string[], limit: number, offset = 0) {
   // The indexed expression must stay identical to the migration. Explicit
   // Cyrillic folding works even in databases created with a C locale.
   return Prisma.sql`
@@ -17,5 +17,6 @@ export function pointSearchSql(clientId: string, methodId: bigint, terms: string
     ORDER BY (${Prisma.join(terms.map(term => Prisma.sql`CASE WHEN normalized ~ ${pointSearchPattern(term, true)} THEN 0 ELSE 1 END`), " + ")}) ASC,
       (${Prisma.join(terms.map(term => Prisma.sql`strpos(normalized, ${term})`), " + ")}) ASC, "address" ASC, "id" ASC
     LIMIT ${limit}
+    OFFSET ${offset}
   `;
 }

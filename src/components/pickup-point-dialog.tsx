@@ -12,6 +12,7 @@ const PickupMap = dynamic(() => import("@/components/ozon-pickup-map"), {
 });
 
 type Point = PickupPoint & { workTime?: string };
+const LIST_PAGE_SIZE = 100;
 
 export function PickupPointDialog({ points, selected, carrier, onSelect, onClose }: {
   points: Point[];
@@ -21,8 +22,12 @@ export function PickupPointDialog({ points, selected, carrier, onSelect, onClose
   onClose: () => void;
 }) {
   const titleId = useId();
+  const listId = useId();
   const dialog = useRef<HTMLDialogElement>(null);
   const [highlighted, setHighlighted] = useState(selected);
+  const [listState, setListState] = useState({ points, visibleCount: LIST_PAGE_SIZE });
+  if (listState.points !== points) setListState({ points, visibleCount: LIST_PAGE_SIZE });
+  const visibleCount = listState.points === points ? listState.visibleCount : LIST_PAGE_SIZE;
   const chosen = points.find(point => point.id === highlighted);
   const mapped = points.some(hasPointCoordinates);
   const carrierLogo = <Image src={carrier === "Ozon" ? "/brand/ozon-delivery.svg" : "/brand/cdek.svg"} alt={carrier} width={83} height={24} className={styles.logo} />;
@@ -48,10 +53,11 @@ export function PickupPointDialog({ points, selected, carrier, onSelect, onClose
             {chosen.workTime && <p className={styles.hours}><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>{chosen.workTime}</p>}
           </section>}
           <div className={styles.listHeading}><h3>Пункты выдачи</h3><span>{points.length}</span></div>
-          <div className={styles.list}>
-          {points.map(point => <button key={point.id} type="button" className={styles.point} aria-pressed={point.id === highlighted} onClick={() => setHighlighted(point.id)}>
+          <div id={listId} className={styles.list}>
+          {points.slice(0, visibleCount).map(point => <button key={point.id} type="button" className={styles.point} aria-pressed={point.id === highlighted} onClick={() => setHighlighted(point.id)}>
             <span className={styles.pointTop}><span>{point.name || `Пункт ${carrier}`}</span><span className={styles.radio} aria-hidden="true">{point.id === highlighted && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="m5 12 4 4L19 6" /></svg>}</span></span><strong>{point.address}</strong>{point.workTime && <small>{point.workTime}</small>}
           </button>)}
+          {visibleCount < points.length && <button type="button" className="button button--outline button--small" aria-controls={listId} onClick={() => setListState({ points, visibleCount: visibleCount + LIST_PAGE_SIZE })}>Показать ещё</button>}
           {!points.length && <p className={styles.empty}>Пункты не найдены. Закройте карту и выберите другой город.</p>}
           </div>
         </aside>

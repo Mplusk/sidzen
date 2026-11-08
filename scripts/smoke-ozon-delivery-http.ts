@@ -33,6 +33,14 @@ const oldOperator = await prisma.siteSetting.findMany({ where: { key: { in: oper
 const oldDeliveryAuditIds = (await prisma.auditLog.findMany({ where: { entityType: "DeliveryMethod" }, select: { id: true } })).map(row => row.id);
 const pointId = "9100000001";
 const extraPointIds = ["9100000002", "9100000003", "9100000004", "9100000005", "9100000006"];
+const paginationGeneration = `qa-pagination-${randomUUID()}`;
+const paginationCity = `Тестоград-${randomUUID().slice(0, 8)}`;
+const paginationIdBase = 1000000000000 + Number.parseInt(randomUUID().slice(0, 8), 16) * 1000;
+const paginationPoints = Array.from({ length: 230 }, (_, index) => ({
+  id: String(paginationIdBase + index), name: "QA ПВЗ пагинации", address: `Россия, ${paginationCity}, улица Тестовая, ${index + 1}`,
+  type: "pvz", latitude: 55.75 + index / 100000, longitude: 37.62, active: true,
+  clientId: "fixture-delivery-app", methodId: 7n, generation: paginationGeneration,
+}));
 let productId: string | undefined, cartId: string | undefined;
 let fixtureOrderId: string | undefined;
 let deletedCarrier: { id: string; active: boolean; deletedAt: Date | null } | undefined;
@@ -113,7 +121,31 @@ try {
   ] });
   const points = await request("/api/delivery/ozon/points/?q=Москва", undefined, false);
   assert.match(points.headers.get("cache-control") || "", /no-store/);
-  assert.deepEqual(await points.json(), { points: [{ id: pointId, name: "QA ПВЗ", address: "Москва, QA улица, 1", type: "pvz", latitude: 55.75, longitude: 37.62 }], truncated: false });
+  const pointResult = await points.json();
+  assert.match(pointResult.scope, /^[a-f0-9]{64}$/, "The directory response must include its delivery configuration fingerprint");
+  assert.deepEqual(pointResult, { points: [{ id: pointId, name: "QA ПВЗ", address: "Москва, QA улица, 1", type: "pvz", latitude: 55.75, longitude: 37.62 }], truncated: false, nextOffset: null, scope: pointResult.scope });
+  // Two public HTTP requests cross the former 200-point limit without touching Ozon.
+  await prisma.ozonDeliveryPoint.createMany({ data: paginationPoints });
+  const receivedPoints: { id: string; address: string }[] = [];
+  let nextOffset: number | null = 0;
+  for (const [pageIndex, expectedSize] of [200, 30].entries()) {
+    assert.notEqual(nextOffset, null, "The first page must advertise its continuation");
+    const response = await request(`/api/delivery/ozon/points/?q=${encodeURIComponent(paginationCity)}&offset=${nextOffset}`, undefined, false);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("cache-control") || "", /no-store/);
+    const page = await response.json();
+    assert.equal(page.scope, pointResult.scope, "All pages must belong to the same delivery configuration");
+    assert.equal(page.points.length, expectedSize);
+    assert.equal(page.truncated, pageIndex === 0);
+    assert.equal(page.nextOffset, pageIndex === 0 ? 200 : null);
+    receivedPoints.push(...page.points);
+    nextOffset = page.nextOffset;
+  }
+  assert.equal(nextOffset, null, "The final page must end pagination");
+  assert.equal(receivedPoints.length, paginationPoints.length);
+  assert.equal(new Set(receivedPoints.map(point => point.id)).size, paginationPoints.length, "Pagination must not repeat point IDs");
+  assert.equal(new Set(receivedPoints.map(point => point.address)).size, paginationPoints.length, "Every fixture address must appear once");
+  assert.deepEqual(new Map(receivedPoints.map(point => [point.id, point.address])), new Map(paginationPoints.map(point => [point.id, point.address])), "Real HTTP pagination must return every fixture point with its correct address");
   for (const query of ["Мос qa", "QA, Москва 1", "Москва _QA% 1"]) {
     const found = await (await request(`/api/delivery/ozon/points/?q=${encodeURIComponent(query)}`, undefined, false)).json();
     assert.deepEqual(found.points.map((point: { id: string }) => point.id), [pointId], "Partial words, separators and order must not hide the matched PVZ or expose another client");
@@ -217,6 +249,7 @@ try {
   console.log("PASS: isolated QA application without payment / fiscal receipt and with accepted-terms evidence; no guest access grant for signed-in buyer.");
   console.log("PASS: delivery creation/deletion with confirmation, anonymous denial, stale edits/orders rejected, historical shipments unchanged and deployment seed does not revive deleted methods.");
   console.log("PASS: public PVZ word search, partial and reordered terms, ё/е normalization and scoped suggestions without provider calls while typing.");
+  console.log("PASS: public HTTP PVZ pagination returns all 230 city points across two pages, with stable scope and no missing or duplicate IDs/addresses.");
 } finally {
   if (deletedCarrier) await prisma.deliveryMethod.update({ where: { id: deletedCarrier.id }, data: { active: deletedCarrier.active, deletedAt: deletedCarrier.deletedAt } });
   if (customDeliveryId) await prisma.deliveryMethod.deleteMany({ where: { id: customDeliveryId } });
@@ -233,6 +266,7 @@ try {
   if (cartId) await prisma.cart.deleteMany({ where: { id: cartId } });
   if (productId) await prisma.product.deleteMany({ where: { id: productId } });
   await prisma.ozonDeliveryPoint.deleteMany({ where: { id: { in: [pointId, ...extraPointIds] }, generation: "qa-only" } });
+  await prisma.ozonDeliveryPoint.deleteMany({ where: { id: { in: paginationPoints.map(point => point.id) }, generation: paginationGeneration } });
   if (old) await prisma.siteSetting.upsert({ where: { key: OZON_DELIVERY_SETTING }, create: { ...old, value: old.value === null ? Prisma.JsonNull : old.value as Prisma.InputJsonValue }, update: { value: old.value === null ? Prisma.JsonNull : old.value as Prisma.InputJsonValue } });
   else await prisma.siteSetting.deleteMany({ where: { key: OZON_DELIVERY_SETTING } });
   await prisma.$disconnect();

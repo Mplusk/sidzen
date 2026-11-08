@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
@@ -21,7 +21,22 @@ export default function OzonPickupMap({ points, selected, onSelect, carrier = "O
   const selectRef = useRef(onSelect);
   const selectedRef = useRef(selected);
   const [tileError, setTileError] = useState(false);
+  const located = useMemo(() => points.filter(hasPointCoordinates), [points]);
+  const focus = useMemo(() => initialMapPoints(points), [points]);
   useEffect(() => { selectRef.current = onSelect; }, [onSelect]);
+  useEffect(() => { selectedRef.current = selected; }, [selected]);
+  const revealSelection = useCallback(() => {
+    const id = selectedRef.current;
+    const marker = markersRef.current.get(id);
+    const clusters = clustersRef.current;
+    // A selection can arrive while later marker batches are still loading.
+    if (!marker || !clusters?.hasLayer(marker)) return;
+    clusters.zoomToShowLayer(marker, () => {
+      if (clustersRef.current !== clusters || selectedRef.current !== id) return;
+      marker.getElement()?.classList.add("ozon-map-pin--selected");
+      if (openPopupOnSelect) marker.openPopup();
+    });
+  }, [openPopupOnSelect]);
   useEffect(() => {
     if (!container.current) return;
     const map = L.map(container.current, { minZoom: 3, maxZoom: 18, scrollWheelZoom: true, touchZoom: true });
@@ -35,7 +50,6 @@ export default function OzonPickupMap({ points, selected, onSelect, carrier = "O
   }, []);
   useEffect(() => {
     const map = mapRef.current;
-    const located = points.filter(hasPointCoordinates);
     if (!map || !located.length) return;
     const clusters = L.markerClusterGroup({
       maxClusterRadius: 52,
@@ -48,42 +62,46 @@ export default function OzonPickupMap({ points, selected, onSelect, carrier = "O
     }).addTo(map);
     clustersRef.current = clusters;
     const markers = located.map(point => {
-      const content = document.createElement("div");
-      const title = document.createElement("strong"); title.textContent = point.name;
-      const address = document.createElement("p"); address.textContent = point.address;
-      const button = document.createElement("button"); button.type = "button"; button.className = "button button--small";
-      showSelection(button, false);
-      button.onclick = () => { showSelection(button, true); selectRef.current(point.id); };
-      buttonsRef.current.set(point.id, button);
-      content.append(title, address, button);
       const marker = L.marker([point.latitude, point.longitude], { title: `ПВЗ: ${point.address}`, alt: `ПВЗ: ${point.address}`, icon: L.divIcon({ className: `ozon-map-pin ${carrier === "Ozon" ? "ozon-map-pin--ozon" : "ozon-map-pin--cdek"}`, html: '<span aria-hidden="true">●</span>', iconSize: [28, 36], iconAnchor: [14, 36] }) });
-      if (openPopupOnSelect) marker.bindPopup(content);
+      if (openPopupOnSelect) {
+        const content = document.createElement("div");
+        const title = document.createElement("strong"); title.textContent = point.name;
+        const address = document.createElement("p"); address.textContent = point.address;
+        const button = document.createElement("button"); button.type = "button"; button.className = "button button--small";
+        showSelection(button, false);
+        button.onclick = () => { showSelection(button, true); selectRef.current(point.id); };
+        buttonsRef.current.set(point.id, button);
+        content.append(title, address, button);
+        marker.bindPopup(content);
+      }
       else marker.on("click", () => selectRef.current(point.id));
       marker.on("add", () => marker.getElement()?.classList.toggle("ozon-map-pin--selected", selectedRef.current === point.id));
-      clusters.addLayer(marker);
       markersRef.current.set(point.id, marker);
       return marker;
     });
-    const focus = initialMapPoints(points);
     map.fitBounds(L.latLngBounds(focus.map(point => [point.latitude, point.longitude])), { padding: [28, 28], maxZoom: 15 });
+    // Native chunkedLoading has no cancellation API. Small public addLayers
+    // batches yield to the UI and can be cancelled when the city/dialog changes.
+    let offset = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const addBatch = () => {
+      const start = offset;
+      const batch = markers.slice(start, start + 200);
+      clusters.addLayers(batch);
+      offset += batch.length;
+      const selectedMarker = markersRef.current.get(selectedRef.current);
+      if (start > 0 && selectedMarker && batch.includes(selectedMarker)) revealSelection();
+      if (offset < markers.length) timer = setTimeout(addBatch, 0);
+    };
+    addBatch();
     const markerIndex = markersRef.current;
     const buttonIndex = buttonsRef.current;
-    return () => { clusters.remove(); for (const marker of markers) marker.remove(); markerIndex.clear(); buttonIndex.clear(); clustersRef.current = null; };
-  }, [points, carrier, openPopupOnSelect]);
+    return () => { clearTimeout(timer); clusters.remove(); for (const marker of markers) marker.remove(); markerIndex.clear(); buttonIndex.clear(); clustersRef.current = null; };
+  }, [located, focus, carrier, openPopupOnSelect, revealSelection]);
   useEffect(() => {
-    selectedRef.current = selected;
-    const point = points.find(point => point.id === selected);
     for (const [id, marker] of markersRef.current) marker.getElement()?.classList.toggle("ozon-map-pin--selected", id === selected);
     for (const [id, button] of buttonsRef.current) showSelection(button, id === selected);
-    if (point && hasPointCoordinates(point)) {
-      const marker = markersRef.current.get(point.id);
-      if (marker && clustersRef.current) clustersRef.current.zoomToShowLayer(marker, () => {
-        if (selectedRef.current !== point.id) return;
-        marker.getElement()?.classList.add("ozon-map-pin--selected");
-        if (openPopupOnSelect) marker.openPopup();
-      });
-    }
-  }, [points, selected, openPopupOnSelect]);
-  const focused = initialMapPoints(points).length;
-  return <div className="ozon-map-wrapper"><div ref={container} className="ozon-pickup-map" role="region" aria-label={`Карта пунктов выдачи ${carrier}`} />{focused < points.filter(hasPointCoordinates).length && <p className="muted">Карта открыта в районе большинства найденных ПВЗ. Пункты в других районах тоже доступны: выберите адрес в списке — карта перейдёт к нему.</p>}{tileError && <p className="muted" role="status">Подложка карты временно недоступна. ПВЗ можно выбрать по метке или из списка ниже.</p>}</div>;
+    revealSelection();
+  }, [located, selected, carrier, revealSelection]);
+  return <div className="ozon-map-wrapper"><div ref={container} className="ozon-pickup-map" role="region" aria-label={`Карта пунктов выдачи ${carrier}`} />{focus.length < located.length && <p className="muted">Карта открыта в районе большинства найденных ПВЗ. Пункты в других районах тоже доступны: выберите адрес в списке — карта перейдёт к нему.</p>}{tileError && <p className="muted" role="status">Подложка карты временно недоступна. ПВЗ можно выбрать по метке или из списка ниже.</p>}</div>;
 }
