@@ -26,7 +26,7 @@ describe("city search for the pickup map", () => {
     await type("Омск");
     expect(fetch).not.toHaveBeenCalled();
     await search();
-    expect(fetch).toHaveBeenCalledWith("/api/delivery/ozon/points/?q=%D0%9E%D0%BC%D1%81%D0%BA", expect.objectContaining({ cache: "no-store" }));
+    expect(fetch).toHaveBeenCalledWith("/api/delivery/ozon/points/?q=%D0%9E%D0%BC%D1%81%D0%BA&view=map", expect.objectContaining({ cache: "no-cache" }));
     expect(results).toHaveBeenCalledWith(points, false); expect(openMap).toHaveBeenCalledOnce();
   });
   it("suggests cities while typing and selects one without choosing a pickup point", async () => {
@@ -88,6 +88,23 @@ describe("city search for the pickup map", () => {
     expect(vi.mocked(fetch).mock.calls[1][0]).toContain("&offset=200");
     await act(async () => finish(Response.json({ points: [firstPage[199], missingPoint], truncated: false, nextOffset: null })));
     expect(results).toHaveBeenCalledWith([...firstPage, missingPoint], false);
+    expect(openMap).toHaveBeenCalledOnce();
+  });
+  it("opens a full large city from one cached-directory request", async () => {
+    const city = Array.from({ length: 3931 }, (_, index) => ({ ...points[0], id: String(index) }));
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ points: city, truncated: false, nextOffset: null, scope: "directory" }));
+    await type("Санкт-Петербург"); await search();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(vi.mocked(fetch).mock.calls[0][0]).toContain("&view=map");
+    expect(results).toHaveBeenCalledWith(city, false);
+    expect(openMap).toHaveBeenCalledOnce();
+  });
+  it("follows the advertised page size for cities larger than one map response", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ points, truncated: true, nextOffset: 5000, scope: "directory" }))
+      .mockResolvedValueOnce(Response.json({ points: [{ ...points[0], id: "5001" }], truncated: false, nextOffset: null, scope: "directory" }));
+    await type("Москва"); await search();
+    expect(vi.mocked(fetch).mock.calls[1][0]).toContain("&view=map&offset=5000");
+    expect(results.mock.calls[0][0]).toHaveLength(2);
     expect(openMap).toHaveBeenCalledOnce();
   });
   it("never displays an incomplete map when a later page fails, and retries from the first page", async () => {
