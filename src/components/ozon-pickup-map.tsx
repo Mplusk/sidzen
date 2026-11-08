@@ -56,7 +56,10 @@ export default function OzonPickupMap({ points, selected, onSelect, carrier = "O
       button.onclick = () => { showSelection(button, true); selectRef.current(point.id); };
       buttonsRef.current.set(point.id, button);
       content.append(title, address, button);
-      const marker = L.marker([point.latitude, point.longitude], { title: `ПВЗ: ${point.address}`, alt: `ПВЗ: ${point.address}`, icon: L.divIcon({ className: `ozon-map-pin ${carrier === "Ozon" ? "ozon-map-pin--ozon" : "ozon-map-pin--cdek"}`, html: '<span aria-hidden="true">●</span>', iconSize: [28, 36], iconAnchor: [14, 36] }) }).bindPopup(content);
+      const marker = L.marker([point.latitude, point.longitude], { title: `ПВЗ: ${point.address}`, alt: `ПВЗ: ${point.address}`, icon: L.divIcon({ className: `ozon-map-pin ${carrier === "Ozon" ? "ozon-map-pin--ozon" : "ozon-map-pin--cdek"}`, html: '<span aria-hidden="true">●</span>', iconSize: [28, 36], iconAnchor: [14, 36] }) });
+      if (openPopupOnSelect) marker.bindPopup(content);
+      else marker.on("click", () => selectRef.current(point.id));
+      marker.on("add", () => marker.getElement()?.classList.toggle("ozon-map-pin--selected", selectedRef.current === point.id));
       clusters.addLayer(marker);
       markersRef.current.set(point.id, marker);
       return marker;
@@ -66,7 +69,7 @@ export default function OzonPickupMap({ points, selected, onSelect, carrier = "O
     const markerIndex = markersRef.current;
     const buttonIndex = buttonsRef.current;
     return () => { clusters.remove(); for (const marker of markers) marker.remove(); markerIndex.clear(); buttonIndex.clear(); clustersRef.current = null; };
-  }, [points, carrier]);
+  }, [points, carrier, openPopupOnSelect]);
   useEffect(() => {
     selectedRef.current = selected;
     const point = points.find(point => point.id === selected);

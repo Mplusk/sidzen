@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import { useEffect, useId, useRef, useState } from "react";
 import { hasPointCoordinates, type PickupPoint } from "@/lib/delivery/points";
 import styles from "./pickup-point-dialog.module.css";
@@ -24,6 +25,7 @@ export function PickupPointDialog({ points, selected, carrier, onSelect, onClose
   const [highlighted, setHighlighted] = useState(selected);
   const chosen = points.find(point => point.id === highlighted);
   const mapped = points.some(hasPointCoordinates);
+  const carrierLogo = <Image src={carrier === "Ozon" ? "/brand/ozon-delivery.svg" : "/brand/cdek.svg"} alt={carrier} width={83} height={24} className={styles.logo} />;
 
   useEffect(() => {
     const element = dialog.current;
@@ -36,16 +38,25 @@ export function PickupPointDialog({ points, selected, carrier, onSelect, onClose
 
   return <dialog ref={dialog} className={styles.dialog} aria-labelledby={titleId} onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
     <div className={styles.shell}>
-      <header className={styles.header}><div><h2 id={titleId}>Выберите пункт выдачи</h2><p>{carrier} · выберите на карте или в списке</p></div><button type="button" className={styles.close} aria-label="Закрыть выбор пункта" onClick={onClose}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 5l14 14M19 5L5 19" /></svg></button></header>
+      <header className={styles.header}><div><div className={styles.heading}><h2 id={titleId}>Выберите пункт выдачи</h2>{carrierLogo}</div><p>Найдите удобный адрес на карте или в списке</p></div><button type="button" className={styles.close} aria-label="Закрыть выбор пункта" onClick={onClose}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 5l14 14M19 5L5 19" /></svg></button></header>
       <div className={styles.content}>
         <div className={styles.map}>{mapped ? <PickupMap carrier={carrier} points={points} selected={highlighted} onSelect={setHighlighted} openPopupOnSelect={false} /> : <p className={styles.mapLoading}>Карта для этих адресов недоступна. Выберите пункт из списка.</p>}</div>
-        <div className={styles.list} aria-label={`Пункты выдачи ${carrier}`}>
+        <aside className={styles.sidebar} aria-label={`Пункты выдачи ${carrier}`}>
+          {chosen && <section className={styles.selection} aria-label="Выбранный пункт" aria-live="polite">
+            <div className={styles.selectionHeading}>{carrierLogo}<span>{chosen.name || `Пункт ${carrier}`}</span><svg className={styles.check} aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m5 12 4 4L19 6" /></svg></div>
+            <p className={styles.selectedAddress}>{chosen.address}</p>
+            {chosen.workTime && <p className={styles.hours}><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>{chosen.workTime}</p>}
+          </section>}
+          <div className={styles.listHeading}><h3>Пункты выдачи</h3><span>{points.length}</span></div>
+          <div className={styles.list}>
           {points.map(point => <button key={point.id} type="button" className={styles.point} aria-pressed={point.id === highlighted} onClick={() => setHighlighted(point.id)}>
-            <strong>{point.name || `Пункт ${carrier}`}</strong><span>{point.address}</span>{point.workTime && <small>{point.workTime}</small>}
+            <span className={styles.pointTop}><span>{point.name || `Пункт ${carrier}`}</span><span className={styles.radio} aria-hidden="true">{point.id === highlighted && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="m5 12 4 4L19 6" /></svg>}</span></span><strong>{point.address}</strong>{point.workTime && <small>{point.workTime}</small>}
           </button>)}
-        </div>
+          {!points.length && <p className={styles.empty}>Пункты не найдены. Закройте карту и выберите другой город.</p>}
+          </div>
+        </aside>
       </div>
-      <footer className={styles.footer}><span>{chosen ? chosen.address : "Выберите удобный пункт выдачи"}</span><button type="button" className="button button--small" disabled={!chosen} onClick={() => { if (chosen) onSelect(chosen.id); }}>Выбрать пункт</button></footer>
+      <footer className={styles.footer}><span>{chosen ? "Подтвердите выбранный пункт выдачи" : "Выберите удобный пункт выдачи"}</span><button type="button" className="button button--small" disabled={!chosen} onClick={() => { if (chosen) onSelect(chosen.id); }}>Выбрать пункт<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"><path d="M5 12h14m-5-5 5 5-5 5" /></svg></button></footer>
     </div>
   </dialog>;
 }
