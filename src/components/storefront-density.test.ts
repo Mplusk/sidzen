@@ -33,11 +33,11 @@ it("keeps exactly four information links and no Shop footer block", () => {
   for (const href of ["/about/", "/contacts/", "/faq/", "/delivery/"]) expect(footer).toContain(`href="${href}"`);
   for (const href of ["/cart/", "/materials/", "/account/", "/catalog/"]) expect(footer).not.toContain(`href="${href}"`);
 });
-it("places footer information at the right edge on desktop and the left edge on mobile", () => {
+it("aligns the footer sections in two columns and stacks them on mobile", () => {
   expect(read("./footer.tsx")).toContain('className="footer-info"');
   const css = read("../app/globals.css");
-  expect(css).toContain(".footer-info { justify-self: end; }");
-  expect(css.slice(css.lastIndexOf("@media (max-width: 600px)"))).toContain(".footer-info { justify-self: start; }");
+  expect(css).toMatch(/\.footer-grid, \.footer-bottom\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  expect(css.slice(css.lastIndexOf("@media (max-width: 600px)"))).toMatch(/\.footer-grid, \.footer-bottom\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
 });
 it("keeps the footer on a shared readable grid with copyright and legal links below", () => {
   const footer = read("./footer.tsx"), css = read("../app/globals.css");
@@ -45,8 +45,8 @@ it("keeps the footer on a shared readable grid with copyright and legal links be
   expect(footer).toContain('<nav className="footer-info" aria-labelledby="footer-information-heading">');
   expect(footer.indexOf('className="footer-note"')).toBeGreaterThan(footer.indexOf('className="container footer-bottom"'));
   expect(footer).toContain('aria-label="Правовая информация"');
-  expect(css).toContain('.site-footer > .container { width: min(75rem, calc(100% - 2rem)); }');
+  expect(css).not.toContain('.site-footer > .container { width: min(75rem, calc(100% - 2rem)); }');
   expect(css).toContain('.footer-description { max-width: 42ch;');
   expect(css).toContain('line-height: 1.65; text-wrap: balance;');
-  expect(css).toContain('.footer-bottom { display: flex; flex-wrap: wrap; justify-content: space-between;');
+  expect(css).toContain('.footer-legal { display: flex; flex-wrap: wrap;');
 });
