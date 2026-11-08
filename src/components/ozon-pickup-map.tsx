@@ -24,7 +24,7 @@ export default function OzonPickupMap({ points, selected, onSelect, carrier = "O
   useEffect(() => { selectRef.current = onSelect; }, [onSelect]);
   useEffect(() => {
     if (!container.current) return;
-    const map = L.map(container.current, { minZoom: 3, maxZoom: 18, scrollWheelZoom: false });
+    const map = L.map(container.current, { minZoom: 3, maxZoom: 18, scrollWheelZoom: true, touchZoom: true });
     mapRef.current = map;
     const tiles = L.tileLayer("/api/maps/tiles/{z}/{x}/{y}/", { maxZoom: 18, keepBuffer: 0, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>' }).addTo(map);
     tiles.on("tileerror", () => setTileError(true));
