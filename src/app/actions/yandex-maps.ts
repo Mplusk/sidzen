@@ -14,7 +14,7 @@ export async function saveYandexMapsSettings(form: FormData) {
   const result = (code: string): never => redirect(`/account/integrations/?result=maps-${code}#yandex-maps`);
   if (!rateLimit(`yandex-maps-settings:${actor.id}`, 5, 60_000).allowed) result("rate");
   const current = await getYandexMapsConfig();
-  const supplied = String(form.get("apiKey") ?? "").trim();
+  const supplied = String(form.get("mapsApiKey") ?? "").trim();
   if (supplied && !/^[A-Za-z0-9_-]{16,128}$/.test(supplied)) result("invalid");
   const apiKey = form.get("clearKey") === "on" ? "" : supplied || current.apiKey;
   const saved = await prisma.$transaction(async tx => {

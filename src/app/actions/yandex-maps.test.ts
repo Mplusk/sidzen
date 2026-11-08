@@ -11,7 +11,7 @@ import { decryptSecret } from "@/lib/integration-secrets";
 
 function form(extra: Record<string, string> = {}) {
   const data = new FormData();
-  for (const [key, value] of Object.entries({ apiKey: "", revision: "v1", ...extra })) data.set(key, value);
+  for (const [key, value] of Object.entries({ mapsApiKey: "", revision: "v1", ...extra })) data.set(key, value);
   return data;
 }
 beforeEach(() => {
@@ -35,7 +35,7 @@ describe("Yandex Maps administrator settings", () => {
     expect(JSON.stringify(m.audit.mock.calls)).not.toContain("fixture-key-12345678");
   });
   it("rejects invalid and stale changes and supports clearing the key", async () => {
-    await expect(saveYandexMapsSettings(form({ apiKey: "bad url!" }))).rejects.toThrow("maps-invalid");
+    await expect(saveYandexMapsSettings(form({ mapsApiKey: "bad url!" }))).rejects.toThrow("maps-invalid");
     m.config.mockResolvedValueOnce({ apiKey: "", revision: "v1" }).mockResolvedValueOnce({ apiKey: "", revision: "v2" });
     await expect(saveYandexMapsSettings(form())).rejects.toThrow("maps-changed");
     expect(m.save).not.toHaveBeenCalled();
