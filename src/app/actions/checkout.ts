@@ -6,7 +6,10 @@ import { getCart } from "@/app/actions/cart";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkoutSchema } from "@/lib/checkout-validation";
-import { grantOrderAccess } from "@/lib/order-access";
+import { setGuestGrantCookie } from "@/lib/order-access";
+import { createGuestGrant } from "@/lib/guest-order-grant";
+import { reserveStock } from "@/lib/stock-reservations";
+import { assertCheckoutProductsUnchanged } from "@/lib/checkout-product-snapshot";
 import { deliveryConfigFingerprint, getOzonDeliveryConfig, OZON_DELIVERY_CODE, requireOzonDelivery } from "@/lib/delivery/ozon-config";
 import { verifyOzonQuote, OzonQuoteError, type OzonQuote } from "@/lib/delivery/ozon-quote";
 import { OzonDeliveryError } from "@/lib/delivery/ozon-client";
@@ -14,7 +17,7 @@ import { retryOzonQuote } from "@/lib/delivery/ozon-retry";
 import { verifyDeliveryConsent, operatorReady } from "@/lib/privacy";
 import { CONSENT_VERSION } from "@/lib/privacy-documents";
 import { deliveryTotals } from "@/lib/delivery/pricing";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { writeDiagnostic } from "@/lib/diagnostics";
 import { ozonDiagnosticCode, type DiagnosticCode } from "@/lib/diagnostic-events";
 import { ozonCreateBody } from "@/lib/delivery/ozon-worker";
@@ -106,9 +109,9 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
     catch { return fail("payment-items"); }
   }
   const number = `3DP-${new Date().toISOString().slice(2, 10).replace(/-/g, "")}-${randomBytes(4).toString("hex").toUpperCase()}`;
-  let order;
+  let result;
   try {
-    order = await prisma.$transaction(async (tx) => {
+    result = await prisma.$transaction(async (tx) => {
       if (!isOzon && !isCdek) {
         // Serialize checkout with delivery deletion; stale forms cannot reuse removed methods.
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412028)`;
@@ -134,14 +137,26 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
       }
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412034)`;
       if (yookassaReady(await getYooKassaConfig(tx)) !== onlinePayment) throw new Error("payment-config-changed");
+      const lines = cart.items.map(item => {
+        if (!item.productId) throw new Error("stock-changed");
+        return { productId: item.productId, quantity: item.quantity };
+      });
+      const reservedProducts = await reserveStock(tx, lines);
+      await assertCheckoutProductsUnchanged(tx, cart);
+      const orderItems = cart.items.map(item => {
+        const remaining = item.productId ? reservedProducts.get(item.productId) ?? 0 : 0;
+        const held = Math.min(item.quantity, remaining);
+        if (item.productId) reservedProducts.set(item.productId, remaining - held);
+        return { productId: item.productId, productName: item.product!.name, sku: item.product!.sku, quantity: item.quantity, reservedStock: held, stockReservationState: held ? "ACTIVE" : "NONE", unitPrice: item.unitPrice, totalPrice: item.unitPrice * item.quantity, configuration: item.quote!.config, materialId: item.quote!.materialId, colorId: item.quote!.colorId };
+      });
       // Claim the cart rows atomically so a double click cannot create two orders.
       const claimed = await tx.cartItem.deleteMany({ where: { cartId: cart.id, OR: cart.items.map((item) => ({ id: item.id, quantity: item.quantity, updatedAt: item.updatedAt })) } });
       if (claimed.count !== cart.items.length) throw new Error("cart-changed");
       const created = await tx.order.create({ data: {
-        number, userId: user?.id, kind: onlinePayment ? "ORDER" : "APPLICATION", status: onlinePayment ? "AWAITING_PAYMENT" : "NEW", customerName: parsed.data.name, customerEmail: parsed.data.email, customerPhone: parsed.data.phone,
+        number, userId: user?.id, inventoryTracked: true, kind: onlinePayment ? "ORDER" : "APPLICATION", status: onlinePayment ? "AWAITING_PAYMENT" : "NEW", customerName: parsed.data.name, customerEmail: parsed.data.email, customerPhone: parsed.data.phone,
         shippingAddress: ozonQuote ? ozonQuote.address : cdekQuote ? cdekQuote.address : parsed.data.delivery === "pickup" ? "Самовывоз по согласованию" : `${parsed.data.postalCode ? `${parsed.data.postalCode}, ` : ""}${parsed.data.city}, ${parsed.data.address}`,
         customerComment: parsed.data.comment || undefined, subtotal, deliveryPrice, total,
-        items: { create: cart.items.map((item) => ({ productId: item.productId, productName: item.product!.name, sku: item.product!.sku, quantity: item.quantity, unitPrice: item.unitPrice, totalPrice: item.unitPrice * item.quantity, configuration: item.quote!.config, materialId: item.quote!.materialId, colorId: item.quote!.colorId })) },
+        items: { create: orderItems },
         ...(onlinePayment ? { payment: { create: { provider: "yookassa-online", amount: total, status: "PENDING" } } } : {}),
         // Persist the carrier outbox atomically with the application. Retries
         // reuse this immutable body/key; no payment or receipt is created.
@@ -151,15 +166,19 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
       await queueTelegramOrder(tx, created.id);
       await tx.auditLog.create({ data: { actorId: user?.id, action: "order.application.create", entityType: "Order", entityId: created.id, after: { version: CONSENT_VERSION, privacyNoticeVersion: CONSENT_VERSION, delivery: deliveryMethod.code, flow: "contact-request" } } });
       if (ozonQuote?.consentId) await tx.privacyConsent.update({ where: { id: ozonQuote.consentId }, data: { orderId: created.id } });
-      return created;
+      const guestGrant = user ? undefined : await createGuestGrant(tx, created.number);
+      return { order: created, guestGrant };
     });
-  } catch {
+  } catch (error) {
     await writeDiagnostic("checkout.changed");
+    if (error instanceof Error && error.message === "stock-legacy-review") return fail("stock-review");
     if (inline) return fail("changed");
     redirect("/cart/?error=changed");
   }
   await writeDiagnostic("checkout.application");
-  if (!user) await grantOrderAccess(order.number);
+  const { order, guestGrant } = result;
+  if (guestGrant) await setGuestGrantCookie(order.number, guestGrant);
+  updateTag("catalog");
   const { sendOrderConfirmation } = await import("@/lib/order-notifications");
   await sendOrderConfirmation(order.id).catch(() => undefined);
   revalidatePath("/admin", "layout");

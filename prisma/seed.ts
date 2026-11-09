@@ -173,14 +173,15 @@ async function seedCatalog() {
 }
 
 async function seedContent() {
-  const rubric = await prisma.rubric.upsert({ where: { slug: "guides" }, update: { name: "Гайды" }, create: { slug: "guides", name: "Гайды", description: "Практические материалы о 3D-печати" } });
+  // Seed defaults only on creation: editors own existing content and SEO.
+  const rubric = await prisma.rubric.upsert({ where: { slug: "guides" }, update: {}, create: { slug: "guides", name: "Гайды", description: "Практические материалы о 3D-печати" } });
   const articles = [
     { slug: "pla-ili-petg", title: "PLA или PETG: что выбрать для вашей детали", excerpt: "Сравниваем прочность, температуру, внешний вид и стоимость двух популярных пластиков.", content: "PLA лучше подходит для макетов, декора и интерьерных деталей. PETG выбирают для креплений, корпусов и изделий, которые контактируют с влагой. При выборе важны не только прочность, но и температура эксплуатации, точность посадок и требуемая обработка." },
   ];
   for (const article of articles) {
     await prisma.article.upsert({
       where: { slug: article.slug },
-      update: { ...article, metaTitle: article.title, status: PublicationStatus.PUBLISHED },
+      update: {},
       create: { ...article, rubricId: rubric.id, status: PublicationStatus.PUBLISHED, authorName: "Команда 3DPRINTA", h1: article.title, metaTitle: article.title, metaDescription: article.excerpt, publishedAt: new Date() },
     });
   }
@@ -232,7 +233,7 @@ async function seedContent() {
     ["/", "Каталог изделий 3DPRINTA", "Интернет-магазин изделий с выбором материала и цвета.", "Каталог изделий"],
     ["/catalog/", "Каталог изделий 3D-печати", "Готовые органайзеры, крепления, декор и прототипы. Выбор материала и цвета.", "Каталог изделий"],
   ] as const;
-  for (const [path, title, metaDescription, h1] of seoPages) await prisma.seoPage.upsert({ where: { path }, update: { title, metaDescription, h1 }, create: { path, title, metaDescription, h1, schemaTypes: path === "/" ? ["Organization", "WebSite", "FAQPage"] : ["BreadcrumbList"] } });
+  for (const [path, title, metaDescription, h1] of seoPages) await prisma.seoPage.upsert({ where: { path }, update: {}, create: { path, title, metaDescription, h1, schemaTypes: path === "/" ? ["Organization", "WebSite", "FAQPage"] : ["BreadcrumbList"] } });
 }
 
 async function main() {
@@ -248,4 +249,3 @@ main()
     await prisma.$disconnect();
     process.exit(1);
   });
-

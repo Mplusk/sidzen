@@ -1,12 +1,14 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requirePermission } from "@/lib/auth";
 import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { releaseUnsentStock } from "@/lib/stock-reservations";
+import { revokeGuestGrantsForOrder } from "@/lib/guest-order-grant";
 
 export async function deleteOrderAction(formData: FormData) {
   const user = await requirePermission(PERMISSIONS.ordersWrite);
@@ -24,6 +26,8 @@ export async function deleteOrderAction(formData: FormData) {
       if (!order || order.deletedAt) return null;
       if (order.number !== input.data.confirmation) throw new Error("confirmation");
       if (order.payment?.provider === "yookassa-online" && !["CANCELED", "REFUNDED"].includes(order.payment.status)) throw new Error("payment-active");
+      if (!order.payment || order.payment.status === "CANCELED") await releaseUnsentStock(tx, order.id);
+      await revokeGuestGrantsForOrder(tx, order.number);
       // Commit cancellation intent with archival. Do not clear an active lease:
       // an in-flight create must save its remote identifiers for cancellation.
       if (order.shipment?.ozonJob) await tx.ozonDeliveryJob.update({ where: { id: order.shipment.ozonJob.id }, data: { cancelRequestedAt: new Date(), cancelError: null, nextAttemptAt: new Date() } });
@@ -38,6 +42,7 @@ export async function deleteOrderAction(formData: FormData) {
     console.error("Could not delete order");
     redirect("/admin/orders/?error=delete");
   }
+  updateTag("catalog");
   revalidatePath("/admin", "layout");
   revalidatePath("/account", "layout");
   redirect(number ? `/admin/orders/?deleted=${encodeURIComponent(number)}` : "/admin/orders/?error=missing");

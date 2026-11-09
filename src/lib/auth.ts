@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { mergeGuestFavorites } from "@/lib/favorites-merge";
 import { claimGuestOrders } from "@/lib/guest-order-claims";
+import { revokeGuestGrant } from "@/lib/guest-order-grant";
 
 export const SESSION_COOKIE = "3dp_session";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
@@ -50,6 +51,17 @@ export async function destroySession() {
     cookieStore.delete(cookie.name);
   }
   // A shared browser must not retain guest order access after signing out.
+  const orderCookies = cookieStore.getAll().filter(cookie => cookie.name.startsWith("3dp_order_"));
+  if (orderCookies.length) await prisma.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412026)`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412032)`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412034)`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412042)`;
+    for (const cookie of orderCookies) {
+      const number = cookie.name.slice("3dp_order_".length);
+      if (/^3DP-[A-Za-z0-9-]{1,80}$/.test(number)) await revokeGuestGrant(tx, number, cookie.value);
+    }
+  });
   for (const cookie of cookieStore.getAll()) if (cookie.name.startsWith("3dp_order_")) cookieStore.delete(cookie.name);
 }
 

@@ -22,6 +22,7 @@ import { categoryAiReady, getCategoryAiConfig, queueCategoryAi } from "@/lib/cat
 
 import { applicationStatuses, orderStatuses } from "@/lib/order-status";
 import { terminalOrderStatuses } from "@/lib/privacy-retention-policy";
+import { finishStockReservations, releaseUnsentStock } from "@/lib/stock-reservations";
 
 export async function updateOrderStatusAction(formData: FormData) {
   const user = await requirePermission(PERMISSIONS.ordersWrite);
@@ -46,22 +47,29 @@ export async function updateOrderStatusAction(formData: FormData) {
       if (["QUEUED", "PRINTING", "POST_PROCESSING", "PACKED", "SHIPPED"].includes(status) && before.payment?.status !== "PAID") return null;
       if ((status === "PAID" && before.payment?.status !== "PAID") || (status === "REFUNDED" && before.payment?.status !== "REFUNDED") || (status === "CANCELED" && before.payment?.status === "PAID") || (before.fiscalReceipts.some(row => row.kind === "SETTLEMENT") && status !== "DELIVERED" && status !== "REFUNDED")) return null;
       if (status === "DELIVERED" && (formData.get("deliveryConfirmed") !== "on" || before.payment?.status !== "PAID" || before.payment.refundReviewRequired)) return null;
-      if (status === "DELIVERED") await queueDerivedReceipt(tx, before.id, "SETTLEMENT");
     }
     if (before.payment?.provider === "yookassa-online") {
       if (["IN_PROGRESS", "QUEUED", "PRINTING", "PACKED", "SHIPPED", "DELIVERED"].includes(parsed.data.status) && before.payment.status !== "PAID") return null;
       if ((parsed.data.status === "PAID" && before.payment.status !== "PAID") || (parsed.data.status === "REFUNDED" && before.payment.status !== "REFUNDED") || (parsed.data.status === "CANCELED" && before.payment.status !== "CANCELED") || (before.yookassaSettlement && !["DELIVERED", "REFUNDED"].includes(parsed.data.status))) return null;
       if (parsed.data.status === "DELIVERED") {
         if (formData.get("deliveryConfirmed") !== "on" || before.payment.refundReviewRequired) return null;
-        await queueYooKassaSettlement(tx, before.id);
       }
     }
+    if (terminalOrderStatuses.some(status => status === before.status) && !terminalOrderStatuses.some(status => status === parsed.data.status)) { statusError = "stock-status"; return null; }
+    const endedReservation = await tx.orderItem.findFirst({ where: { orderId: before.id, stockReservationState: { in: ["RELEASED", "CONSUMED"] } }, select: { stockReservationState: true } });
+    if (endedReservation && (endedReservation.stockReservationState === "RELEASED" ? !["CANCELED", "REFUNDED"].includes(parsed.data.status) : !["DELIVERED", "REFUNDED"].includes(parsed.data.status))) { statusError = "stock-status"; return null; }
+    // No side effects until every fiscal and inventory constraint has passed.
+    if (parsed.data.status === "DELIVERED" && before.fiscalReceipts.length) await queueDerivedReceipt(tx, before.id, "SETTLEMENT");
+    if (parsed.data.status === "DELIVERED" && before.payment?.provider === "yookassa-online") await queueYooKassaSettlement(tx, before.id);
+    if (["CANCELED", "REFUNDED"].includes(parsed.data.status)) await releaseUnsentStock(tx, before.id);
+    if (parsed.data.status === "DELIVERED") await finishStockReservations(tx, before.id, "CONSUMED");
     const updated = await tx.order.update({ where: { id: before.id }, data: { status: parsed.data.status, internalNote: parsed.data.note || null, privacyClosedAt: terminalOrderStatuses.some(status => status === parsed.data.status) ? before.status === parsed.data.status ? before.privacyClosedAt ?? new Date() : new Date() : null, ...(before.kind === "APPLICATION" ? { purchaseConfirmedAt: parsed.data.status === "DELIVERED" ? before.purchaseConfirmedAt ?? new Date() : null } : {}) } });
     if (parsed.data.status === "CANCELED") await tx.cdekDeliveryJob.updateMany({ where: { shipment: { orderId: before.id }, status: { notIn: ["CANCELED", "FINISHED"] } }, data: { cancelRequestedAt: new Date(), nextAttemptAt: new Date() } });
     await tx.auditLog.create({ data: { actorId: user.id, action: "order.status.update", entityType: "Order", entityId: before.id, before: { status: before.status }, after: { status: updated.status, deliveryConfirmed: formData.get("deliveryConfirmed") === "on", purchaseConfirmed: Boolean(updated.purchaseConfirmedAt) } } });
     return updated;
   });
   if (!order) redirect(`/admin/orders/?error=${statusError}`);
+  updateTag("catalog");
   revalidatePath("/admin/orders/");
   revalidatePath("/account", "layout");
   revalidatePath("/catalog", "layout");
@@ -189,7 +197,7 @@ function productMutationData(input: Extract<ReturnType<typeof parseProductForm>,
 }
 
 function productErrorCode(error: unknown) {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" ? "duplicate" : error instanceof Error && error.message === "duplicate-sku" ? "duplicate" : error instanceof Error && ["images", "specifications", "marketplace-busy", "ai-disabled"].includes(error.message) ? error.message : "invalid";
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" ? "duplicate" : error instanceof Error && error.message === "duplicate-sku" ? "duplicate" : error instanceof Error && ["images", "specifications", "marketplace-busy", "ai-disabled", "stale", "reserved-stock"].includes(error.message) ? error.message : "invalid";
 }
 
 export async function createProductAction(formData: FormData) {
@@ -236,6 +244,12 @@ export async function updateProductAction(formData: FormData) {
   const user = await requirePermission(PERMISSIONS.productsWrite);
   const id = String(formData.get("id") ?? "");
   if (!id) redirect("/admin/products/");
+  const version = String(formData.get("productVersion") ?? "");
+  const expectedUpdatedAt = new Date(version);
+  if (!Number.isFinite(expectedUpdatedAt.getTime()) || expectedUpdatedAt.toISOString() !== version) redirect(`/admin/products/${id}/?error=stale`);
+  const originalStock = String(formData.get("originalStock") ?? "");
+  const originalReservedStock = String(formData.get("originalReservedStock") ?? "");
+  if (![originalStock, originalReservedStock].every((value) => /^(0|[1-9]\d*)$/.test(value) && Number.isSafeInteger(Number(value)))) redirect(`/admin/products/${id}/?error=stale`);
   const parsed = parseProductForm(formData);
   if (!parsed.success) redirect(`/admin/products/${id}/?error=${parsed.error}`);
   const before = await prisma.product.findUniqueOrThrow({ where: { id }, include: { images: true, categories: { include: { category: { select: { slug: true } } } } } });
@@ -257,6 +271,10 @@ export async function updateProductAction(formData: FormData) {
     const importedFieldsChanged = data.name !== before.name || data.description !== before.description || Number(data.basePrice) !== Number(before.basePrice) || (data.oldPrice == null ? null : Number(data.oldPrice)) !== (before.oldPrice == null ? null : Number(before.oldPrice)) || JSON.stringify(parsed.data.specifications) !== JSON.stringify(before.specifications) || JSON.stringify(data.images.map((image) => image.path)) !== JSON.stringify([...before.images].sort((a, b) => a.sortOrder - b.sortOrder).map((image) => image.path));
     product = await prisma.$transaction(async (tx) => {
       await guardProductWrite(tx, data.sku, id);
+      // Lock before comparing so a concurrent reservation cannot change stock between the check and update.
+      const [locked] = await tx.$queryRaw<Array<{ updatedAt: Date; stock: number; reservedStock: number }>>`SELECT "updatedAt", "stock", "reservedStock" FROM "Product" WHERE "id" = ${id} FOR UPDATE`;
+      if (!locked || locked.updatedAt.getTime() !== expectedUpdatedAt.getTime() || locked.stock !== Number(originalStock) || locked.reservedStock !== Number(originalReservedStock)) throw new Error("stale");
+      if (data.stock < locked.reservedStock) throw new Error("reserved-stock");
       const linked = importedFieldsChanged && await tx.marketplaceListing.count({ where: { productId: id } });
       if (data.categoryMode === "AI" && !categoryAiReady(await getCategoryAiConfig(tx))) throw new Error("ai-disabled");
       const updated = await tx.product.update({ where: { id }, data: {
@@ -357,4 +375,3 @@ export async function createArticleAction(formData: FormData) {
   revalidatePath("/blog/");
   redirect("/admin/content/?saved=1");
 }
-

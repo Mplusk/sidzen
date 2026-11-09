@@ -13,12 +13,15 @@ export async function deleteProduct(input: { id: string; confirmation: string },
   const result = await prisma.$transaction(async tx => {
     await marketplaceLock(tx);
     if (await tx.marketplaceSyncRun.count({ where: { status: { in: ["QUEUED", "RUNNING"] } } })) throw new Error("busy");
+    // Serialize deletion with checkout reservation of this product.
+    await tx.$queryRaw`SELECT "id" FROM "Product" WHERE "id" = ${parsed.data.id} FOR UPDATE`;
     const product = await tx.product.findUnique({ where: { id: parsed.data.id }, include: {
       images: true, variants: true, marketplaceIdentities: true, marketplaceListings: true,
       categories: { include: { category: { select: { slug: true } } } }, reviews: { include: { images: true } },
     } });
     if (!product) throw new Error("missing");
     if (product.status === "PUBLISHED" && !actor.canPublish) throw new Error("permission");
+    if (product.reservedStock > 0 || await tx.orderItem.count({ where: { productId: product.id, order: { inventoryTracked: false } } })) throw new Error("reserved");
     await tx.cartItem.deleteMany({ where: { OR: [{ productId: product.id }, { variantId: { in: product.variants.map(row => row.id) } }] } });
     await tx.marketplaceListing.deleteMany({ where: { productId: product.id } });
     // Database cascades remove variants, reviews/photos, favorites, category

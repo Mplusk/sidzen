@@ -40,7 +40,7 @@ try {
   const id = ids[0], path = `/admin/products/${id}/`, input = { id, confirmation: id };
   const variant = await prisma.productVariant.create({ data: { productId: id, sku: `${prefix}-variant`, price: 599 } });
   cartId = (await prisma.cart.create({ data: { sessionKey: prefix, items: { create: [{ productId: id, unitPrice: 599 }, { variantId: variant.id, unitPrice: 599 }] } } })).id;
-  orderId = (await prisma.order.create({ data: { number: prefix, customerName: "QA", customerPhone: "+70000000000", customerEmail: "qa@example.test", subtotal: 599, total: 599, items: { create: { productId: id, productName: prefix, sku: `${prefix}-0`, unitPrice: 599, totalPrice: 599 } } } })).id;
+  orderId = (await prisma.order.create({ data: { number: prefix, status: "DELIVERED", inventoryTracked: false, customerName: "QA", customerPhone: "+70000000000", customerEmail: "qa@example.test", subtotal: 599, total: 599, items: { create: { productId: id, productName: prefix, sku: `${prefix}-0`, unitPrice: 599, totalPrice: 599 } } } })).id;
   const before = await prisma.orderItem.findFirstOrThrow({ where: { orderId } });
   await prisma.productFavorite.create({ data: { userId: actor.id, productId: id } });
   await prisma.review.create({ data: { productId: id, userId: actor.id, rating: 5, author: "QA", text: prefix, images: { create: { fileName: photo, width: 1, height: 1, sortOrder: 0 } } } });
@@ -48,6 +48,14 @@ try {
   const snapshot = { externalId: "101", sku: `${prefix}-0`, barcodes: [`${prefix}-barcode`], name: prefix, description: null, specifications: null, price: 599, oldPrice: null, images: [], issue: null };
   await prisma.$transaction(async tx => { await marketplaceLock(tx); await applySnapshot(tx, "wb", prefix, snapshot); });
   await assert.rejects(deleteProduct({ ...input, confirmation: "wrong" }, admin), /confirmation/);
+  // A historical order must be reconciled, even when already completed.
+  await assert.rejects(deleteProduct(input, { ...admin, canPublish: false }), /permission/);
+  await assert.rejects(deleteProduct(input, admin), /reserved/);
+  assert(await prisma.product.findUnique({ where: { id } }));
+  await prisma.order.update({ where: { id: orderId }, data: { inventoryTracked: true } });
+  await prisma.product.update({ where: { id }, data: { reservedStock: 1 } });
+  await assert.rejects(deleteProduct(input, admin), /reserved/);
+  await prisma.product.update({ where: { id }, data: { reservedStock: 0 } });
   await assert.rejects(deleteProduct(input, { ...admin, canPublish: false }), /permission/);
   runId = (await prisma.marketplaceSyncRun.create({ data: { provider: "wb", accountId: prefix } })).id;
   await assert.rejects(deleteProduct(input, admin), /busy/);

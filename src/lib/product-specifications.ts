@@ -6,7 +6,7 @@ export type SpecificationProduct = {
   widthMm: Measurement; depthMm: Measurement; heightMm: Measurement; weightGrams: Measurement;
   shippingWeightG?: number | null; shippingLengthMm?: number | null; shippingWidthMm?: number | null; shippingHeightMm?: number | null;
   materials: { name: string }[]; colors: { name: string }[];
-  stock: number; madeToOrder: boolean; leadDays: number;
+  stock: number; reservedStock?: number; madeToOrder: boolean; leadDays: number;
 };
 export function productSpecificationRows(product: SpecificationProduct) {
   const rows = new Map<string, string>();
@@ -49,7 +49,7 @@ export function productSpecificationRows(product: SpecificationProduct) {
   if (positive(product.shippingWeightG ?? null)) rows.set("Вес с упаковкой, г", format(product.shippingWeightG!));
   const parcel = [product.shippingLengthMm ?? null, product.shippingWidthMm ?? null, product.shippingHeightMm ?? null];
   if (parcel.every(positive)) rows.set("Габариты упаковки (Д × Ш × В)", `${parcel.map(format).join(" × ")} мм`);
-  if (product.stock > 0) rows.set("Отправка", "На следующий рабочий день");
+  if (product.stock - (product.reservedStock ?? 0) > 0) rows.set("Отправка", "На следующий рабочий день");
   else if (product.madeToOrder) rows.set("Срок изготовления", `${product.leadDays}–${product.leadDays + 2} ${pluralRu(product.leadDays + 2, ["рабочий день", "рабочих дня", "рабочих дней"])}`);
   return [...rows.entries()];
 }

@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ transaction: vi.fn(), find: vi.fn(), update: vi.fn(), orderUpdate: vi.fn(), audit: vi.fn(), settleUpdate: vi.fn(), cancelOzon: vi.fn(), cancelCdek: vi.fn() }));
+const m = vi.hoisted(() => ({ transaction: vi.fn(), find: vi.fn(), update: vi.fn(), orderUpdate: vi.fn(), audit: vi.fn(), settleUpdate: vi.fn(), cancelOzon: vi.fn(), cancelCdek: vi.fn(), release: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: m.transaction } }));
 vi.mock("@/lib/privacy", () => ({ operatorReady: async () => true }));
+vi.mock("@/lib/stock-reservations", () => ({ releaseUnsentStock: m.release }));
 import { applyYooKassaPayment } from "./payments";
 
 const payment = { id: "payment", provider: "yookassa-online", orderId: "order", externalId: null, amount: 240, status: "PENDING", paidAt: null, payload: { version: 1, shopId: "123", firstAttemptAt: "2026-11-03T12:00:00.000Z", request: "encrypted" }, order: { id: "order", total: 240, currency: "RUB", deletedAt: null } };
@@ -25,6 +26,12 @@ describe("verified YooKassa payment", () => {
     await applyYooKassaPayment({ ...remote, status: "pending", paid: false });
     expect(m.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "PAID" }) }));
   });
+  it("does not revive a canceled order after its stock was released", async () => {
+    m.find.mockResolvedValue({ ...payment, status: "CANCELED", externalId: remote.id });
+    await applyYooKassaPayment(remote);
+    expect(m.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "CANCELED" }) }));
+    expect(m.orderUpdate).not.toHaveBeenCalledWith(expect.objectContaining({ data: { status: "PAID" } }));
+  });
   it("blocks settlement after a partial refund", async () => {
     m.find.mockResolvedValue({ ...payment, status: "PAID", externalId: remote.id });
     await applyYooKassaPayment({ ...remote, refunded_amount: { value: "10.00", currency: "RUB" } });
@@ -33,6 +40,7 @@ describe("verified YooKassa payment", () => {
   });
   it("cancels unsent carrier jobs when the verified payment is canceled", async () => {
     await applyYooKassaPayment({ ...remote, status: "canceled", paid: false });
+    expect(m.release).toHaveBeenCalledWith(expect.anything(), "order");
     expect(m.cancelOzon).toHaveBeenCalledOnce(); expect(m.cancelCdek).toHaveBeenCalledOnce();
   });
 });

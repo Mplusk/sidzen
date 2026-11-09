@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { revokeGuestGrantsForOrder } from "@/lib/guest-order-grant";
 
 export type LinkOrderOwnerResult = "linked" | "already" | "changed" | "missing" | "mismatch" | "forbidden" | "completed";
 
@@ -21,6 +22,7 @@ export async function linkOrderOwner(db: PrismaClient, input: { actorId: string;
     if (order.userId && (order.purchaseConfirmedAt || ["DELIVERED", "CANCELED", "REFUNDED"].includes(order.status))) return "completed";
     const updated = await tx.order.updateMany({ where: { id: order.id, userId: input.expectedOwnerId, deletedAt: null, personalDataErasedAt: null }, data: { userId: target.id } });
     if (!updated.count) return "changed";
+    await revokeGuestGrantsForOrder(tx, order.number);
     await tx.auditLog.create({ data: { actorId: input.actorId, action: "order.owner.assign", entityType: "Order", entityId: order.id, before: { userId: order.userId }, after: { userId: target.id, confirmation: "administrator" } } });
     return "linked";
   });

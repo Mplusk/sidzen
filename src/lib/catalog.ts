@@ -26,7 +26,7 @@ export const getCatalog = unstable_cache(async (params: CatalogParams) => {
     status: "PUBLISHED", type: { in: ["READY", "PARAMETRIC"] },
     categories: { some: { category: { visible: true } } },
     ...(params.category ? { categories: { some: { category: { slug: params.category, visible: true } } } } : {}),
-    ...(params.availability === "stock" ? { stock: { gt: 0 } } : {}),
+    ...(params.availability === "stock" ? { stock: { gt: prisma.product.fields.reservedStock } } : {}),
     AND: [...filters, ...searchTerms(params.q ?? "").map((terms) => ({ OR: terms.flatMap((term) => [
       { name: { contains: term, mode: "insensitive" as const } }, { sku: { contains: term, mode: "insensitive" as const } },
       { shortDescription: { contains: term, mode: "insensitive" as const } }, { description: { contains: term, mode: "insensitive" as const } },
