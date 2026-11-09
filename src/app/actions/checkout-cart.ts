@@ -16,7 +16,7 @@ export async function updateCheckoutCartItem(id: string, expected: number, quant
     const removed = await prisma.cartItem.deleteMany({ where });
     if (!removed.count) return { error: "Корзина изменилась. Проверьте состав заказа." };
   } else {
-    if (!item.quote || !item.options || !item.product) return { error: "Товар недоступен. Проверьте корзину." };
+    if (!item.quote || !item.options || !item.product || !item.productId || !Number.isSafeInteger(item.options.stock) || item.options.stock < 0) return { error: "Товар недоступен. Проверьте корзину." };
     const otherQuantity = cart.items.filter(value => value.id !== item.id && value.productId === item.productId).reduce((sum, value) => sum + value.quantity, 0);
     if (!item.product.madeToOrder && quantity + otherQuantity > item.options.stock) return { error: "Такого количества нет в наличии." };
     let quote;

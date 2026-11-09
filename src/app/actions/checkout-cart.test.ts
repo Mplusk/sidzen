@@ -8,7 +8,7 @@ vi.mock("next/cache", () => ({ revalidatePath: m.revalidate }));
 import { updateCheckoutCartItem } from "./checkout-cart";
 
 const updatedAt = new Date("2030-01-01T00:00:00Z");
-const item = { id: "item", quantity: 1, updatedAt, available: true, quote: { unitPrice: 240 }, options: {}, product: { madeToOrder: false, stock: 3 }, selection: { material: "", color: "", quantity: 1 } };
+const item = { id: "item", productId: "product", quantity: 1, updatedAt, available: true, quote: { unitPrice: 240 }, options: { stock: 3 }, product: { madeToOrder: false, stock: 3, reservedStock: 0 }, selection: { material: "", color: "", quantity: 1 } };
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -45,10 +45,35 @@ describe("editing the cart during checkout", () => {
     expect((await updateCheckoutCartItem("item", 1, 2, updatedAt.toISOString())).error).toContain("изменилась");
   });
   it("allows recovery to available stock, but rejects unpublished or invalid configurations", async () => {
-    m.getCart.mockResolvedValue({ id: "own-cart", items: [{ ...item, quantity: 5, available: false, product: { ...item.product, stock: 2 } }] });
+    m.getCart.mockResolvedValue({ id: "own-cart", items: [{ ...item, quantity: 5, available: false, options: { stock: 2 }, product: { ...item.product, stock: 2 } }] });
     expect(await updateCheckoutCartItem("item", 5, 2, updatedAt.toISOString())).toEqual({});
     expect((await updateCheckoutCartItem("item", 5, 3, updatedAt.toISOString())).error).toContain("наличии");
     m.getCart.mockResolvedValue({ id: "own-cart", items: [{ ...item, quantity: 5, available: false, quote: null }] });
     expect((await updateCheckoutCartItem("item", 5, 2, updatedAt.toISOString())).error).toContain("недоступен");
+  });
+  it("uses stock after reservations rather than the physical quantity", async () => {
+    m.getCart.mockResolvedValue({ id: "own-cart", items: [{ ...item, options: { stock: 2 }, product: { ...item.product, stock: 5, reservedStock: 3 } }] });
+    expect(await updateCheckoutCartItem("item", 1, 2, updatedAt.toISOString())).toEqual({});
+    expect((await updateCheckoutCartItem("item", 1, 3, updatedAt.toISOString())).error).toContain("наличии");
+    expect(m.update).toHaveBeenCalledTimes(1);
+  });
+  it("counts other variants of the same product but not different products", async () => {
+    const otherVariant = { ...item, id: "other-variant", quantity: 2 };
+    const otherProduct = { ...item, id: "other-product", productId: "other", quantity: 20 };
+    m.getCart.mockResolvedValue({ id: "own-cart", items: [item, otherVariant, otherProduct] });
+    expect((await updateCheckoutCartItem("item", 1, 2, updatedAt.toISOString())).error).toContain("наличии");
+    expect(await updateCheckoutCartItem("item", 1, 1, updatedAt.toISOString())).toEqual({});
+    expect(m.update).toHaveBeenCalledTimes(1);
+  });
+  it("allows quantities beyond ready stock for made-to-order goods", async () => {
+    m.getCart.mockResolvedValue({ id: "own-cart", items: [{ ...item, options: { stock: 0 }, product: { ...item.product, madeToOrder: true, stock: 0 } }] });
+    expect(await updateCheckoutCartItem("item", 1, 4, updatedAt.toISOString())).toEqual({});
+  });
+  it("fails closed if stock or the product identity is missing", async () => {
+    m.getCart.mockResolvedValue({ id: "own-cart", items: [{ ...item, options: {} }] });
+    expect((await updateCheckoutCartItem("item", 1, 2, updatedAt.toISOString())).error).toContain("недоступен");
+    m.getCart.mockResolvedValue({ id: "own-cart", items: [{ ...item, productId: null }] });
+    expect((await updateCheckoutCartItem("item", 1, 2, updatedAt.toISOString())).error).toContain("недоступен");
+    expect(m.update).not.toHaveBeenCalled();
   });
 });
