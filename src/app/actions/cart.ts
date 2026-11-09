@@ -34,7 +34,7 @@ async function saveProduct(formData: FormData, editing: boolean) {
   const selection = selectionFromForm(formData);
   let quote;
   try { quote = priceProduct(productOptions(product), selection); } catch { redirect("/cart/?error=options"); }
-  if (!product.madeToOrder && selection.quantity > product.stock) redirect("/cart/?error=stock");
+  if (!product.madeToOrder && selection.quantity > productOptions(product).stock) redirect("/cart/?error=stock");
   const cart = await getOrCreateCart();
   const data = { quantity: selection.quantity, unitPrice: quote.unitPrice, variantId: quote.variantId ?? null, config: quote.config };
   if (editing) {
@@ -65,6 +65,8 @@ export async function getCart() {
     include: { items: { where: { product: { type: { in: ["READY", "PARAMETRIC"] } } }, include: { product: { include: { ...productOptionInclude, images: { orderBy: { sortOrder: "asc" }, take: 1 }, categories: { include: { category: true } } } } }, orderBy: { createdAt: "asc" } } },
   });
   if (!cart) return null;
+  const quantities = new Map<string | null, number>();
+  for (const item of cart.items) quantities.set(item.productId, (quantities.get(item.productId) ?? 0) + item.quantity);
   return { ...cart, items: cart.items.map((item) => {
     const options = item.product ? productOptions(item.product) : null;
     const config = (item.config ?? {}) as Record<string, unknown>;
@@ -73,7 +75,7 @@ export async function getCart() {
     try {
       if (!options || item.product?.status !== "PUBLISHED") throw new Error("unavailable");
       const quote = priceProduct(options, selection);
-      return { ...item, unitPrice: quote.unitPrice, config: quote.config, options, selection, available: options.madeToOrder || options.stock >= item.quantity, quote };
+      return { ...item, unitPrice: quote.unitPrice, config: quote.config, options, selection, available: options.madeToOrder || options.stock >= (quantities.get(item.productId) ?? item.quantity), quote };
     } catch {
       return { ...item, unitPrice: Number(item.unitPrice), options, selection: { ...defaults, quantity: item.quantity }, available: false, quote: null };
     }

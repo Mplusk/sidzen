@@ -4,6 +4,7 @@ import { decryptSecret, encryptSecret } from "@/lib/integration-secrets";
 import { operatorReady } from "@/lib/privacy";
 import { getYooKassaConfig, yookassaReady, type YooKassaConfig } from "./config";
 import { receiptForOrder } from "./receipt";
+import { releaseUnsentStock } from "@/lib/stock-reservations";
 
 const bindingSchema = z.object({ version: z.literal(1), shopId: z.string(), firstAttemptAt: z.iso.datetime(), request: z.string(), receiptStatus: z.string().optional(), reconciliationRequired: z.boolean().optional() });
 const remoteSchema = z.object({ id: z.string().uuid(), status: z.enum(["pending", "waiting_for_capture", "succeeded", "canceled"]), paid: z.boolean(), test: z.boolean(), amount: z.object({ value: z.string(), currency: z.literal("RUB") }), metadata: z.object({ orderId: z.string(), paymentId: z.string() }), recipient: z.object({ account_id: z.string() }), confirmation: z.object({ confirmation_url: z.url().optional() }).optional(), receipt_registration: z.enum(["pending", "succeeded", "canceled"]).optional(), refunded_amount: z.object({ value: z.string(), currency: z.literal("RUB") }).optional() });
@@ -40,15 +41,21 @@ export async function applyYooKassaPayment(remote: RemotePayment) {
     const status = refunded === Number(payment.amount) && refunded > 0 ? "REFUNDED" : remote.status === "succeeded" && remote.paid ? "PAID" : remote.status === "canceled" ? "CANCELED" : remote.status === "waiting_for_capture" ? "AUTHORIZED" : "PENDING";
     const partial = refunded > 0 && status !== "REFUNDED";
     const payload = { ...binding, reconciliationRequired: false, ...(remote.receipt_registration ? { receiptStatus: remote.receipt_registration } : {}) };
-    const nextStatus = payment.status === "REFUNDED" || (payment.status === "PAID" && status !== "REFUNDED") ? payment.status : status;
-    await tx.payment.update({ where: { id: payment.id }, data: { externalId: remote.id, payload, status: nextStatus, ...(status === "PAID" && !payment.paidAt ? { paidAt: new Date() } : {}), ...(partial ? { refundReviewRequired: true } : {}) } });
-    if (status === "PAID" && !payment.order.deletedAt) await tx.order.updateMany({ where: { id: payment.orderId, status: { in: ["NEW", "APPROVED", "AWAITING_PAYMENT"] } }, data: { status: "PAID" } });
+    // A verified cancellation is terminal: an out-of-order older webhook must
+    // never revive an order whose inventory may already have been released.
+    const nextStatus = payment.status === "CANCELED" || payment.status === "REFUNDED" || (payment.status === "PAID" && status !== "REFUNDED") ? payment.status : status;
+    await tx.payment.update({ where: { id: payment.id }, data: { externalId: remote.id, payload, status: nextStatus, ...(nextStatus === "PAID" && status === "PAID" && !payment.paidAt ? { paidAt: new Date() } : {}), ...(partial ? { refundReviewRequired: true } : {}) } });
+    if (nextStatus === "PAID" && status === "PAID" && !payment.order.deletedAt) await tx.order.updateMany({ where: { id: payment.orderId, status: { in: ["NEW", "APPROVED", "AWAITING_PAYMENT"] } }, data: { status: "PAID" } });
     if (nextStatus === "CANCELED") {
+      await releaseUnsentStock(tx, payment.orderId);
       await tx.order.updateMany({ where: { id: payment.orderId, status: { in: ["NEW", "APPROVED", "AWAITING_PAYMENT"] } }, data: { status: "CANCELED" } });
       await tx.ozonDeliveryJob.updateMany({ where: { shipment: { orderId: payment.orderId }, status: { notIn: ["CANCELED", "FINISHED"] } }, data: { cancelRequestedAt: new Date(), nextAttemptAt: new Date() } });
       await tx.cdekDeliveryJob.updateMany({ where: { shipment: { orderId: payment.orderId }, status: { notIn: ["CANCELED", "FINISHED"] } }, data: { cancelRequestedAt: new Date(), nextAttemptAt: new Date() } });
     }
-    if (status === "REFUNDED") {
+    if (nextStatus === "REFUNDED") {
+      // Returning money does not prove the physical goods came back. Only an
+      // order that definitely never entered carrier processing is releasable.
+      await releaseUnsentStock(tx, payment.orderId);
       await tx.order.updateMany({ where: { id: payment.orderId, status: { not: "REFUNDED" } }, data: { status: "REFUNDED" } });
       await tx.yooKassaSettlement.updateMany({ where: { orderId: payment.orderId, status: "PENDING", firstAttemptAt: null }, data: { status: "CANCELED" } });
       await tx.yooKassaSettlement.updateMany({ where: { orderId: payment.orderId, status: { in: ["SENDING", "QUEUED"] } }, data: { status: "MANUAL_REVIEW", errorCode: "refund-in-flight", leaseUntil: null } });

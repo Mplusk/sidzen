@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ permission: vi.fn(), transaction: vi.fn(), find: vi.fn(), remove: vi.fn(), update: vi.fn(), cancel: vi.fn(), audit: vi.fn(), revalidate: vi.fn(), fiscalCount: vi.fn(), fiscalDelete: vi.fn() }));
+const mocks = vi.hoisted(() => ({ permission: vi.fn(), transaction: vi.fn(), find: vi.fn(), remove: vi.fn(), update: vi.fn(), cancel: vi.fn(), audit: vi.fn(), revalidate: vi.fn(), fiscalCount: vi.fn(), fiscalDelete: vi.fn(), revoke: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ requirePermission: mocks.permission }));
 vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: mocks.transaction } }));
+vi.mock("@/lib/stock-reservations", () => ({ releaseUnsentStock: vi.fn() }));
+vi.mock("@/lib/guest-order-grant", () => ({ revokeGuestGrantsForOrder: mocks.revoke }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
-vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
+vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate, updateTag: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: (url: string) => { throw new Error(`redirect:${url}`); } }));
 
 import { deleteOrderAction } from "./admin-orders";
@@ -42,6 +44,7 @@ describe("order deletion", () => {
 
   it("deletes the exact order and records an audit in the same transaction", async () => {
     await expect(deleteOrderAction(form("3DP-123"))).rejects.toThrow("redirect:/admin/orders/?deleted=3DP-123");
+    expect(mocks.revoke).toHaveBeenCalledWith(expect.anything(), "3DP-123");
     expect(mocks.update).toHaveBeenCalledWith({ where: { id: "order-1" }, data: { deletedAt: expect.any(Date), privacyClosedAt: expect.any(Date) } });
     expect(mocks.remove).not.toHaveBeenCalled();
     expect(mocks.audit).toHaveBeenCalledWith({ data: expect.objectContaining({ actorId: "admin-1", action: "order.delete", entityId: "order-1", before: { number: "3DP-123", status: "NEW", total: "1200" } }) });

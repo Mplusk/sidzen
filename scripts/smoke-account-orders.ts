@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
-import { guestOrderSignature } from "../src/lib/guest-order-grant";
+import { createGuestGrant, guestGrantAllows, guestOrderSignature, revokeGuestGrant } from "../src/lib/guest-order-grant";
 import { claimGrantedGuestOrders } from "../src/lib/guest-order-claims";
 import { linkOrderOwner } from "../src/lib/order-owner";
 import { dashboardDelivery } from "../src/lib/dashboard-delivery";
@@ -29,9 +29,15 @@ try {
   await prisma.order.update({ where: { id: erased.id }, data: { personalDataErasedAt: new Date() } });
   await prisma.order.update({ where: { id: completed.id }, data: { status: "DELIVERED" } });
   const grant = (number: string) => ({ name: `3dp_order_${number}`, value: guestOrderSignature(number) });
+  const liveToken = await createGuestGrant(prisma, manual.number);
+  assert.equal(await guestGrantAllows(prisma, manual, liveToken), true);
+  await revokeGuestGrant(prisma, manual.number, liveToken);
+  assert.equal(await guestGrantAllows(prisma, manual, liveToken), false);
+  const replacementToken = await createGuestGrant(prisma, manual.number);
   const grants = [grant(guest.number), { ...grant(forged.number), value: "0".repeat(64) }, grant(alreadyOwned.number), grant(deleted.number), grant(erased.number)];
   assert.equal(await claimGrantedGuestOrders(prisma, buyer.id, grants), 1);
   assert.equal((await prisma.order.findUniqueOrThrow({ where: { id: guest.id } })).userId, buyer.id);
+  assert.equal(await guestGrantAllows(prisma, guest, grant(guest.number).value), false, "Claim must revoke the old guest cookie even if ownership is later cleared");
   assert.equal((await prisma.order.findUniqueOrThrow({ where: { id: forged.id } })).userId, null);
   assert.equal((await prisma.order.findUniqueOrThrow({ where: { id: alreadyOwned.id } })).userId, other.id);
   assert.equal((await prisma.order.findUniqueOrThrow({ where: { id: deleted.id } })).userId, null);
@@ -41,6 +47,8 @@ try {
   assert.equal(await linkOrderOwner(prisma, { ...input, actorId: other.id }), "forbidden");
   assert.equal(await linkOrderOwner(prisma, { ...input, targetUserId: other.id }), "mismatch");
   assert.equal(await linkOrderOwner(prisma, input), "linked");
+  assert.equal(await guestGrantAllows(prisma, manual, replacementToken), false, "Owner assignment must revoke existing grants");
+  assert.equal(await guestGrantAllows(prisma, manual, grant(manual.number).value), false, "Owner assignment must revoke legacy signatures");
   assert.equal(await linkOrderOwner(prisma, input), "already");
   assert.equal(await linkOrderOwner(prisma, { ...input, orderId: transfer.id, orderNumber: transfer.number }), "changed");
   assert.equal(await linkOrderOwner(prisma, { ...input, orderId: transfer.id, orderNumber: transfer.number, expectedOwnerId: other.id }), "linked");
@@ -52,6 +60,7 @@ try {
   assert.equal(await prisma.auditLog.count({ where: { entityId: { in: [guest.id, manual.id, transfer.id] }, action: { in: ["order.owner.claim", "order.owner.assign"] } } }), 3);
   console.log("PASS account orders: signed guest claims, privileged verified assignment, stale-owner and access checks, shipment status and audit.");
 } finally {
+  await prisma.guestOrderGrant.deleteMany({ where: { orderNumber: { startsWith: `3DP-QA-${prefix}` } } });
   await prisma.auditLog.deleteMany({ where: { entityId: { in: orders } } });
   await prisma.order.deleteMany({ where: { id: { in: orders } } });
   await prisma.user.deleteMany({ where: { id: { in: users } } });

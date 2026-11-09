@@ -4,6 +4,8 @@ vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: m.transaction, delivery
 vi.mock("@/lib/yookassa/config", () => ({ getYooKassaConfig: async () => ({ enabled: false }), yookassaReady: () => false }));
 vi.mock("@/lib/auth", () => ({ getCurrentUser: async () => ({ id: "buyer" }) }));
 vi.mock("@/app/actions/cart", () => ({ getCart: m.cart }));
+vi.mock("@/lib/stock-reservations", () => ({ reserveStock: async () => new Map([["p", 1]]) }));
+vi.mock("@/lib/checkout-product-snapshot", () => ({ assertCheckoutProductsUnchanged: vi.fn() }));
 vi.mock("@/lib/privacy", () => ({ operatorReady: async () => true, verifyDeliveryConsent: vi.fn() }));
 vi.mock("@/lib/diagnostics", () => ({ writeDiagnostic: vi.fn() }));
 vi.mock("@/lib/order-notifications", () => ({ sendOrderConfirmation: vi.fn().mockResolvedValue(undefined) }));
@@ -12,7 +14,7 @@ vi.mock("@/lib/delivery/cdek-config", () => ({ CDEK_DELIVERY_CODE: "cdek-deliver
 vi.mock("@/lib/delivery/cdek-quote", () => ({ verifyCdekQuote: m.verify, cdekConfigFingerprint: () => "config", cdekPackages: () => [{ weight: 100, length: 20, width: 10, height: 5 }] }));
 vi.mock("@/lib/delivery/cdek-client", () => ({ CdekDeliveryClient: class { tariff = m.tariff; } }));
 vi.mock("@/lib/delivery/cdek-points", () => ({ checkedCdekPoint: m.point }));
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), updateTag: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: (path: string) => { throw new Error(`redirect:${path}`); } }));
 import { createOrderAction } from "./checkout";
 

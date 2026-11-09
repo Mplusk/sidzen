@@ -6,6 +6,7 @@ vi.mock("@/lib/audit", () => ({ writeAudit: vi.fn() }));
 vi.mock("@/lib/marketplaces/sync", () => ({ guardProductWrite: vi.fn() }));
 vi.mock("@/lib/cloudkassir/lifecycle", () => ({ queueDerivedReceipt: m.queue }));
 vi.mock("@/lib/yookassa/settlements", () => ({ queueYooKassaSettlement: m.yooQueue }));
+vi.mock("@/lib/stock-reservations", () => ({ finishStockReservations: vi.fn(), releaseUnsentStock: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), updateTag: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: (path: string) => { throw new Error(`redirect:${path}`); } }));
 import { updateOrderStatusAction } from "./admin";
@@ -14,7 +15,7 @@ beforeEach(() => {
   vi.resetAllMocks(); m.permission.mockResolvedValue({ id: "staff" });
   m.find.mockResolvedValue({ id: "order", number: "QA-1", kind: "APPLICATION", status: "NEW", deletedAt: null, purchaseConfirmedAt: null, payment: null, fiscalReceipts: [] });
   m.update.mockImplementation(async (query) => ({ id: "order", number: "QA-1", ...query.data }));
-  m.transaction.mockImplementation(callback => callback({ $executeRaw: vi.fn(), order: { findUnique: m.find, update: m.update }, auditLog: { create: m.audit }, cdekDeliveryJob: { updateMany: m.cancelCdek } }));
+  m.transaction.mockImplementation(callback => callback({ $executeRaw: vi.fn(), orderItem: { findFirst: vi.fn().mockResolvedValue(null) }, order: { findUnique: m.find, update: m.update }, auditLog: { create: m.audit }, cdekDeliveryJob: { updateMany: m.cancelCdek } }));
 });
 describe("YooKassa order lifecycle", () => {
   it("requires paid status and explicit handover before queueing a settlement receipt", async () => {
@@ -35,6 +36,7 @@ describe("YooKassa order lifecycle", () => {
 });
 describe("manual application lifecycle", () => {
   it("requires order write permission", async () => { m.permission.mockRejectedValue(new Error("forbidden")); await expect(updateOrderStatusAction(request("IN_PROGRESS"))).rejects.toThrow("forbidden"); expect(m.transaction).not.toHaveBeenCalled(); });
+  it("cannot reactivate a closed order without a new stock reservation", async () => { m.find.mockResolvedValue({ id: "order", status: "CANCELED", fiscalReceipts: [] }); await expect(updateOrderStatusAction(request("IN_PROGRESS"))).rejects.toThrow("stock-status"); expect(m.update).not.toHaveBeenCalled(); });
   it("moves to in progress without payment or receipt and audits the change", async () => { await expect(updateOrderStatusAction(request("IN_PROGRESS"))).rejects.toThrow("saved=1"); expect(m.update).toHaveBeenCalledWith({ where: { id: "order" }, data: { status: "IN_PROGRESS", internalNote: null, purchaseConfirmedAt: null, privacyClosedAt: null } }); expect(m.queue).not.toHaveBeenCalled(); expect(m.audit).toHaveBeenCalledWith({ data: expect.objectContaining({ action: "order.status.update", after: expect.objectContaining({ purchaseConfirmed: false }) }) }); });
   it.each(["PAID", "AWAITING_PAYMENT", "REFUNDED"])("rejects payment-driven status %s for an application", async status => { await expect(updateOrderStatusAction(request(status))).rejects.toThrow("application-status"); expect(m.update).not.toHaveBeenCalled(); });
   it("requires explicit attestation of purchase and handover before completion", async () => { await expect(updateOrderStatusAction(request("DELIVERED"))).rejects.toThrow("application-status"); expect(m.update).not.toHaveBeenCalled(); await expect(updateOrderStatusAction(request("DELIVERED", true))).rejects.toThrow("saved=1"); expect(m.update).toHaveBeenCalledWith({ where: { id: "order" }, data: { status: "DELIVERED", internalNote: null, purchaseConfirmedAt: expect.any(Date), privacyClosedAt: expect.any(Date) } }); expect(m.queue).not.toHaveBeenCalled(); });

@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: "Товары — управлени�
 export default async function AdminProductsPage({ searchParams }: { searchParams: Promise<{ q?: string; error?: string; deleted?: string; deleteError?: string }> }) {
   const user = await requirePermission(PERMISSIONS.productsRead);
   const params = await searchParams;
-  const deleteMessages: Record<string, string> = { confirmation: "Удаление не подтверждено. Откройте карточку и подтвердите удаление.", busy: "Дождитесь завершения синхронизации с маркетплейсами и повторите удаление.", missing: "Товар уже удалён или не найден.", permission: "Нет права удаления опубликованного товара.", failed: "Не удалось удалить товар. Попробуйте ещё раз." };
+  const deleteMessages: Record<string, string> = { reserved: "Товар зарезервирован в заказах. Сначала завершите или отмените их и проверьте остатки.", confirmation: "Удаление не подтверждено. Откройте карточку и подтвердите удаление.", busy: "Дождитесь завершения синхронизации с маркетплейсами и повторите удаление.", missing: "Товар уже удалён или не найден.", permission: "Нет права удаления опубликованного товара.", failed: "Не удалось удалить товар. Попробуйте ещё раз." };
   const products = await prisma.product.findMany({ where: params.q ? { OR: [{ name: { contains: params.q, mode: "insensitive" } }, { sku: { contains: params.q, mode: "insensitive" } }] } : {}, include: { categories: { include: { category: true } } }, orderBy: { updatedAt: "desc" } });
   const canWrite = user.permissions.has(PERMISSIONS.productsWrite) || user.roles.includes("superadmin");
   const canPublish = user.permissions.has(PERMISSIONS.productsPublish) || user.roles.includes("superadmin");

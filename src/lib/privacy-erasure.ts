@@ -55,6 +55,9 @@ async function applyPlan(tx: Prisma.TransactionClient, plan: ErasurePlan, actorI
   await assertCustomer(tx, plan.userId, actorId, plan.scope);
   const orders = await tx.order.findMany({ where: { id: { in: ids } }, include: orderInclude });
   if (orders.some(order => erasureBlocked(order, evaluationNow))) throw new ErasureError("active");
+  // Deleting order items would orphan physical reservations. Resolve the
+  // delivery/stock state before deleting or anonymizing the order.
+  if (await tx.orderItem.count({ where: { orderId: { in: ids }, OR: [{ stockReservationState: "ACTIVE" }, { productId: { not: null }, order: { inventoryTracked: false } }] } })) throw new ErasureError("active");
   if (orders.some(order => hasFinancialEvidence(order) && orderRetentionEnd(order) > evaluationNow && (!plan.retainedIds.includes(order.id) || !plan.retainedUntil || orderRetentionEnd(order) > new Date(plan.retainedUntil)))) throw new ErasureError("active");
   // A restored plan may never erase someone else's newly-owned file.
   if (await tx.orderItem.count({ where: { modelFileId: { in: plan.modelIds }, orderId: { notIn: ids } } })) throw new ErasureError("files-in-use");
@@ -96,6 +99,7 @@ async function applyPlan(tx: Prisma.TransactionClient, plan: ErasurePlan, actorI
     if (!retain) {
       await tx.fiscalReceipt.deleteMany({ where: { orderId: order.id } });
       await tx.yooKassaSettlement.deleteMany({ where: { orderId: order.id } });
+      await tx.guestOrderGrant.deleteMany({ where: { orderNumber: order.number } });
       // Without an independent retention basis do not keep a re-identifiable
       // order-number stub merely for convenience or statistics.
       await tx.order.delete({ where: { id: order.id } });
@@ -144,6 +148,7 @@ async function buildAndApply(tx: Prisma.TransactionClient, userId: string | null
   const orders = await tx.order.findMany({ where: { OR: [{ id: { in: extraIds } }, ...(userId ? [{ userId }] : [])] }, include: orderInclude });
   if (orders.some(order => erasureBlocked(order, now))) throw new ErasureError("active");
   const orderIds = orders.map(order => order.id);
+  if (await tx.orderItem.count({ where: { orderId: { in: orderIds }, OR: [{ stockReservationState: "ACTIVE" }, { productId: { not: null }, order: { inventoryTracked: false } }] } })) throw new ErasureError("active");
   const models = await tx.customerModelFile.findMany({ where: { OR: [...(userId ? [{ ownerId: userId }] : []), { orderItems: { some: { orderId: { in: orderIds } } } }] }, select: { id: true, storedName: true } });
   if (await tx.orderItem.count({ where: { modelFileId: { in: models.map(model => model.id) }, orderId: { notIn: orderIds } } })) throw new ErasureError("files-in-use");
   const images = userId ? await tx.reviewImage.findMany({ where: { review: { userId } }, select: { fileName: true } }) : [];
@@ -204,4 +209,3 @@ export async function pruneErasureEvidence(now: Date) {
     await prisma.privacyErasure.delete({ where: { id: row.id } });
   }
 }
-

@@ -61,7 +61,24 @@ try {
   const path = `/admin/products/${product.id}/`, edit = await form(path, 'name="sku"');
   assert(edit.html.includes("Категория определена DeepSeek"));
   assert.equal((await prisma.productCategory.findFirstOrThrow({ where: { productId: product.id, isPrimary: true } })).categoryId, categories[0]);
-  const manual = productFields(edit.body, sku, "MANUAL", categories[1]); assert.equal((await request(path, manual)).status, 303);
+  assert(edit.body.get("productVersion"));
+  // Simulate a sale after the administrator opened the form: an old stock value must not overwrite it.
+  // Keep the timestamp identical to cover two writes landing in the same millisecond.
+  await prisma.product.update({ where: { id: product.id }, data: { stock: 0, updatedAt: new Date(String(edit.body.get("productVersion"))) } });
+  const stale = productFields(edit.body, sku, "MANUAL", categories[1]);
+  assert.match((await request(path, stale)).headers.get("location") ?? "", /error=stale/);
+  assert.equal((await prisma.product.findUniqueOrThrow({ where: { id: product.id } })).stock, 0);
+  const noVersion = productFields((await form(path, 'name="sku"')).body, sku, "MANUAL", categories[1]);
+  noVersion.delete("productVersion");
+  assert.match((await request(path, noVersion)).headers.get("location") ?? "", /error=stale/);
+  assert.equal((await prisma.product.findUniqueOrThrow({ where: { id: product.id } })).stock, 0);
+  await prisma.product.update({ where: { id: product.id }, data: { stock: 1, reservedStock: 1 } });
+  const belowReservation = productFields((await form(path, 'name="sku"')).body, sku, "MANUAL", categories[1]);
+  belowReservation.set("stock", "0");
+  assert.match((await request(path, belowReservation)).headers.get("location") ?? "", /error=reserved-stock/);
+  assert.equal((await prisma.product.findUniqueOrThrow({ where: { id: product.id } })).stock, 1);
+  await prisma.product.update({ where: { id: product.id }, data: { reservedStock: 0 } });
+  const manual = productFields((await form(path, 'name="sku"')).body, sku, "MANUAL", categories[1]); assert.equal((await request(path, manual)).status, 303);
   assert.equal((await prisma.product.findUniqueOrThrow({ where: { id: product.id } })).categoryMode, "MANUAL");
   assert.equal((await prisma.productCategory.findFirstOrThrow({ where: { productId: product.id, isPrimary: true } })).categoryId, categories[1]);
   assert.equal(await processCategoryAiJob(transport), false);

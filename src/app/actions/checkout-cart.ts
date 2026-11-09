@@ -17,7 +17,8 @@ export async function updateCheckoutCartItem(id: string, expected: number, quant
     if (!removed.count) return { error: "Корзина изменилась. Проверьте состав заказа." };
   } else {
     if (!item.quote || !item.options || !item.product) return { error: "Товар недоступен. Проверьте корзину." };
-    if (!item.product.madeToOrder && quantity > item.product.stock) return { error: "Такого количества нет в наличии." };
+    const otherQuantity = cart.items.filter(value => value.id !== item.id && value.productId === item.productId).reduce((sum, value) => sum + value.quantity, 0);
+    if (!item.product.madeToOrder && quantity + otherQuantity > item.options.stock) return { error: "Такого количества нет в наличии." };
     let quote;
     try { quote = priceProduct(item.options, { ...item.selection, quantity }); }
     catch { return { error: "Не удалось рассчитать товар. Проверьте корзину." }; }

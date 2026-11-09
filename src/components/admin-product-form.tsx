@@ -18,6 +18,7 @@ export type ProductFormOptions = {
 
 export type ProductFormValue = {
   id: string;
+  updatedAt: Date;
   name: string;
   slug: string;
   sku: string;
@@ -33,6 +34,7 @@ export type ProductFormValue = {
   oldPrice: number | null;
   costPrice: number | null;
   stock: number;
+  reservedStock: number;
   madeToOrder: boolean;
   leadDays: number;
   weightGrams: number | null;
@@ -87,15 +89,15 @@ export function AdminProductForm({ options, product, error, canPublish = true, a
   const isEdit = Boolean(product);
   const firstCategory = product ? product.primaryCategoryId : (aiReady ? "" : options.categories[0]?.id) || "";
   const specificationsText = product?.specifications ? JSON.stringify(currentProductSpecifications(product.specifications), null, 2) : "";
-  const errorMessage = error === "marketplace-busy" ? "Сейчас идёт синхронизация маркетплейсов. Дождитесь завершения или остановите её в ЛК → Маркетплейсы, затем сохраните товар." : error === "duplicate" ? "Slug или артикул уже используются другим товаром, в том числе в привязках маркетплейсов." : error === "images" ? "Проверьте список изображений и формат загружаемых файлов." : error === "specifications" ? "Характеристики должны быть корректным JSON-объектом." : error ? "Проверьте заполнение полей товара." : null;
+  const errorMessage = error === "stale" ? "Товар изменился после открытия формы. Проверьте актуальные данные и остаток, затем повторите изменения и сохраните их." : error === "reserved-stock" ? "Остаток не может быть меньше количества товаров, зарезервированных в заказах." : error === "marketplace-busy" ? "Сейчас идёт синхронизация маркетплейсов. Дождитесь завершения или остановите её в ЛК → Маркетплейсы, затем сохраните товар." : error === "duplicate" ? "Slug или артикул уже используются другим товаром, в том числе в привязках маркетплейсов." : error === "images" ? "Проверьте список изображений и формат загружаемых файлов." : error === "specifications" ? "Характеристики должны быть корректным JSON-объектом." : error ? "Проверьте заполнение полей товара." : null;
 
   return <>
     {error === "ai-disabled" && <p className="notice notice--danger">DeepSeek выключен или не подключён. Подключите его в ЛК → Подключения магазина или выберите категорию вручную.</p>}
-    {errorMessage && error !== "ai-disabled" && <p className="notice notice--danger">{errorMessage}</p>}
+    {errorMessage && error !== "ai-disabled" && <p className="notice notice--danger" role="alert">{errorMessage}</p>}
     {product?.status === "PUBLISHED" && product.stock <= 0 && !product.madeToOrder && <p className="notice" role="status">Товар виден в каталоге, но недоступен для покупки: остаток равен нулю, изготовление под заказ выключено. Укажите реальный остаток или включите «Изготавливается под заказ», если вы принимаете такие заказы.</p>}
     {product && <p className="muted">Если товар привязан к маркетплейсу, изменение названия, описания, цены, характеристик или фотографий защищает данные сайта от перезаписи. Возобновить импорт этих полей можно в <Link className="text-link" href="/account/marketplaces/">ЛК → Маркетплейсы</Link>.</p>}
     <form action={isEdit ? updateProductAction : createProductAction} className="admin-grid">
-      {product && <input type="hidden" name="id" value={product.id} />}
+      {product && <><input type="hidden" name="id" value={product.id} /><input type="hidden" name="productVersion" value={product.updatedAt.toISOString()} /><input type="hidden" name="originalStock" value={product.stock} /><input type="hidden" name="originalReservedStock" value={product.reservedStock} /></>}
 
       <section className="admin-card"><h2>Основное</h2><div className="form-grid">
         <label className="field field--full"><span>Название *</span><input name="name" defaultValue={product?.name} minLength={3} maxLength={180} required /></label>
@@ -110,7 +112,7 @@ export function AdminProductForm({ options, product, error, canPublish = true, a
         <label className="field"><span>Цена, ₽ *</span><input name="basePrice" type="number" min="0" max="999999999" step="0.01" defaultValue={product?.basePrice ?? 0} required /></label>
         <label className="field"><span>Старая цена, ₽</span><input name="oldPrice" type="number" min="0" step="0.01" defaultValue={product?.oldPrice ?? ""} /></label>
         <label className="field"><span>Себестоимость, ₽</span><input name="costPrice" type="number" min="0" step="0.01" defaultValue={product?.costPrice ?? ""} /></label>
-        <label className="field"><span>Остаток, шт.</span><input name="stock" type="number" min="0" step="1" defaultValue={product?.stock ?? 0} required /></label>
+        <label className="field"><span>Остаток, шт.</span><input name="stock" type="number" min="0" step="1" defaultValue={product?.stock ?? 0} required />{product && product.reservedStock > 0 && <small>В том числе зарезервировано в заказах: {product.reservedStock} шт.</small>}</label>
         <label className="field"><span>Срок изготовления, дней</span><input name="leadDays" type="number" min="1" max="3650" step="1" defaultValue={product?.leadDays ?? 3} required /></label>
         <label className="admin-check admin-check--standalone"><input name="madeToOrder" type="checkbox" defaultChecked={product?.madeToOrder ?? false} /><span><strong>Изготавливается под заказ</strong><small>Показывать срок вместо обычного наличия</small></span></label>
       </div></section>

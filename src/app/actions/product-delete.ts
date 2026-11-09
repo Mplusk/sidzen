@@ -12,7 +12,7 @@ export async function deleteProductAction(form: FormData) {
   try {
     result = await deleteProduct({ id: String(form.get("id") ?? ""), confirmation: String(form.get("confirmation") ?? "") }, { id: user.id, canPublish: user.roles.includes("superadmin") || user.permissions.has(PERMISSIONS.productsPublish) });
   } catch (error) {
-    const code = error instanceof Error && ["confirmation", "busy", "missing", "permission"].includes(error.message) ? error.message : "failed";
+    const code = error instanceof Error && ["confirmation", "busy", "missing", "permission", "reserved"].includes(error.message) ? error.message : "failed";
     redirect(`/admin/products/?deleteError=${code}`);
   }
   updateTag("catalog");

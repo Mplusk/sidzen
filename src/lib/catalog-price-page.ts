@@ -23,7 +23,7 @@ export async function getCatalogPricePage({ where, orderBy, min, max, descending
     const batch = await prisma.product.findMany({
       where, orderBy: priceSort ? [{ id: "asc" }] : orderBy,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}), take: 200,
-      select: { ...productOptionInclude, id: true, name: true, basePrice: true, weightGrams: true, stock: true, madeToOrder: true },
+      select: { ...productOptionInclude, id: true, name: true, basePrice: true, weightGrams: true, stock: true, reservedStock: true, madeToOrder: true },
     });
     for (const row of batch) {
       const price = defaultProductPrice(productOptions(row));

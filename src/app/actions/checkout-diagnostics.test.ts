@@ -4,7 +4,7 @@ const m = vi.hoisted(() => ({ cart: vi.fn(), config: vi.fn(), verify: vi.fn(), c
 vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: m.transaction } }));
 vi.mock("@/lib/auth", () => ({ getCurrentUser: async () => null }));
 vi.mock("@/app/actions/cart", () => ({ getCart: m.cart }));
-vi.mock("@/lib/order-access", () => ({ grantOrderAccess: vi.fn() }));
+vi.mock("@/lib/order-access", () => ({ setGuestGrantCookie: vi.fn() }));
 vi.mock("@/lib/payments", () => ({ onlinePaymentReady: async () => true, createOnlinePayment: vi.fn() }));
 vi.mock("@/lib/diagnostics", () => ({ writeDiagnostic: m.log }));
 vi.mock("@/lib/privacy", () => ({ operatorReady: async () => true, verifyDeliveryConsent: m.consent }));
