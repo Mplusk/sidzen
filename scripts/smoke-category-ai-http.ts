@@ -68,6 +68,15 @@ try {
   const stale = productFields(edit.body, sku, "MANUAL", categories[1]);
   assert.match((await request(path, stale)).headers.get("location") ?? "", /error=stale/);
   assert.equal((await prisma.product.findUniqueOrThrow({ where: { id: product.id } })).stock, 0);
+  // A list price edit must also invalidate this form even within the same millisecond.
+  const priceForm = (await form(path, 'name="sku"')).body;
+  assert(priceForm.get("originalBasePrice") !== null && priceForm.get("originalOldPrice") !== null);
+  await prisma.product.update({ where: { id: product.id }, data: { basePrice: 175, oldPrice: 200, updatedAt: new Date(String(priceForm.get("productVersion"))) } });
+  const stalePrice = productFields(priceForm, sku, "MANUAL", categories[1]);
+  assert.match((await request(path, stalePrice)).headers.get("location") ?? "", /error=stale/);
+  const afterPrice = await prisma.product.findUniqueOrThrow({ where: { id: product.id } });
+  assert.equal(Number(afterPrice.basePrice), 175); assert.equal(Number(afterPrice.oldPrice), 200);
+  await prisma.product.update({ where: { id: product.id }, data: { basePrice: 100, oldPrice: null } });
   const noVersion = productFields((await form(path, 'name="sku"')).body, sku, "MANUAL", categories[1]);
   noVersion.delete("productVersion");
   assert.match((await request(path, noVersion)).headers.get("location") ?? "", /error=stale/);

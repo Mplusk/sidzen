@@ -250,6 +250,9 @@ export async function updateProductAction(formData: FormData) {
   const originalStock = String(formData.get("originalStock") ?? "");
   const originalReservedStock = String(formData.get("originalReservedStock") ?? "");
   if (![originalStock, originalReservedStock].every((value) => /^(0|[1-9]\d*)$/.test(value) && Number.isSafeInteger(Number(value)))) redirect(`/admin/products/${id}/?error=stale`);
+  const originalBasePrice = formData.get("originalBasePrice");
+  const originalOldPrice = formData.get("originalOldPrice");
+  if (typeof originalBasePrice !== "string" || !/^\d{1,10}(?:\.\d{1,2})?$/.test(originalBasePrice) || typeof originalOldPrice !== "string" || (originalOldPrice !== "" && !/^\d{1,10}(?:\.\d{1,2})?$/.test(originalOldPrice))) redirect(`/admin/products/${id}/?error=stale`);
   const parsed = parseProductForm(formData);
   if (!parsed.success) redirect(`/admin/products/${id}/?error=${parsed.error}`);
   const before = await prisma.product.findUniqueOrThrow({ where: { id }, include: { images: true, categories: { include: { category: { select: { slug: true } } } } } });
@@ -272,8 +275,8 @@ export async function updateProductAction(formData: FormData) {
     product = await prisma.$transaction(async (tx) => {
       await guardProductWrite(tx, data.sku, id);
       // Lock before comparing so a concurrent reservation cannot change stock between the check and update.
-      const [locked] = await tx.$queryRaw<Array<{ updatedAt: Date; stock: number; reservedStock: number }>>`SELECT "updatedAt", "stock", "reservedStock" FROM "Product" WHERE "id" = ${id} FOR UPDATE`;
-      if (!locked || locked.updatedAt.getTime() !== expectedUpdatedAt.getTime() || locked.stock !== Number(originalStock) || locked.reservedStock !== Number(originalReservedStock)) throw new Error("stale");
+      const [locked] = await tx.$queryRaw<Array<{ updatedAt: Date; stock: number; reservedStock: number; basePrice: Prisma.Decimal; oldPrice: Prisma.Decimal | null }>>`SELECT "updatedAt", "stock", "reservedStock", "basePrice", "oldPrice" FROM "Product" WHERE "id" = ${id} FOR UPDATE`;
+      if (!locked || locked.updatedAt.getTime() !== expectedUpdatedAt.getTime() || locked.stock !== Number(originalStock) || locked.reservedStock !== Number(originalReservedStock) || !locked.basePrice.equals(originalBasePrice) || (locked.oldPrice == null ? originalOldPrice !== "" : originalOldPrice === "" || !locked.oldPrice.equals(originalOldPrice))) throw new Error("stale");
       if (data.stock < locked.reservedStock) throw new Error("reserved-stock");
       const linked = importedFieldsChanged && await tx.marketplaceListing.count({ where: { productId: id } });
       if (data.categoryMode === "AI" && !categoryAiReady(await getCategoryAiConfig(tx))) throw new Error("ai-disabled");
