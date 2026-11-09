@@ -4,21 +4,23 @@ import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { bulkProductStatusAction, type ProductBulkState } from "@/app/actions/product-bulk";
 import { PRODUCT_STATUSES } from "@/lib/product-admin";
+import { AdminProductPriceDialog } from "@/components/admin-product-price-dialog";
 
-export type AdminProductRow = { id: string; name: string; sku: string; category: string; price: string; stock: number; status: string; canEdit: boolean };
+export type AdminProductRow = { id: string; name: string; sku: string; category: string; price: string; oldPrice: string | null; rawBasePrice: string; rawOldPrice: string | null; productVersion: string; hasVariants: boolean; switchesToSite: boolean; stock: number; status: string; canEdit: boolean };
 const labels: Record<string, string> = { DRAFT: "Черновик", REVIEW: "На проверке", PUBLISHED: "Опубликован", HIDDEN: "Скрыт", ARCHIVED: "В архиве" };
 const initial: ProductBulkState = { success: false, message: "" };
 
 export function AdminProductsTable({ products, categories, canWrite, canPublish }: { products: AdminProductRow[]; categories: { id: string; name: string }[]; canWrite: boolean; canPublish: boolean }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [status, setStatus] = useState(canPublish ? "PUBLISHED" : "DRAFT");
+  const [editingPrice, setEditingPrice] = useState<AdminProductRow | null>(null);
   const [state, action, pending] = useActionState(bulkProductStatusAction, initial);
   const allRef = useRef<HTMLInputElement>(null);
   const selectable = products.filter(product => product.canEdit);
   const count = selectable.filter(product => selected.has(product.id)).length;
   const all = selectable.length > 0 && count === selectable.length;
   useEffect(() => { if (allRef.current) allRef.current.indeterminate = count > 0 && !all; }, [count, all]);
-  return <form action={action} className="admin-products-bulk" data-selection={canWrite}>
+  return <><form action={action} className="admin-products-bulk" data-selection={canWrite}>
     {canWrite && <div className="admin-products-bulk__toolbar">
       <span aria-live="polite">Выбрано: <strong>{count}</strong></span>
       <label className="field">Новый статус<select name="status" value={status} onChange={event => setStatus(event.target.value)} disabled={pending}>{PRODUCT_STATUSES.filter(value => canPublish || value !== "PUBLISHED").map(value => <option key={value} value={value}>{labels[value]}</option>)}</select></label>
@@ -34,8 +36,8 @@ export function AdminProductsTable({ products, categories, canWrite, canPublish 
     </tr></thead><tbody>{products.map(product => <tr key={product.id} className={selected.has(product.id) ? "admin-products-bulk__selected" : undefined}>
       {canWrite && <td><label><input type="checkbox" name="productIds" value={product.id} aria-label={`Выбрать товар ${product.sku}`} checked={selected.has(product.id)} disabled={pending || !product.canEdit} onChange={event => setSelected(current => { const next = new Set(current); if (event.target.checked) next.add(product.id); else next.delete(product.id); return next; })} /></label></td>}
       <td>{product.canEdit ? <Link href={`/admin/products/${product.id}/`}><strong>{product.name}</strong></Link> : <strong>{product.name}</strong>}</td>
-      <td>{product.sku}</td><td>{product.category}</td><td>{product.price}</td><td>{product.stock}</td><td><span className="status" data-status={product.status}>{labels[product.status] ?? product.status}</span></td>
+      <td>{product.sku}</td><td>{product.category}</td><td><div className="admin-product-price"><span>{product.price}</span><span className="admin-product-price__old">Старая: {product.oldPrice ?? "—"}</span>{canWrite && product.canEdit && <button type="button" className="admin-product-price__edit" aria-label={`Изменить цену товара ${product.name}, артикул ${product.sku}`} onClick={() => setEditingPrice(product)}>Изменить цену</button>}</div></td><td>{product.stock}</td><td><span className="status" data-status={product.status}>{labels[product.status] ?? product.status}</span></td>
       <td>{product.canEdit && <><Link className="text-link" href={`/admin/products/${product.id}/`}>Редактировать</Link><br /><Link className="admin-delete-link" href={`/admin/products/${product.id}/#delete-product`}>Удалить</Link></>}</td>
     </tr>)}</tbody></table></div>
-  </form>;
+  </form>{editingPrice && <AdminProductPriceDialog product={editingPrice} onClose={() => setEditingPrice(null)} />}</>;
 }
