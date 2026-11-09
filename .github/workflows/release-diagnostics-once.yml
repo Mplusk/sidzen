@@ -1,0 +1,52 @@
+name: Check release state (temporary)
+on:
+  pull_request:
+    types: [opened]
+jobs:
+  inspect:
+    name: Read-only release state
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'codex/release-state-check-38'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    environment: production
+    concurrency:
+      group: production-diagnostics
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - name: Inspect release and migration status
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          install -d -m 0700 "${HOME}/.ssh"
+          printf '%s\n' "${DEPLOY_SSH_PRIVATE_KEY}" > "${HOME}/.ssh/preflight_key"
+          printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > "${HOME}/.ssh/known_hosts"
+          chmod 0600 "${HOME}/.ssh/preflight_key" "${HOME}/.ssh/known_hosts"
+          ssh -i "${HOME}/.ssh/preflight_key" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "${DEPLOY_USER}@${DEPLOY_HOST}" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          revision=2984c0991d7890ea24b835e2c41a2ea95b5b7b7f
+          printf 'Server time UTC: '; date -u +%Y-%m-%dT%H:%M:%SZ
+          printf 'Active release: '; basename "$(readlink -f /opt/3dprinta/current)"
+          for service in app migrate marketplace-worker; do
+            if timeout 15s docker image inspect "3dprinta-${service}:${revision}" >/dev/null 2>&1; then echo "Image ${service}: available"; else echo "Image ${service}: unavailable"; fi
+          done
+          for container in 3dprinta-app-1 3dprinta-db-1 3dprinta-marketplace-worker-1 3dprinta-migrate-1; do
+            printf '%s: ' "$container"
+            timeout 15s docker inspect --format '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' "$container" 2>/dev/null || echo 'not present'
+          done
+          for script in registry-deploy activate; do
+            count="$(pgrep -fc "/opt/3dprinta/incoming/${revision}.${script}.sh" || true)"
+            printf 'Process %s: %s\n' "$script" "$count"
+          done
+          for command in pg_dump docker; do
+            count="$(pgrep -xc "$command" || true)"
+            printf 'Process %s: %s\n' "$command" "$count"
+          done
+          REMOTE
+      - name: Remove runner credentials
+        if: always()
+        run: rm -f -- "${HOME}/.ssh/preflight_key"
