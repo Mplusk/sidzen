@@ -30,10 +30,16 @@ try {
   await prisma.siteSetting.upsert({ where: { key: TELEGRAM_KEY }, create: { key: TELEGRAM_KEY, group: "integrations", value: stored }, update: { value: stored } });
   const login = (await form("/login/", 'name="email"')).body; login.set("email", "qa@example.test"); login.set("password", "LocalGalleryQA-2026"); assert.equal((await request("/login/", login)).status, 303);
   const telegram = await form(path, 'name="chatId"');
-  const sidebar = telegram.html.match(/<aside class="account-nav">[\s\S]*?<\/aside>/)?.[0];
-  assert(sidebar, "Account navigation must render");
-  assert(!sidebar.includes('/account/documents/') && !sidebar.includes('/account/privacy/'));
-  for (const retained of ['/account/orders/', '/account/reviews/', '/account/profile/']) assert(sidebar.includes(retained));
+  const sidebars = [...telegram.html.matchAll(/<aside\b[^>]*class="account-nav(?:\s+[^"]*)?"[^>]*>[\s\S]*?<\/aside>/g)].map(match => match[0]);
+  const personal = sidebars.find(sidebar => sidebar.includes('aria-label="Личный кабинет"'));
+  const management = sidebars.find(sidebar => sidebar.includes('aria-label="Управление магазином"'));
+  assert(personal && management && personal !== management, "Personal and management navigation must render as separate blocks");
+  assert(!personal.includes('/account/documents/') && !personal.includes('/account/privacy/'));
+  for (const retained of ['/account/orders/', '/account/reviews/', '/account/profile/']) assert(personal.includes(retained));
+  for (const href of ['/admin/orders/', '/account/clients/', '/account/monitoring/', '/account/integrations/', '/account/marketplaces/', '/account/review-moderation/', '/account/logs/', '/admin/']) {
+    assert(management.includes(`href="${href}"`), `Missing management link ${href}`);
+    assert(!personal.includes(`href="${href}"`), `Management link ${href} must not appear in personal navigation`);
+  }
   const profile = await (await request('/account/profile/')).text();
   assert(!profile.includes('href="/account/privacy/"'));
   assert.equal((await request('/account/privacy/')).headers.get("location"), "/contacts/");
@@ -51,7 +57,14 @@ try {
   telegram.body.set("chatId", "@not-a-numeric-chat");
   assert.match((await request(path, telegram.body, false)).headers.get("location") ?? "", /login/);
   assert((await request(path, telegram.body, true, "https://foreign.invalid")).status >= 400);
-  try { await prisma.userRole.deleteMany({ where: { userId: actor.id } }); assert.match((await request(path, telegram.body)).headers.get("location") ?? "", /forbidden/); }
+  try {
+    await prisma.userRole.deleteMany({ where: { userId: actor.id } });
+    const buyer = await request('/account/profile/'); assert.equal(buyer.status, 200);
+    const buyerHtml = await buyer.text();
+    assert(buyerHtml.includes('aria-label="Личный кабинет"'));
+    assert(!buyerHtml.includes('aria-label="Управление магазином"'), "A buyer without management permissions must not see an empty management block");
+    assert.match((await request(path, telegram.body)).headers.get("location") ?? "", /forbidden/);
+  }
   finally { await prisma.userRole.createMany({ data: roles, skipDuplicates: true }); }
   assert.match((await request(path, telegram.body)).headers.get("location") ?? "", /telegram-invalid/);
   assert.deepEqual((await prisma.siteSetting.findUniqueOrThrow({ where: { key: TELEGRAM_KEY } })).value, stored);
