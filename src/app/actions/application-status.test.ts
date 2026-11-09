@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ permission: vi.fn(), find: vi.fn(), update: vi.fn(), audit: vi.fn(), queue: vi.fn(), yooQueue: vi.fn(), transaction: vi.fn(), cancelCdek: vi.fn() }));
+const m = vi.hoisted(() => ({ permission: vi.fn(), find: vi.fn(), update: vi.fn(), audit: vi.fn(), queue: vi.fn(), yooQueue: vi.fn(), transaction: vi.fn(), cancelCdek: vi.fn(), ended: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ requirePermission: m.permission }));
 vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: m.transaction } }));
 vi.mock("@/lib/audit", () => ({ writeAudit: vi.fn() }));
@@ -15,9 +15,22 @@ beforeEach(() => {
   vi.resetAllMocks(); m.permission.mockResolvedValue({ id: "staff" });
   m.find.mockResolvedValue({ id: "order", number: "QA-1", kind: "APPLICATION", status: "NEW", deletedAt: null, purchaseConfirmedAt: null, payment: null, fiscalReceipts: [] });
   m.update.mockImplementation(async (query) => ({ id: "order", number: "QA-1", ...query.data }));
-  m.transaction.mockImplementation(callback => callback({ $executeRaw: vi.fn(), orderItem: { findFirst: vi.fn().mockResolvedValue(null) }, order: { findUnique: m.find, update: m.update }, auditLog: { create: m.audit }, cdekDeliveryJob: { updateMany: m.cancelCdek } }));
+  m.ended.mockResolvedValue(null);
+  m.transaction.mockImplementation(callback => callback({ $executeRaw: vi.fn(), orderItem: { findFirst: m.ended }, order: { findUnique: m.find, update: m.update }, auditLog: { create: m.audit }, cdekDeliveryJob: { updateMany: m.cancelCdek } }));
 });
 describe("YooKassa order lifecycle", () => {
+  it("prioritizes the fiscal restriction when a completed sale cannot return to shipping", async () => {
+    m.find.mockResolvedValue({ id: "order", kind: "ORDER", status: "DELIVERED", payment: { status: "PAID" }, fiscalReceipts: [{ kind: "SETTLEMENT" }] });
+    await expect(updateOrderStatusAction(request("SHIPPED"))).rejects.toThrow("fiscal-status");
+    expect(m.update).not.toHaveBeenCalled(); expect(m.queue).not.toHaveBeenCalled();
+  });
+  it("does not queue a fiscal receipt when the stock reservation was released", async () => {
+    m.find.mockResolvedValue({ id: "order", kind: "ORDER", status: "CANCELED", payment: { provider: "tochka", status: "PAID", refundReviewRequired: false }, fiscalReceipts: [{ kind: "PREPAYMENT" }] });
+    m.ended.mockResolvedValue({ stockReservationState: "RELEASED" });
+    const confirmed = request("DELIVERED"); confirmed.set("deliveryConfirmed", "on");
+    await expect(updateOrderStatusAction(confirmed)).rejects.toThrow("stock-status");
+    expect(m.queue).not.toHaveBeenCalled(); expect(m.yooQueue).not.toHaveBeenCalled(); expect(m.update).not.toHaveBeenCalled();
+  });
   it("requires paid status and explicit handover before queueing a settlement receipt", async () => {
     m.find.mockResolvedValue({ id: "order", number: "QA-1", kind: "ORDER", status: "PAID", deletedAt: null, payment: { provider: "yookassa-online", status: "PAID", refundReviewRequired: false }, fiscalReceipts: [] });
     await expect(updateOrderStatusAction(request("DELIVERED"))).rejects.toThrow("fiscal-status");
