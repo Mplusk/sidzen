@@ -20,8 +20,8 @@ export async function deleteProduct(input: { id: string; confirmation: string },
       categories: { include: { category: { select: { slug: true } } } }, reviews: { include: { images: true } },
     } });
     if (!product) throw new Error("missing");
-    if (product.reservedStock > 0 || await tx.orderItem.count({ where: { productId: product.id, order: { inventoryTracked: false } } })) throw new Error("reserved");
     if (product.status === "PUBLISHED" && !actor.canPublish) throw new Error("permission");
+    if (product.reservedStock > 0 || await tx.orderItem.count({ where: { productId: product.id, order: { inventoryTracked: false } } })) throw new Error("reserved");
     await tx.cartItem.deleteMany({ where: { OR: [{ productId: product.id }, { variantId: { in: product.variants.map(row => row.id) } }] } });
     await tx.marketplaceListing.deleteMany({ where: { productId: product.id } });
     // Database cascades remove variants, reviews/photos, favorites, category
