@@ -3,8 +3,16 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const map = vi.hoisted(() => ({ render: vi.fn() }));
-vi.mock("next/dynamic", () => ({ default: () => (props: unknown) => { map.render(props); return null; } }));
+const map = vi.hoisted(() => ({ render: vi.fn(), measure: vi.fn() }));
+vi.mock("next/dynamic", async () => {
+  const { useEffect, useRef, createElement } = await import("react");
+  return { default: () => (props: unknown) => {
+    const element = useRef<HTMLDivElement>(null);
+    map.render(props);
+    useEffect(() => { map.measure(element.current?.closest("dialog")?.open); }, []);
+    return createElement("div", { ref: element });
+  } };
+});
 import { PickupPointDialog } from "./pickup-point-dialog";
 
 const points = [
@@ -29,6 +37,15 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); });
 
 describe("pickup point dialog", () => {
+  it("opens the dialog before the map measures its container, including on reopen", async () => {
+    await render();
+    expect(map.measure).toHaveBeenLastCalledWith(true);
+    await act(async () => root.render(null));
+    await render();
+    expect(map.measure).toHaveBeenCalledTimes(2);
+    expect(map.measure).toHaveBeenLastCalledWith(true);
+  });
+
   it("previews a list selection and confirms only through the explicit action", async () => {
     await render();
     expect(confirm().disabled).toBe(true);

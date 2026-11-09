@@ -27,11 +27,23 @@ describe("pickup map coordinates", () => {
 
     const focus = initialMapPoints(points);
 
-    expect(focus).toEqual(main);
+    expect(focus.length).toBeGreaterThan(1900);
+    expect(focus.length).toBeLessThan(main.length);
+    expect(focus.every(value => value.id.startsWith("city-"))).toBe(true);
     expect(initialMapPoints(points)).toEqual(focus);
     expect(points).toEqual([...distant, ...main]);
     expect(points.filter(hasPointCoordinates)).toHaveLength(2700);
-    expect(focus[0]).toBe(main[0]);
+    expect(focus.every(value => !value.id.startsWith("distant-"))).toBe(true);
+  });
+  it("keeps a small or linear settlement usable while excluding distant suburbs from a large city view", () => {
+    const small = Array.from({ length: 20 }, (_, index) => ({ ...point, id: `small-${index}`, longitude: 38.9 + index / 1000 }));
+    expect(initialMapPoints(small)).toEqual(small);
+    const line = Array.from({ length: 100 }, (_, index) => ({ ...point, id: `line-${index}`, longitude: 38.9 + index / 10000 }));
+    const focus = initialMapPoints(line);
+    expect(focus.length).toBeGreaterThanOrEqual(90);
+    expect(focus.every(value => value.latitude === point.latitude)).toBe(true);
+    expect(focus).not.toContain(line[0]);
+    expect(line).toHaveLength(100);
   });
   it("keeps both settlements in view when a large result has no majority", () => {
     const points = Array.from({ length: 2400 }, (_, index) => ({ ...point, id: String(index), latitude: index % 2 ? 59.9 : 55.7, longitude: index % 2 ? 30.2 : 37.6 }));
