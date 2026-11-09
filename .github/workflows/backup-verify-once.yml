@@ -1,0 +1,47 @@
+name: Verify production backup (temporary)
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+jobs:
+  backup_check:
+    name: Read-only backup verification
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'codex/stock-guest-access-20261109'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - name: Verify a recent backup on the server
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          install -d -m 0700 "${HOME}/.ssh"
+          printf '%s\n' "${DEPLOY_SSH_PRIVATE_KEY}" > "${HOME}/.ssh/preflight_key"
+          printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > "${HOME}/.ssh/known_hosts"
+          chmod 0600 "${HOME}/.ssh/preflight_key" "${HOME}/.ssh/known_hosts"
+          ssh -i "${HOME}/.ssh/preflight_key" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "${DEPLOY_USER}@${DEPLOY_HOST}" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          backup_root=/var/backups/3dprinta
+          test -r "$backup_root"
+          backup_name="$(find "$backup_root" -mindepth 1 -maxdepth 1 -type d -name '20??????T??????Z' -mmin -1440 -printf '%f\n' | LC_ALL=C sort -r | head -n 1)"
+          if [[ ! "$backup_name" =~ ^20[0-9]{6}T[0-9]{6}Z$ ]]; then echo 'No readable backup from the past 24 hours.' >&2; exit 1; fi
+          backup_path="$backup_root/$backup_name"
+          manifest="$backup_path/SHA256SUMS"
+          test -s "$manifest"
+          for name in database.dump model-files.tar.gz product-images.tar.gz privacy-ledger.tar.gz; do
+            test -s "$backup_path/$name"
+            grep -Fq -- "  $backup_path/$name" "$manifest"
+          done
+          test "$(wc -l < "$manifest")" -eq 4
+          sha256sum --check --status "$manifest"
+          cd /opt/3dprinta/current
+          docker compose --project-name 3dprinta --env-file .env.production exec -T db pg_restore --list < "$backup_path/database.dump" > /dev/null
+          printf 'Verified backup: %s (UTC); four files and checksums valid; PostgreSQL archive table of contents readable.\n' "$backup_name"
+          REMOTE
+      - name: Remove runner credentials
+        if: always()
+        run: rm -f -- "${HOME}/.ssh/preflight_key"
