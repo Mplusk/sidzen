@@ -26,5 +26,14 @@ export function initialMapPoints(points: PickupPoint[]) {
   }
   // A settlement name can also occur in a distant street or district name.
   // Focus an unambiguous majority without removing any other selectable PVZ.
-  return largest.length > located.length / 2 ? largest : located;
+  if (largest.length <= located.length / 2) return located;
+  // The 30 km neighbourhood can still include distant suburbs. For a large,
+  // unambiguous settlement, fit its central 90% on each axis. This only
+  // changes the opening view: every point is still drawn and selectable.
+  if (largest.length < 40) return largest;
+  const latitudes = largest.map(point => point.latitude).sort((a, b) => a - b);
+  const longitudes = largest.map(point => point.longitude).sort((a, b) => a - b);
+  const low = Math.floor((largest.length - 1) * 0.05);
+  const high = Math.ceil((largest.length - 1) * 0.95);
+  return largest.filter(point => point.latitude >= latitudes[low] && point.latitude <= latitudes[high] && point.longitude >= longitudes[low] && point.longitude <= longitudes[high]);
 }

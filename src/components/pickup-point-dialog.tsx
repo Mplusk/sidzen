@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Image from "next/image";
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import { hasPointCoordinates, type PickupPoint } from "@/lib/delivery/points";
 import styles from "./pickup-point-dialog.module.css";
 
@@ -32,7 +32,9 @@ export function PickupPointDialog({ points, selected, carrier, onSelect, onClose
   const mapped = points.some(hasPointCoordinates);
   const carrierLogo = <Image src={carrier === "Ozon" ? "/brand/ozon-delivery.svg" : "/brand/cdek.svg"} alt={carrier} width={83} height={24} className={styles.logo} />;
 
-  useEffect(() => {
+  // Leaflet measures its container in a passive effect. Open the dialog before
+  // that effect runs so fitBounds uses the visible map size on every opening.
+  useLayoutEffect(() => {
     const element = dialog.current;
     if (!element) return;
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
