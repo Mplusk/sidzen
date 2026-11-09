@@ -12,9 +12,14 @@ import { CloudKassirSettings } from "@/components/cloudkassir-settings";
 import { CategoryAiSettings } from "@/components/category-ai-settings";
 import { CommunicationsSettings } from "@/components/communications-settings";
 import { YooKassaSettings } from "@/components/yookassa-settings";
+import { SmtpSettings } from "@/components/smtp-settings";
 
 export const metadata: Metadata = { title: "Подключения магазина", robots: { index: false, follow: false } };
 const messages: Record<string, string> = {
+  "smtp-saved": "Настройки почты сохранены.", "smtp-checked": "Подключение к почте проверено, настройки сохранены. Тестовое письмо не отправлялось.",
+  "smtp-invalid": "Проверьте пароль почтового ящика. Чтобы удалить сохранённый пароль, не вводите новый одновременно.",
+  "smtp-connection": "Не удалось подключиться к почтовому ящику. Проверьте пароль и доступность SpaceWeb. Настройки не изменены.",
+  "smtp-changed": "Настройки почты изменились. Обновите страницу и повторите.", "smtp-rate": "Слишком много проверок почты. Повторите через минуту.",
   "yookassa-rate": "Слишком много проверок ЮKassa. Повторите через минуту.", "yookassa-invalid": "Проверьте идентификатор магазина и секретный ключ ЮKassa.",
   "yookassa-receipts": "Подтвердите подключение чеков и налоговые настройки в ЮKassa.", "yookassa-connection": "ЮKassa не подтвердила рабочее подключение. Проверьте ключи и статус магазина.",
   "yookassa-changed": "Настройки изменились или остались платежи для сверки. Обновите страницу.", "yookassa-checked": "Подключение ЮKassa проверено и настройки сохранены; платёж не проводился.", "yookassa-saved": "Настройки ЮKassa сохранены.",
@@ -79,9 +84,9 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
     <h1>Подключения магазина</h1><p className="muted">Управляйте оплатой, чеками и способами доставки магазина.</p>
     <p><Link className="text-link" href="/account/marketplaces/">Подключить Ozon / Wildberries и синхронизировать товары →</Link></p>
     <nav className="integrations-nav" aria-label="Разделы подключений">
-      <a href="#yookassa-online">Оплата</a><a href="#ozon-delivery">Ozon Доставка</a><a href="#cdek-delivery">СДЭК</a><a href="#category-ai">DeepSeek</a><a href="#communications">Уведомления</a>
+      <a href="#yookassa-online">Оплата</a><a href="#ozon-delivery">Ozon Доставка</a><a href="#cdek-delivery">СДЭК</a><a href="#category-ai">DeepSeek</a><a href="#communications">Уведомления</a><a href="#smtp">Почта</a>
     </nav>
-    {params.result && messages[params.result] && <p role="status" className="content-card">{messages[params.result]}</p>}
+    {params.result && !params.result.startsWith("smtp-") && messages[params.result] && <p role="status" className="content-card">{messages[params.result]}</p>}
     <YooKassaSettings />
     <details className="content-card"><summary>Архивные платёжные интеграции — только для ранее созданных заказов</summary><p className="muted">Настройки и проверка старых обязательств сохранены. Даже включённая здесь интеграция не добавляет способы оплаты к новым заявкам.</p>
     <section className="content-card"><h2>Точка · интернет-эквайринг</h2>
@@ -110,9 +115,11 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
     <CdekDeliverySettings />
     <CategoryAiSettings />
     <CommunicationsSettings />
+    <SmtpSettings message={params.result?.startsWith("smtp-") ? messages[params.result] : undefined} error={Boolean(params.result?.startsWith("smtp-") && !["smtp-saved", "smtp-checked"].includes(params.result))} />
     <h2>Другие способы доставки</h2><p className="muted">Управляйте способами с фиксированными тарифами. Эти способы не используют API перевозчика. Ozon Delivery API подключается отдельно выше. Способ можно отключить или удалить с подтверждением — старые заказы не меняются.</p>
     {!methods.length && <p className="notice">Другие способы доставки не добавлены. При включённом Ozon покупателю доступна только Ozon Доставка.</p>}
     {methods.map((method) => <section className="content-card" key={method.id}><h3>{method.name} · {method.active ? "включён" : "выключен"}</h3>{method.code === "cdek" && <p className="notice">Этот старый фиксированный способ не отображается при оформлении. Подключите СДЭК API выше для расчёта тарифа.</p>}<DeliveryForm method={{ ...method, basePrice: Number(method.basePrice) }} /><AdminDeleteDelivery id={method.id} name={method.name} /></section>)}
     <section className="content-card"><h3>Новый способ доставки</h3><DeliveryForm /></section>
   </div>;
 }
+

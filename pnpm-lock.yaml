@@ -26,6 +26,9 @@ importers:
       next:
         specifier: 16.4.5
         version: 16.4.5(@babel/core@7.29.7)(@types/node@24.10.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      nodemailer:
+        specifier: 10.4.0
+        version: 10.4.0
       react:
         specifier: 19.2.8
         version: 19.2.8
@@ -54,6 +57,9 @@ importers:
       '@types/node':
         specifier: 24.10.2
         version: 24.10.2
+      '@types/nodemailer':
+        specifier: 8.0.2
+        version: 8.0.2
       '@types/react':
         specifier: 19.2.14
         version: 19.2.14
@@ -826,6 +832,9 @@ packages:
 
   '@types/node@24.10.2':
     resolution: {integrity: sha512-WOhQTZ4G8xZ1tjJTvKOpyEVSGgOTvJAfDK3FNFgELyaTpzhdgHVHeqW8V+UJvzF5BT+/B54T/1S2K6gd9c7bbA==}
+
+  '@types/nodemailer@8.0.2':
+    resolution: {integrity: sha512-c7M5ox8p0nEOfbJ2E9Qcmt8/QCu/VzsiAhzBiZbvky2PhKZDHpKB3sQHBM5MEZNkCfBOaS6S9//AGPRTNB7IaA==}
 
   '@types/react-dom@19.2.3':
     resolution: {integrity: sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==}
@@ -2040,6 +2049,10 @@ packages:
   node-releases@2.0.54:
     resolution: {integrity: sha512-YHs7BmmcsdAI5Ozuf8JZo6PT0mv2GIWC9vMfvUC3dp65M8hn7Ux8CPL+2oBI7juNuj9d0ndhTcznq2ODBps9cQ==}
     engines: {node: '>=18'}
+
+  nodemailer@10.4.0:
+    resolution: {integrity: sha512-fyy6r4Q5euRJ9Qr3Cts9K7SZrfe9zmz9oLOYiAR02MEJRDRci+99y0OoYBYBgpLffOqkkjXrB/d26VfiMje/kA==}
+    engines: {node: '>=20.0.0'}
 
   nwsapi@2.2.28:
     resolution: {integrity: sha512-IlVB7OS7qrOsVYlpnFIkETjMwT9jwvmocJmmM+GZU/PAB3uGi9Ezd7vcWhWBUnSc0ya4ppmQITOyP1ez9gg8cg==}
@@ -3268,6 +3281,10 @@ snapshots:
   '@types/node@24.10.2':
     dependencies:
       undici-types: 7.16.0
+
+  '@types/nodemailer@8.0.2':
+    dependencies:
+      '@types/node': 24.10.2
 
   '@types/react-dom@19.2.3(@types/react@19.2.14)':
     dependencies:
@@ -4673,6 +4690,8 @@ snapshots:
 
   node-releases@2.0.54: {}
 
+  nodemailer@10.4.0: {}
+
   nwsapi@2.2.28: {}
 
   nypm@0.6.9:
@@ -5373,3 +5392,4 @@ snapshots:
       zod: 4.5.4
 
   zod@4.5.4: {}
+
