@@ -49,4 +49,25 @@ describe("pickup map coordinates", () => {
     const points = Array.from({ length: 2400 }, (_, index) => ({ ...point, id: String(index), latitude: index % 2 ? 59.9 : 55.7, longitude: index % 2 ? 30.2 : 37.6 }));
     expect(initialMapPoints(points)).toEqual(points);
   });
+  it("focuses a clearly dominant city even when region-wide matches outnumber it", () => {
+    const city = Array.from({ length: 45 }, (_, i) => ({ ...point, id: `city-${i}`, latitude: 52.72 + i / 10000, longitude: 41.45 + i / 10000 }));
+    const others = Array.from({ length: 55 }, (_, i) => ({ ...point, id: `other-${i}`, latitude: i < 15 ? 52.9 : 48 + Math.floor(i / 10), longitude: i < 15 ? 40.5 : 70 + Math.floor(i / 10) }));
+    const all = [...city, ...others];
+    const focus = initialMapPoints(all);
+    expect(focus.length).toBeGreaterThan(35);
+    expect(focus.every(value => value.id.startsWith("city-"))).toBe(true);
+    expect(all).toHaveLength(100);
+  });
+  it("does not guess between comparable geographic clusters without a majority", () => {
+    const groups = [40, 30, 30].flatMap((size, group) => Array.from({ length: size }, (_, i) => ({ ...point, id: `${group}-${i}`, latitude: 50 + group * 2, longitude: 40 + group * 2 })));
+    expect(initialMapPoints(groups)).toEqual(groups);
+  });
+  it("keeps a separated satellite town outside the initial city bounds", () => {
+    const city = Array.from({ length: 90 }, (_, i) => ({ ...point, id: `city-${i}`, latitude: 52.7 + (i % 9) / 1000, longitude: 41.4 + (i % 10) / 1000 }));
+    const satellite = Array.from({ length: 10 }, (_, i) => ({ ...point, id: `satellite-${i}`, latitude: 52.703 + (i % 4) / 1000, longitude: 41.8 + i / 1000 }));
+    const all = [...city, ...satellite];
+    const focus = initialMapPoints(all);
+    expect(focus.every(value => value.id.startsWith("city-"))).toBe(true);
+    expect(all.filter(hasPointCoordinates)).toHaveLength(100);
+  });
 });

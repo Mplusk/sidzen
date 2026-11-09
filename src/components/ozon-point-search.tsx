@@ -19,6 +19,7 @@ export function OzonPointSearch({ onReset, onResults, onOpenMap }: {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const [suggesting, setSuggesting] = useState(false);
+  const [suggestionsUnavailable, setSuggestionsUnavailable] = useState(false);
   const request = useRef<AbortController | null>(null);
   const generation = useRef(0);
   const suggestRequest = useRef<AbortController | null>(null);
@@ -39,7 +40,7 @@ export function OzonPointSearch({ onReset, onResults, onOpenMap }: {
   useEffect(() => () => { generation.current++; request.current?.abort(); cancelSuggestions(); }, []);
 
   function change(value: string) {
-    cancel(); cancelSuggestions(); setBusy(false); setQuery(value); setMessage(""); setCities([]); setActive(-1); onReset();
+    cancel(); cancelSuggestions(); setBusy(false); setQuery(value); setMessage(""); setCities([]); setActive(-1); setSuggestionsUnavailable(false); onReset();
     const ready = value.trim().length >= 2;
     setOpen(ready); setSuggesting(ready);
     if (!ready) return;
@@ -51,9 +52,10 @@ export function OzonPointSearch({ onReset, onResults, onOpenMap }: {
       try {
         const response = await fetch(`/api/delivery/ozon/points/?q=${encodeURIComponent(value.trim())}&view=cities`, { cache: "no-store", signal: controller.signal });
         if (!response.ok) throw new Error("cities");
-        const data = await response.json() as { cities: string[] };
-        if (version === suggestGeneration.current) setCities(data.cities);
-      } catch { /* Manual city search remains available. */ }
+        const data = await response.json() as { cities: string[]; suggestionsUnavailable?: boolean };
+        if (!Array.isArray(data.cities)) throw new Error("cities");
+        if (version === suggestGeneration.current) { setCities(data.cities); setSuggestionsUnavailable(!!data.suggestionsUnavailable); }
+      } catch { if (version === suggestGeneration.current) setSuggestionsUnavailable(true); }
       finally {
         clearTimeout(deadline);
         if (version === suggestGeneration.current) { setSuggesting(false); suggestRequest.current = null; }
@@ -62,7 +64,7 @@ export function OzonPointSearch({ onReset, onResults, onOpenMap }: {
   }
   function choose(city: string) {
     cancel(); setBusy(false); setLoaded(0);
-    cancelSuggestions(); setSuggesting(false); setQuery(city); setCities([]); setOpen(false); setActive(-1); setMessage(""); onReset();
+    cancelSuggestions(); setSuggesting(false); setSuggestionsUnavailable(false); setQuery(city); setCities([]); setOpen(false); setActive(-1); setMessage(""); onReset();
   }
 
   async function search() {
@@ -102,7 +104,23 @@ export function OzonPointSearch({ onReset, onResults, onOpenMap }: {
       const points = [...all.values()];
       onResults(points, false);
       if (points.length) onOpenMap();
-      else setMessage("Пункты выдачи не найдены. Проверьте название города и попробуйте ещё раз.");
+      else {
+        // The user may submit before the debounced suggestions arrive. Offer
+        // corrections again, without silently changing the requested city.
+        setMessage("Пункты выдачи не найдены. Проверьте название города и попробуйте ещё раз.");
+        const deadline = setTimeout(() => controller.abort(), 10000);
+        try {
+          const response = await fetch(`/api/delivery/ozon/points/?q=${encodeURIComponent(query.trim())}&view=cities`, { cache: "no-store", signal: controller.signal });
+          if (!response.ok) throw new Error("cities");
+          const data = await response.json() as { cities: string[]; suggestionsUnavailable?: boolean };
+          if (!Array.isArray(data.cities)) throw new Error("cities");
+          if (version !== generation.current) return;
+          setCities(data.cities); setSuggestionsUnavailable(!!data.suggestionsUnavailable);
+          if (data.cities.length) { setOpen(true); setActive(-1); setMessage("Пункты выдачи не найдены. Выберите подходящий город из подсказок."); }
+        } catch {
+          if (version === generation.current) setSuggestionsUnavailable(true);
+        } finally { clearTimeout(deadline); }
+      }
     } catch (error) {
       if (version !== generation.current) return;
       setMessage(error instanceof Error && error.message === "rate-limit" ? "Слишком много запросов. Подождите немного и повторите поиск." : "Не удалось загрузить пункты. Нажмите «Найти ПВЗ на карте», чтобы повторить поиск.");
@@ -142,6 +160,7 @@ export function OzonPointSearch({ onReset, onResults, onOpenMap }: {
     </div>
     <p className="ozon-search-help muted" id={`${id}-help`} role="status">{busy ? `Загружено пунктов: ${loaded}. Собираем все результаты города…` : "Введите не менее двух букв."}</p>
     <p className="sr-only" id={`${id}-status`} role="status">{suggesting ? "Ищем города…" : open && cities.length ? `Вариантов города: ${cities.length}. Используйте стрелки и Enter для выбора.` : ""}</p>
+    {suggestionsUnavailable && <p className="muted" role="status">Подсказки временно недоступны. Проверьте название города и выполните поиск вручную.</p>}
     {message && <p className="notice" role="alert">{message}</p>}
   </div>;
 }

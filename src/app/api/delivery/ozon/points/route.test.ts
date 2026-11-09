@@ -123,6 +123,14 @@ describe("public Ozon PVZ map directory", () => {
     expect(m.find.mock.calls[0][0].values.slice(-2)).toEqual([501, 0]);
     expect(m.info).not.toHaveBeenCalled(); expect(m.update).not.toHaveBeenCalled();
   });
+  it("suggests a city with a transposed letter without contacting the provider", async () => {
+    m.sync.mockResolvedValue({ generation: "typo-dictionary", status: "SUCCEEDED" });
+    m.find.mockResolvedValueOnce([]).mockResolvedValueOnce([{ address: "Россия, Тамбов, улица Ленина, 1" }]);
+    const response = await GET(new Request("https://sidzen.shop/api/delivery/ozon/points/?q=Табмов&view=cities"));
+    expect(await response.json()).toEqual({ cities: ["Тамбов"] });
+    expect(m.find).toHaveBeenCalledTimes(2);
+    expect(m.info).not.toHaveBeenCalled(); expect(m.update).not.toHaveBeenCalled();
+  });
   it("ignores punctuation-only searches without accessing the database", async () => {
     expect(await (await GET(new Request("https://sidzen.shop/api/delivery/ozon/points/?q=%25__"))).json()).toEqual({ points: [] });
     expect(m.find).not.toHaveBeenCalled();
