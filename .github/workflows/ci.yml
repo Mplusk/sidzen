@@ -52,6 +52,7 @@ jobs:
         run: |
           pnpm prisma migrate deploy
           pnpm exec tsx scripts/smoke-stock-reservations.ts
+          pnpm exec tsx scripts/smoke-seed-content.ts
           pnpm exec tsx scripts/smoke-dashboard-orders.ts
           pnpm exec tsx scripts/smoke-account-orders.ts
           pnpm exec tsx scripts/smoke-retired-manufacturing.ts

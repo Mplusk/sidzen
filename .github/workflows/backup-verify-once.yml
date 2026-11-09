@@ -1,18 +1,21 @@
-name: Verify production backup (temporary)
+name: Create and verify production backup (temporary)
 on:
   pull_request:
     types: [opened, synchronize, reopened]
 jobs:
   backup_check:
-    name: Read-only backup verification
+    name: Create and verify backup
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'codex/stock-guest-access-20261109'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: production
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
     permissions:
       contents: read
     steps:
-      - name: Verify a recent backup on the server
+      - name: Create and verify a fresh backup on the server
         env:
           DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
@@ -26,21 +29,24 @@ jobs:
           ssh -i "${HOME}/.ssh/preflight_key" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "${DEPLOY_USER}@${DEPLOY_HOST}" 'bash -s' <<'REMOTE'
           set -Eeuo pipefail
           backup_root=/var/backups/3dprinta
-          test -r "$backup_root"
-          backup_name="$(find "$backup_root" -mindepth 1 -maxdepth 1 -type d -name '20??????T??????Z' -mmin -1440 -printf '%f\n' | LC_ALL=C sort -r | head -n 1)"
-          if [[ ! "$backup_name" =~ ^20[0-9]{6}T[0-9]{6}Z$ ]]; then echo 'No readable backup from the past 24 hours.' >&2; exit 1; fi
+          test -w "$backup_root"
+          exec 9>/opt/3dprinta/deploy.lock
+          flock -n 9
+          backup_name="$(date -u +%Y%m%dT%H%M%SZ)"
+          [[ "$backup_name" =~ ^20[0-9]{6}T[0-9]{6}Z$ ]]
           backup_path="$backup_root/$backup_name"
-          manifest="$backup_path/SHA256SUMS"
-          test -s "$manifest"
-          for name in database.dump model-files.tar.gz product-images.tar.gz privacy-ledger.tar.gz; do
-            test -s "$backup_path/$name"
-            grep -Fq -- "  $backup_path/$name" "$manifest"
-          done
-          test "$(wc -l < "$manifest")" -eq 4
-          sha256sum --check --status "$manifest"
+          umask 077
+          mkdir "$backup_path"
           cd /opt/3dprinta/current
+          docker compose --project-name 3dprinta --env-file .env.production exec -T db pg_dump -U 3dprinta -d 3dprinta --format=custom < /dev/null > "$backup_path/database.dump"
+          docker run --rm -v 3dprinta_model-files:/source:ro -v "$backup_path:/backup" alpine:3.20 tar -czf /backup/model-files.tar.gz -C /source .
+          docker run --rm -v 3dprinta_product-images:/source:ro -v "$backup_path:/backup" alpine:3.20 tar -czf /backup/product-images.tar.gz -C /source .
+          docker run --rm -v 3dprinta_privacy-ledger:/source:ro -v "$backup_path:/backup" alpine:3.20 tar -czf /backup/privacy-ledger.tar.gz -C /source .
+          sha256sum "$backup_path/database.dump" "$backup_path/model-files.tar.gz" "$backup_path/product-images.tar.gz" "$backup_path/privacy-ledger.tar.gz" > "$backup_path/SHA256SUMS"
+          for name in database.dump model-files.tar.gz product-images.tar.gz privacy-ledger.tar.gz SHA256SUMS; do test -s "$backup_path/$name"; done
+          sha256sum --check --status "$backup_path/SHA256SUMS"
           docker compose --project-name 3dprinta --env-file .env.production exec -T db pg_restore --list < "$backup_path/database.dump" > /dev/null
-          printf 'Verified backup: %s (UTC); four files and checksums valid; PostgreSQL archive table of contents readable.\n' "$backup_name"
+          printf 'Created and verified backup: %s (UTC); four files and checksums valid; PostgreSQL archive table of contents readable.\n' "$backup_name"
           REMOTE
       - name: Remove runner credentials
         if: always()
