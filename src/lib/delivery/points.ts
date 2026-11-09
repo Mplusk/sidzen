@@ -24,16 +24,52 @@ export function initialMapPoints(points: PickupPoint[]) {
     if (group.length > largest.length) largest = group;
     if (largest.length === located.length) break;
   }
-  // A settlement name can also occur in a distant street or district name.
-  // Focus an unambiguous majority without removing any other selectable PVZ.
-  if (largest.length <= located.length / 2) return located;
+  // A city name may also match an entire region and unrelated streets across
+  // the country. A clear plurality can identify the city even without 50% of
+  // all results. Keep ambiguous clusters together rather than guessing.
+  if (largest.length <= located.length / 2) {
+    if (largest.length < 3 || largest.length < located.length * 0.25) return located;
+    const selected = new Set(largest);
+    let runnerUp = 0;
+    for (let index = 0; index < anchorCount; index++) {
+      const anchorIndex = anchorCount === located.length ? index : Math.floor(index * (located.length - 1) / (anchorCount - 1));
+      const anchor = coordinates[anchorIndex];
+      let count = 0;
+      for (const candidate of coordinates) {
+        if (selected.has(candidate.point)) continue;
+        const h = Math.sin((candidate.latitude - anchor.latitude) / 2) ** 2 + anchor.cosLatitude * candidate.cosLatitude * Math.sin((candidate.longitude - anchor.longitude) / 2) ** 2;
+        if (h <= maxDistance) count++;
+      }
+      runnerUp = Math.max(runnerUp, count);
+    }
+    if (largest.length <= 2 * runnerUp) return located;
+  }
   // The 30 km neighbourhood can still include distant suburbs. For a large,
   // unambiguous settlement, fit its central 90% on each axis. This only
   // changes the opening view: every point is still drawn and selectable.
   if (largest.length < 40) return largest;
   const latitudes = largest.map(point => point.latitude).sort((a, b) => a - b);
   const longitudes = largest.map(point => point.longitude).sort((a, b) => a - b);
-  const low = Math.floor((largest.length - 1) * 0.05);
-  const high = Math.ceil((largest.length - 1) * 0.95);
-  return largest.filter(point => point.latitude >= latitudes[low] && point.latitude <= latitudes[high] && point.longitude >= longitudes[low] && point.longitude <= longitudes[high]);
+  // On either edge, stop before a geographically separated satellite town.
+  // Require a meaningful physical gap as well as a gap relative to the city;
+  // this leaves continuous, elongated cities unchanged.
+  const edgeBounds = (values: number[], kmPerDegree: number) => {
+    const last = values.length - 1;
+    let low = Math.floor(last * 0.05);
+    let high = Math.ceil(last * 0.95);
+    const middleLow = Math.floor(last * 0.2);
+    const middleHigh = Math.ceil(last * 0.8);
+    const coreWidth = values[Math.floor(last * 0.75)] - values[Math.floor(last * 0.25)];
+    const separated = (gap: number) => gap * kmPerDegree >= 3 && gap > coreWidth * 0.25;
+    for (let index = low; index < middleLow; index++) {
+      if (separated(values[index + 1] - values[index])) low = index + 1;
+    }
+    for (let index = high - 1; index >= middleHigh; index--) {
+      if (separated(values[index + 1] - values[index])) high = index;
+    }
+    return [values[low], values[high]] as const;
+  };
+  const [minLat, maxLat] = edgeBounds(latitudes, 111);
+  const [minLon, maxLon] = edgeBounds(longitudes, 111 * Math.cos(radians(latitudes[Math.floor(latitudes.length / 2)])));
+  return largest.filter(point => point.latitude >= minLat && point.latitude <= maxLat && point.longitude >= minLon && point.longitude <= maxLon);
 }

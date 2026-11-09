@@ -56,6 +56,40 @@ describe("city search for the pickup map", () => {
     await act(async () => finish(Response.json({ cities: ["Яблоновский"] })));
     expect(container.textContent).not.toContain("Яблоновский");
   });
+  it("allows manual search and reports unavailable suggestions", async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetch).mockRejectedValueOnce(new Error("network"));
+    await type("Тамов");
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(container.textContent).toContain("Подсказки временно недоступны");
+    expect(button().disabled).toBe(false);
+    await search();
+    expect(openMap).toHaveBeenCalledOnce();
+  });
+  it("offers a correction after immediate search returns no points, without changing the input", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ points: [] }))
+      .mockResolvedValueOnce(Response.json({ cities: ["Тамбов"] }));
+    await type("Табмов"); await search();
+    expect(input().value).toBe("Табмов");
+    expect(container.textContent).toContain("Выберите подходящий город");
+    expect(container.querySelector('[role="option"]')?.textContent).toBe("Тамбов");
+    expect(openMap).not.toHaveBeenCalled();
+    await act(async () => container.querySelector<HTMLButtonElement>('[role="option"]')!.click());
+    expect(input().value).toBe("Тамбов"); expect(openMap).not.toHaveBeenCalled();
+  });
+  it("ignores corrections arriving after the city is edited", async () => {
+    let finish!: (response: Response) => void;
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ points: [] }))
+      .mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    await type("Табмов");
+    // The second request remains in flight until the input changes.
+    let searchPromise!: Promise<void>;
+    await act(async () => { searchPromise = search(); });
+    await type("Казань");
+    await act(async () => { finish(Response.json({ cities: ["Тамбов"] })); await searchPromise; });
+    expect(input().value).toBe("Казань");
+    expect(container.textContent).not.toContain("Тамбов");
+  });
   it("ignores a stale response after editing the city", async () => {
     let finish!: (value: Response) => void;
     vi.mocked(fetch).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
@@ -67,9 +101,10 @@ describe("city search for the pickup map", () => {
     await search(); expect(openMap).toHaveBeenCalledOnce();
   });
   it("supports Enter without submitting the form and gives errors for empty results or failures", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ points: [] }));
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ points: [] })).mockResolvedValueOnce(Response.json({ cities: [] }));
     await type("Омск");
     await act(async () => input().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+    await vi.waitFor(() => expect(button().disabled).toBe(false));
     expect(container.textContent).toContain("Пункты выдачи не найдены");
     expect(openMap).not.toHaveBeenCalled();
     vi.mocked(fetch).mockRejectedValueOnce(new Error("network"));

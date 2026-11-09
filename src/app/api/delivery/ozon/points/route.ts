@@ -9,6 +9,7 @@ import { pointSearchTerms } from "@/lib/delivery/point-search";
 import { pointSearchSql } from "@/lib/delivery/point-search-sql";
 import { destinationCity } from "@/lib/delivery/destination-city";
 import { pointMapCache } from "@/lib/delivery/point-map-cache";
+import { cityIndex, rankCities } from "@/lib/delivery/city-suggestions";
 
 export async function GET(request: Request) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
@@ -66,6 +67,24 @@ export async function GET(request: Request) {
       const key = normalize(city);
       if (key.startsWith(prefix) && !seen.has(key)) { seen.add(key); names.push(city); }
       if (names.length === 8) break;
+    }
+    // A typo cannot match the indexed prefix search above. Build a shared
+    // directory index only for meaningful input, not for every keystroke.
+    if (prefix.length >= 4 && prefix.length <= 80) {
+      try {
+        const sync = await prisma.ozonDeliverySync.findUnique({ where: { id: "ozon" }, select: { generation: true, status: true } });
+        const key = JSON.stringify([deliveryConfigFingerprint(config), sync?.generation ?? null, sync?.status ?? null]);
+        const methodId = BigInt(config.shipmentMethodId);
+        const dictionary = await cityIndex(key, () => prisma.$queryRaw<{ address: string }[]>`
+          SELECT DISTINCT "address" FROM "OzonDeliveryPoint"
+          WHERE "clientId" = ${config.clientId} AND "methodId" = ${methodId} AND "active" = true
+        `);
+        return Response.json({ cities: rankCities(search, dictionary, names) }, { headers: { "Cache-Control": "private, no-store" } });
+      } catch {
+        // Keep exact prefix results usable, but tell the client that typo
+        // suggestions could not be loaded.
+        return Response.json({ cities: names, suggestionsUnavailable: true }, { headers: { "Cache-Control": "private, no-store" } });
+      }
     }
     return Response.json({ cities: names }, { headers: { "Cache-Control": "private, no-store" } });
   }
