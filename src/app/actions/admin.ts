@@ -339,9 +339,11 @@ export async function updateSettingAction(formData: FormData) {
   const key = String(formData.get("key") ?? "");
   const raw = String(formData.get("value") ?? "");
   const current = await prisma.siteSetting.findUnique({ where: { key } });
-  if (!current || ["system", "integrations"].includes(current.group)) redirect("/admin/settings/?error=key");
+  if (!current || ["system", "integrations", "security"].includes(current.group) || key.startsWith("security.")) redirect("/admin/settings/?error=key");
   const value = typeof current.value === "number" ? Number(raw) : raw;
-  await prisma.siteSetting.update({ where: { key }, data: { value } });
+  // Do not write if this setting was moved into a protected group in parallel.
+  const updated = await prisma.siteSetting.updateMany({ where: { key, group: current.group }, data: { value } });
+  if (updated.count !== 1) redirect("/admin/settings/?error=key");
   await writeAudit({ actorId: user.id, action: "setting.update", entityType: "SiteSetting", entityId: current.id, before: { value: current.value }, after: { value } });
   revalidatePath("/", "layout");
 }
@@ -350,8 +352,17 @@ export async function assignRoleAction(formData: FormData) {
   const actor = await requirePermission(PERMISSIONS.usersWrite);
   const userId = String(formData.get("userId") ?? "");
   const roleId = String(formData.get("roleId") ?? "");
-  await prisma.userRole.upsert({ where: { userId_roleId: { userId, roleId } }, update: {}, create: { userId, roleId } });
-  await writeAudit({ actorId: actor.id, action: "user.role.assign", entityType: "User", entityId: userId, after: { roleId } });
+  await prisma.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412051)`;
+    await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`;
+    const existing = await tx.userRole.findUnique({ where: { userId_roleId: { userId, roleId } } });
+    if (!existing) {
+      await tx.userRole.create({ data: { userId, roleId } });
+      await tx.session.updateMany({ where: { userId, adminVerifiedAt: { not: null } }, data: { adminVerifiedAt: null } });
+      await tx.adminLoginChallenge.updateMany({ where: { userId, consumedAt: null }, data: { consumedAt: new Date() } });
+    }
+    await tx.auditLog.create({ data: { actorId: actor.id, action: "user.role.assign", entityType: "User", entityId: userId, after: { roleId } } });
+  });
   revalidatePath("/admin/users/");
 }
 
@@ -378,3 +389,4 @@ export async function createArticleAction(formData: FormData) {
   revalidatePath("/blog/");
   redirect("/admin/content/?saved=1");
 }
+

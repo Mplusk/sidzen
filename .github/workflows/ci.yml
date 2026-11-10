@@ -92,6 +92,7 @@ jobs:
           pnpm exec tsx scripts/smoke-product-bulk-http.ts
           pnpm exec tsx scripts/smoke-product-delete-http.ts
           pnpm exec tsx scripts/smoke-category-ai-http.ts
+          pnpm exec tsx scripts/smoke-admin-email-http.ts
           pnpm exec tsx scripts/smoke-communications-http.ts
           pnpm exec tsx scripts/smoke-clients-http.ts
           pnpm exec tsx scripts/smoke-privacy-http.ts
@@ -324,3 +325,4 @@ jobs:
       - name: Remove relay runner credentials
         if: always()
         run: rm -f -- "${HOME}/.ssh/relay_deploy"
+

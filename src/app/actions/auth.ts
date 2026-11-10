@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { consentDocument, privacySubject, operatorReady } from "@/lib/privacy";
 import { CONSENT_VERSION } from "@/lib/privacy-documents";
+import { adminEmailProtectionEnabled, beginAdminLogin } from "@/lib/admin-login-challenge";
 
 const credentialsSchema = z.object({ email: z.email().transform((value) => value.toLowerCase().trim()), password: z.string().min(10).max(200) });
 
@@ -23,8 +24,14 @@ export async function loginAction(formData: FormData) {
   if (!parsed.success) redirect(`/login/?error=invalid&returnTo=${encodeURIComponent(returnTo)}`);
   const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
   if (!rateLimit(`login:${ip}`, 10, 15 * 60 * 1000).allowed) redirect("/login/?error=rate-limit");
-  const user = await prisma.user.findUnique({ where: { email: parsed.data.email } });
+  const user = await prisma.user.findUnique({ where: { email: parsed.data.email }, include: { roles: { include: { role: { include: { permissions: true } } } } } });
   if (!user || !user.isActive || !verifyPassword(parsed.data.password, user.passwordHash)) redirect(`/login/?error=invalid&returnTo=${encodeURIComponent(returnTo)}`);
+  const privileged = user.roles.some(({ role }) => role.code === "superadmin" || role.permissions.length > 0);
+  if (privileged && await adminEmailProtectionEnabled()) {
+    const sent = await beginAdminLogin(user, returnTo);
+    if (!sent) redirect("/login/?error=email-confirmation-unavailable");
+    redirect("/admin-login-confirm/?sent=1");
+  }
   await createSession(user.id);
   redirect(returnTo);
 }
@@ -60,3 +67,4 @@ export async function updateProfileAction(formData: FormData) {
   await prisma.user.update({ where: { id: user.id }, data: { ...parsed.data, privacyConsents: { create: { purpose: "account", version: CONSENT_VERSION, document: await consentDocument("account"), subjectHash: privacySubject(user.email) } } } });
   redirect("/account/profile/?saved=1");
 }
+

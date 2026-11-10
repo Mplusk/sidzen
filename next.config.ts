@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { adminConfirmCsp } from "./src/lib/admin-confirm-document";
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -41,6 +42,10 @@ const nextConfig: NextConfig = {
         ]
       },
       {
+        source: "/admin-login-confirm/:path*",
+        headers: [{ key: "Content-Security-Policy", value: adminConfirmCsp }, { key: "X-Frame-Options", value: "DENY" }, { key: "Cache-Control", value: "private, no-store, max-age=0" }, { key: "X-Robots-Tag", value: "noindex, nofollow" }]
+      },
+      {
         source: "/:section(account|admin|checkout|cart|favorites|login|register|api/account|api/auth)/:path*",
         headers: [{ key: "Cache-Control", value: "private, no-store, max-age=0" }, { key: "X-Robots-Tag", value: "noindex, nofollow" }]
       }
@@ -49,3 +54,4 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+

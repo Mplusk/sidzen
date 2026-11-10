@@ -88,6 +88,7 @@ model User {
   privacyRequests PrivacyRequest[]
   socialAccounts SocialAccount[]
   oauthAttempts OAuthAttempt[]
+  adminLoginChallenges AdminLoginChallenge[]
 }
 
 // Daily public-page totals only. No event rows, precise times or visitor keys.
@@ -214,9 +215,29 @@ model Session {
   createdAt DateTime @default(now())
   ip        String?
   userAgent String?
+  adminVerifiedAt DateTime?
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
+}
+
+model AdminLoginChallenge {
+  id String @id @default(cuid())
+  tokenHash String @unique
+  bindingHash String
+  userId String
+  email String
+  passwordFingerprint String
+  returnTo String
+  purpose String @default("login")
+  sessionHash String?
+  smtpRevision String?
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt])
+  @@index([expiresAt])
 }
 
 model Address {
@@ -1072,3 +1093,4 @@ model GuestOrderGrant {
   @@index([orderNumber])
   @@index([expiresAt])
 }
+

@@ -13,6 +13,7 @@ const result = (code: string): never => redirect(`/account/integrations/?result=
 
 export async function saveSmtpSettings(form: FormData) {
   const actor = await requirePermission("settings.write");
+  if (!actor.roles.includes("superadmin")) redirect("/account/?error=forbidden");
   if (!rateLimit(`smtp-settings:${actor.id}`, 5, 60000).allowed) result("rate");
   const current = await getSmtpConfig();
   const rawPassword = form.get("password");
@@ -29,6 +30,8 @@ export async function saveSmtpSettings(form: FormData) {
   const checkedAt = check ? new Date().toISOString() : password === current.password ? current.checkedAt : null;
   const saved = await prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412049)`;
+    const stillSuperadmin = await tx.user.findFirst({ where: { id: actor.id, isActive: true, roles: { some: { role: { code: "superadmin" } } } }, select: { id: true } });
+    if (!stillSuperadmin) return false;
     if ((await getSmtpConfig(tx)).revision !== String(form.get("revision") ?? "")) return false;
     const value = { password: password ? encryptSecret(password, SMTP_KEY) : "", checkedAt, revision: randomUUID() };
     await tx.siteSetting.upsert({ where: { key: SMTP_KEY }, create: { key: SMTP_KEY, group: "integrations", label: "SpaceWeb · исходящая почта", value }, update: { value } });
