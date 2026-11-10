@@ -8,7 +8,7 @@ import { FavoriteButton } from "@/components/favorite-button";
 
 type ProductCardData = Prisma.ProductGetPayload<{ include: typeof productOptionInclude & { images: true; categories: { include: { category: true } } } }>;
 
-export function ProductCard({ product, highPriority = false }: { product: ProductCardData; highPriority?: boolean }) {
+export function ProductCard({ product, highPriority = false, stockReviewRequired = false }: { product: ProductCardData; highPriority?: boolean; stockReviewRequired?: boolean }) {
   const category = product.categories.find((item) => item.isPrimary)?.category ?? product.categories[0]?.category;
   const price = defaultProductPrice(productOptions(product));
   const available = Math.max(0, product.stock - product.reservedStock);
@@ -22,8 +22,9 @@ export function ProductCard({ product, highPriority = false }: { product: Produc
           {discounted && <><s>{formatPrice(product.oldPrice!)}</s><span className="product-card__discount">−{Math.round((1 - price / Number(product.oldPrice)) * 100)}%</span></>}
         </div>
         <h3><Link href={`/catalog/${category?.slug ?? "products"}/${product.slug}/`}>{product.name}</Link></h3>
-        <span className={"product-card__availability" + (available > 0 || product.madeToOrder ? " is-available" : "")}>{available > 0 ? "В наличии" : product.madeToOrder ? "Под заказ" : "Нет в наличии"}</span>
+        <span className={"product-card__availability" + (!stockReviewRequired && (available > 0 || product.madeToOrder) ? " is-available" : "")}>{stockReviewRequired ? "Наличие уточняется" : available > 0 ? "В наличии" : product.madeToOrder ? "Под заказ" : "Нет в наличии"}</span>
       </div>
     </article>
   );
 }
+

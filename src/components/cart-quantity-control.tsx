@@ -2,10 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { updateCheckoutCartItem } from "@/app/actions/checkout-cart";
+import { updateCheckoutCartGroup } from "@/app/actions/checkout-cart";
+import type { CartGroupMember } from "@/lib/cart-groups";
 import styles from "./cart-quantity-control.module.css";
 
-export function CartQuantityControl({ id, name, quantity, max, canAdjust, revision }: { id: string; name: string; quantity: number; max: number; canAdjust: boolean; revision: string }) {
+export function CartQuantityControl({ members, name, quantity, max, canAdjust }: { members: CartGroupMember[]; name: string; quantity: number; max: number; canAdjust: boolean }) {
   const router = useRouter();
   const [pending, startUpdate] = useTransition();
   const [error, setError] = useState("");
@@ -14,7 +15,7 @@ export function CartQuantityControl({ id, name, quantity, max, canAdjust, revisi
     setError("");
     startUpdate(async () => {
       try {
-        const result = await updateCheckoutCartItem(id, quantity, next, revision);
+        const result = await updateCheckoutCartGroup(members, next);
         if (result.error) setError(result.error);
         router.refresh();
       } catch { setError("Не удалось изменить количество. Повторите попытку."); }
@@ -29,3 +30,4 @@ export function CartQuantityControl({ id, name, quantity, max, canAdjust, revisi
     {error && <p className={styles.error} role="alert">{error}</p>}
   </div>;
 }
+

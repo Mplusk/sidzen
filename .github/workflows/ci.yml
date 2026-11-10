@@ -88,6 +88,8 @@ jobs:
           pnpm exec tsx scripts/smoke-product-card-http.ts
           pnpm exec tsx scripts/smoke-favorites-http.ts
           pnpm exec tsx scripts/smoke-catalog-usability.ts
+          pnpm exec tsx scripts/smoke-legacy-stock-http.ts
+          pnpm exec tsx scripts/smoke-cart-groups-http.ts
           pnpm exec tsx scripts/smoke-product-groups-http.ts
           pnpm exec tsx scripts/smoke-product-bulk-http.ts
           pnpm exec tsx scripts/smoke-product-delete-http.ts
