@@ -14,9 +14,7 @@ import { OzonDeliveryClient, OzonDeliveryError, positiveId } from "@/lib/deliver
 import { deliveryConfigFingerprint, getOzonDeliveryConfig, OZON_DELIVERY_SETTING, ozonDeliveryConfigSchema, requireOzonDelivery } from "@/lib/delivery/ozon-config";
 import { buildOzonPostings, cartDeliveryFingerprint, signOzonQuote } from "@/lib/delivery/ozon-quote";
 import { retryOzonQuote } from "@/lib/delivery/ozon-retry";
-import { consentDocument, privacySubject, operatorReady } from "@/lib/privacy";
-import { CONSENT_VERSION } from "@/lib/privacy-documents";
-import { getCurrentUser } from "@/lib/auth";
+import { operatorReady } from "@/lib/privacy";
 import { customerDeliveryPrice } from "@/lib/delivery/pricing";
 import { writeDiagnostic } from "@/lib/diagnostics";
 import { ozonDiagnosticCode } from "@/lib/diagnostic-events";
@@ -68,9 +66,7 @@ export async function saveOzonDelivery(form: FormData) {
   finish(config.authorizedAt && !config.shipmentMethodId ? config.methods?.some(method => method.status === "active") ? "ozon-select-method" : "ozon-no-method" : config.checkedAt ? "ozon-verified" : "saved");
 }
 
-export async function quoteOzonDelivery(phoneInput: string, pointInput: string, consentAccepted: boolean = false) {
-  // This check must precede even OAuth / point-info calls, not just the UI button.
-  if (consentAccepted !== true) return { error: "Для передачи номера Ozon необходимо отдельное согласие на расчёт доставки." };
+export async function quoteOzonDelivery(phoneInput: string, pointInput: string) {
   if (!isRussianMobilePhone(phoneInput)) return { error: "Укажите российский мобильный номер в формате +7 (9XX) XXX-XX-XX и повторите проверку доставки.", reason: "recipient" as const };
   if (!await operatorReady()) return { error: "Для расчёта нужны сведения оператора и подтверждение размещения базы данных в России. Расчёт временно недоступен." };
   const ip = (await headers()).get("x-forwarded-for")?.split(",")[0] || "unknown";
@@ -83,8 +79,6 @@ export async function quoteOzonDelivery(phoneInput: string, pointInput: string, 
     requireOzonDelivery(config);
     if (!cart?.items.length || cart.items.some(item => !item.available)) throw new OzonDeliveryError("cart");
     const request = { recipient: { phone_number: phone }, delivery: { delivery_point: { delivery_point_id: id } }, postings: buildOzonPostings(cart.items, config) };
-    const user = await getCurrentUser();
-    const consent = await prisma.privacyConsent.create({ data: { userId: user?.id, subjectHash: privacySubject(cart.id, phone), purpose: "ozon", version: CONSENT_VERSION, document: await consentDocument("ozon"), expiresAt: new Date(Date.now() + 15 * 60000) } });
     const { value: { point, calculation }, attempts } = await retryOzonQuote(config, async api => {
       const point = (await api.pointInfo([id])).find(point => point.delivery_point_id === id && point.is_active);
       if (!point) throw new OzonDeliveryError("point");
@@ -92,7 +86,7 @@ export async function quoteOzonDelivery(phoneInput: string, pointInput: string, 
       return { point, calculation: await api.checkout(request) };
     });
     await writeDiagnostic("delivery.quote.ok", { stage: "quote", durationMs: Date.now() - started, attempts, pointId: selectedPointId, expectedParcels: request.postings.length });
-    return { ...calculation, cost: customerDeliveryPrice(), address: point.full_address, token: signOzonQuote({ ...calculation, consentId: consent.id, address: point.full_address, request, cart: cartDeliveryFingerprint(cart), config: deliveryConfigFingerprint(config), expires: consent.expiresAt!.getTime() }) };
+    return { ...calculation, cost: customerDeliveryPrice(), address: point.full_address, token: signOzonQuote({ ...calculation, quoteVersion: 2, address: point.full_address, request, cart: cartDeliveryFingerprint(cart), config: deliveryConfigFingerprint(config), expires: Date.now() + 15 * 60000 }) };
   } catch (error) {
     const code = error instanceof OzonDeliveryError ? error.code : "provider";
     const reference = await writeDiagnostic(ozonDiagnosticCode(code), { stage: "quote", durationMs: Date.now() - started, reason: code, attempts: error instanceof OzonDeliveryError ? error.attempts : undefined,

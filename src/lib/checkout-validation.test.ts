@@ -11,10 +11,11 @@ describe("checkout validation", () => {
     expect(checkoutSchema.safeParse({ ...input, delivery: "russian-post", postalCode: "" }).success).toBe(false);
     expect(checkoutSchema.safeParse({ ...input, postalCode: "12345x" }).success).toBe(false);
   });
-  it("requires a separate Ozon permission, not the offer checkbox alone", () => {
+  it("accepts an Ozon order without a separate checkbox while requiring a verified quote and mobile phone", () => {
     const order = { ...input, delivery: "ozon-delivery", city: "", address: "", ozonQuote: "signed-quote" };
-    expect(checkoutSchema.safeParse(order).success).toBe(false);
-    expect(checkoutSchema.safeParse({ ...order, ozonConsent: "on" }).success).toBe(true);
-    expect(checkoutSchema.safeParse({ ...order, ozonConsent: "on", phone: "+7 (000) 000-00-00" }).success).toBe(false);
+    expect(checkoutSchema.safeParse(order).success).toBe(true);
+    expect(checkoutSchema.safeParse({ ...order, ozonQuote: "" }).success).toBe(false);
+    expect(checkoutSchema.safeParse({ ...order, phone: "+7 (000) 000-00-00" }).success).toBe(false);
+    expect(checkoutSchema.safeParse({ ...order, legal: "" }).success).toBe(false);
   });
 });

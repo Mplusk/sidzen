@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import Image from "next/image";
 import { quoteOzonDelivery } from "@/app/actions/ozon-delivery";
 import type { PickupPoint } from "@/lib/delivery/points";
@@ -14,7 +13,6 @@ import styles from "./ozon-delivery-picker.module.css";
 export type DeliveryQuoteView = { token: string; cost: number; days: number; address: string };
 
 export function OzonDeliveryPicker({ phone, onEditPhone, onQuote, packingReady = true, verificationRevision = 0 }: { phone: string; onEditPhone: () => void; onQuote: (value: DeliveryQuoteView | null) => void; packingReady?: boolean; verificationRevision?: number }) {
-  const [consent, setConsent] = useState(false);
   const [city, setCity] = useState<PickupMapCity | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<PickupPoint | null>(null);
   const point = selectedPoint?.id ?? "";
@@ -47,18 +45,18 @@ export function OzonDeliveryPicker({ phone, onEditPhone, onQuote, packingReady =
     });
   }
   async function calculate() {
-    const issue = deliveryCheckIssue(phone, point, consent, packingReady);
-    if (issue) { setMessage(issue); setRecipientError(issue === deliveryCheckIssue(phone, "selected", true, true)); return; }
+    const issue = deliveryCheckIssue(phone, point, packingReady);
+    if (issue) { setMessage(issue); setRecipientError(issue === deliveryCheckIssue(phone, "selected", true)); return; }
     clearQuote(); setPending("quote"); const version = revision.current; const requestedPhone = phone;
     try {
-      const result = await withDeliveryDeadline(quoteOzonDelivery(phone, point, consent));
+      const result = await withDeliveryDeadline(quoteOzonDelivery(phone, point));
       if (version !== revision.current || phoneRef.current !== requestedPhone) return;
       if ("token" in result) { const value = result as DeliveryQuoteView; setQuote({ ...value, phone: requestedPhone, verificationRevision }); onQuote(value); }
       else { setMessage(result.error); setRecipientError("reason" in result && result.reason === "recipient"); }
     } catch { if (version === revision.current && phoneRef.current === requestedPhone) setMessage("Ozon не ответил на проверку доставки. Повторите попытку или выберите другой способ доставки."); }
     finally { if (version === revision.current) setPending(null); }
   }
-  const checkIssue = deliveryCheckIssue(phone, point, consent, packingReady);
+  const checkIssue = deliveryCheckIssue(phone, point, packingReady);
   return <div className={`ozon-delivery-picker ${styles.picker}`}>
     {!packingReady && <p className="notice notice--danger">Для одного из товаров магазин ещё не указал вес и размеры упакованной посылки. Проверка Ozon недоступна — выберите другую доставку или обратитесь в магазин.</p>}
     <OzonPointSearch onReset={() => { setMapOpen(false); setSelectedPoint(null); setCity(null); clearQuote(); }} onCity={value => { setCity(value); setMapOpen(true); }} onOpen={city ? () => setMapOpen(true) : undefined} actionLabel={point ? "Изменить" : "Выбрать на карте"} renderAction={action => <div className={styles.carrier} data-selected={!!point}>
@@ -71,7 +69,6 @@ export function OzonDeliveryPicker({ phone, onEditPhone, onQuote, packingReady =
     {city && mapOpen && <PickupPointDialog city={city} selectedPoint={selectedPoint ?? undefined} selected={point} carrier="Ozon" onSelect={selectPoint} onClose={() => setMapOpen(false)} />}
     <div ref={nextStep} className="ozon-recipient-step" tabIndex={-1} aria-label="Телефон получателя и проверка доставки">
     {point && <div className={styles.verification}>
-    <label className="checkout-consent"><input type="checkbox" name="ozonConsent" checked={consent} required onChange={event => { setConsent(event.target.checked); clearQuote(); }} /><span>Даю отдельное <Link href="/legal/consent/?purpose=ozon" target="_blank">согласие на передачу номера Ozon для проверки и расчёта доставки</Link>. Без согласия можно выбрать другой способ доставки.</span></label>
     {checkIssue && message !== checkIssue && <p className="notice" id="ozon-check-help">{checkIssue}</p>}
     <button type="button" className="button button--small" onClick={calculate} disabled={!!pending} aria-describedby={message ? "ozon-check-message" : checkIssue ? "ozon-check-help" : undefined}>{pending === "quote" ? "Проверяем доставку…" : "Проверить доставку в выбранный ПВЗ"}</button>
     {pending === "quote" && <p className="notice" role="status">Проверяем доступность ПВЗ и срок доставки в Ozon… При временном сбое повторим автоматически. Обычно это быстро, но проверка может занять около 45 секунд.</p>}

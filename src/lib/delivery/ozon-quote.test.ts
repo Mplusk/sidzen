@@ -20,7 +20,7 @@ describe("server-owned Ozon shipping quotes", () => {
     expect(() => buildOzonPostings([{ ...item, quantity: 0 }], config)).toThrow();
   });
   it("binds the signed amount, buyer phone, cart, packaging, configuration and expiry", () => {
-    const quote = { request: { recipient: { phone_number: "+79991234567" }, delivery: { delivery_point: { delivery_point_id: 42 } }, postings: buildOzonPostings(cart.items, config) }, cart: cartDeliveryFingerprint(cart), config: deliveryConfigFingerprint(config), address: "Test PVZ", cost: 180, days: 3, expires: Date.now() + 60000 };
+    const quote = { request: { recipient: { phone_number: "+79991234567" }, delivery: { delivery_point: { delivery_point_id: 42 } }, postings: buildOzonPostings(cart.items, config) }, cart: cartDeliveryFingerprint(cart), config: deliveryConfigFingerprint(config), address: "Test PVZ", cost: 180, days: 3, expires: Date.now() + 60000, quoteVersion: 2 as const };
     const token = signOzonQuote(quote);
     expect(verifyOzonQuote(token, cart, config, "+79991234567").cost).toBe(180);
     for (const other of [{ ...cart, id: "another-cart" }, { ...cart, items: [{ ...item, quantity: 3 }] }, { ...cart, items: [{ ...item, unitPrice: 241 }] }, { ...cart, items: [{ ...item, product: { ...item.product, shippingWeightG: 90 } }] }]) expect(() => verifyOzonQuote(token, other, config, "+79991234567")).toThrow("quote");
@@ -29,5 +29,10 @@ describe("server-owned Ozon shipping quotes", () => {
     expect(() => verifyOzonQuote(signOzonQuote({ ...quote, expires: 1 }), cart, config, "+79991234567")).toThrow("quote");
     const forged = `${Buffer.from(JSON.stringify({ ...quote, cost: 0 })).toString("base64url")}.${token.split(".")[1]}`;
     expect(() => verifyOzonQuote(forged, cart, config, "+79991234567")).toThrow("quote");
+    const legacy = { ...quote, quoteVersion: undefined, consentId: "previous-consent" };
+    expect(verifyOzonQuote(signOzonQuote(legacy), cart, config, "+79991234567").consentId).toBe("previous-consent");
+    expect(() => verifyOzonQuote(signOzonQuote({ ...legacy, consentId: undefined }), cart, config, "+79991234567")).toThrow("quote");
+    const forgedVersion = `${Buffer.from(JSON.stringify({ ...legacy, quoteVersion: 2, consentId: undefined })).toString("base64url")}.${signOzonQuote(legacy).split(".")[1]}`;
+    expect(() => verifyOzonQuote(forgedVersion, cart, config, "+79991234567")).toThrow("quote");
   });
 });

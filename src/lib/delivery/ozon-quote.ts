@@ -22,7 +22,7 @@ export function buildOzonPostings(items: DeliveryItem[], config: OzonDeliveryCon
   }
   return postings;
 }
-const quoteSchema = z.object({ request: checkoutRequestSchema, cart: z.string(), config: z.string(), address: z.string(), cost: z.number().finite().nonnegative(), days: z.number().int().nonnegative(), expires: z.number().int(), consentId: z.string().optional() });
+const quoteSchema = z.object({ request: checkoutRequestSchema, cart: z.string(), config: z.string(), address: z.string(), cost: z.number().finite().nonnegative(), days: z.number().int().nonnegative(), expires: z.number().int(), consentId: z.string().min(1).optional(), quoteVersion: z.literal(2).optional() });
 export type OzonQuote = z.infer<typeof quoteSchema>;
 export class OzonQuoteError extends OzonDeliveryError {
   constructor(public readonly reason: "expired" | "signature" | "cart" | "config" | "phone") { super("quote"); }
@@ -40,6 +40,9 @@ export function verifyOzonQuote(token: string, cart: { id: string; items: Delive
   if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) throw new OzonQuoteError("signature");
   let quote: OzonQuote;
   try { quote = quoteSchema.parse(JSON.parse(Buffer.from(body, "base64url").toString())); } catch { throw new OzonQuoteError("signature"); }
+  // Previously issued quotes require their real consent record. New quotes
+  // carry a signed version so an older, unbound quote cannot bypass it.
+  if (!quote.consentId && quote.quoteVersion !== 2) throw new OzonQuoteError("signature");
   if (quote.expires <= Date.now()) throw new OzonQuoteError("expired");
   if (quote.cart !== cartDeliveryFingerprint(cart)) throw new OzonQuoteError("cart");
   if (quote.config !== deliveryConfigFingerprint(config)) throw new OzonQuoteError("config");

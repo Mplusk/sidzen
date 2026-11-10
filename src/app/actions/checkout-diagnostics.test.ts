@@ -16,7 +16,7 @@ import { OzonQuoteError } from "@/lib/delivery/ozon-quote";
 import { OzonDeliveryError } from "@/lib/delivery/ozon-client";
 import { createOrderAction } from "./checkout";
 const form = () => {
-  const f = new FormData(); for (const [k, v] of Object.entries({ name: "Synthetic buyer", email: "qa@example.test", phone: "+79991234567", delivery: "ozon-delivery", legal: "on", payment: "manual", expectedTotal: "240", ozonQuote: "signed-fixture", ozonConsent: "on" })) f.set(k, v); return f;
+  const f = new FormData(); for (const [k, v] of Object.entries({ name: "Synthetic buyer", email: "qa@example.test", phone: "+79991234567", delivery: "ozon-delivery", legal: "on", payment: "manual", expectedTotal: "240", ozonQuote: "signed-fixture" })) f.set(k, v); return f;
 };
 beforeEach(() => {
   vi.resetAllMocks(); m.log.mockResolvedValue("00000000-0000-4000-8000-000000000001");

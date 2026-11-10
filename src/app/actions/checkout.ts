@@ -15,7 +15,7 @@ import { verifyOzonQuote, OzonQuoteError, type OzonQuote } from "@/lib/delivery/
 import { OzonDeliveryError } from "@/lib/delivery/ozon-client";
 import { retryOzonQuote } from "@/lib/delivery/ozon-retry";
 import { verifyDeliveryConsent, operatorReady } from "@/lib/privacy";
-import { CONSENT_VERSION } from "@/lib/privacy-documents";
+import { CONSENT_VERSION, PRIVACY_NOTICE_VERSION } from "@/lib/privacy-documents";
 import { deliveryTotals } from "@/lib/delivery/pricing";
 import { revalidatePath, updateTag } from "next/cache";
 import { writeDiagnostic } from "@/lib/diagnostics";
@@ -37,7 +37,7 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
     redirect(`/checkout/?error=${error}${reference ? `&reference=${reference}` : ""}`);
   };
   if (!await operatorReady()) return fail("operator");
-  const parsed = checkoutSchema.safeParse(Object.fromEntries(["name", "email", "phone", "city", "address", "postalCode", "delivery", "comment", "legal", "expectedTotal", "ozonQuote", "ozonConsent", "cdekQuote"].map((key) => [key, formData.get(key) ?? ""])));
+  const parsed = checkoutSchema.safeParse(Object.fromEntries(["name", "email", "phone", "city", "address", "postalCode", "delivery", "comment", "legal", "expectedTotal", "ozonQuote", "cdekQuote"].map((key) => [key, formData.get(key) ?? ""])));
   if (!parsed.success) { await writeDiagnostic("checkout.invalid"); return fail("invalid", undefined, parsed.error.flatten().fieldErrors); }
   const cart = await getCart();
   if (!cart?.items.length) redirect("/cart/?error=empty");
@@ -59,8 +59,10 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
     try {
       const config = await getOzonDeliveryConfig(); requireOzonDelivery(config);
       ozonQuote = verifyOzonQuote(parsed.data.ozonQuote, cart, config, parsed.data.phone);
-      stage = "consent";
-      await verifyDeliveryConsent(ozonQuote.consentId ?? "", cart.id, parsed.data.phone);
+      if (ozonQuote.consentId) {
+        stage = "consent";
+        await verifyDeliveryConsent(ozonQuote.consentId, cart.id, parsed.data.phone);
+      }
       stage = "recheck";
       const result = await retryOzonQuote(config, api => api.checkout(ozonQuote!.request));
       const fresh = result.value; attempts = result.attempts;
@@ -133,8 +135,10 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412027)`;
         const config = await getOzonDeliveryConfig(tx); requireOzonDelivery(config);
         if (deliveryConfigFingerprint(config) !== ozonQuote.config) throw new Error("delivery-config-changed");
-        await tx.$queryRaw`SELECT "id" FROM "PrivacyConsent" WHERE "id" = ${ozonQuote.consentId ?? ""} FOR UPDATE`;
-        await verifyDeliveryConsent(ozonQuote.consentId ?? "", cart.id, parsed.data.phone, tx);
+        if (ozonQuote.consentId) {
+          await tx.$queryRaw`SELECT "id" FROM "PrivacyConsent" WHERE "id" = ${ozonQuote.consentId} FOR UPDATE`;
+          await verifyDeliveryConsent(ozonQuote.consentId, cart.id, parsed.data.phone, tx);
+        }
       }
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412034)`;
       if (yookassaReady(await getYooKassaConfig(tx)) !== onlinePayment) throw new Error("payment-config-changed");
@@ -165,7 +169,7 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
         notifications: { create: { channel: "email", recipient: parsed.data.email, template: "order-confirmation", status: "PENDING" } },
       } });
       await queueTelegramOrder(tx, created.id);
-      await tx.auditLog.create({ data: { actorId: user?.id, action: "order.application.create", entityType: "Order", entityId: created.id, after: { version: CONSENT_VERSION, privacyNoticeVersion: CONSENT_VERSION, delivery: deliveryMethod.code, flow: "contact-request" } } });
+      await tx.auditLog.create({ data: { actorId: user?.id, action: "order.application.create", entityType: "Order", entityId: created.id, after: { version: CONSENT_VERSION, privacyNoticeVersion: PRIVACY_NOTICE_VERSION, delivery: deliveryMethod.code, flow: "contact-request" } } });
       if (ozonQuote?.consentId) await tx.privacyConsent.update({ where: { id: ozonQuote.consentId }, data: { orderId: created.id } });
       const guestGrant = user ? undefined : await createGuestGrant(tx, created.number);
       return { order: created, guestGrant };

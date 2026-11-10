@@ -20,14 +20,14 @@ vi.mock("@/lib/delivery/ozon-retry", () => ({ retryOzonQuote: m.checkout }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), updateTag: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: (path: string) => { throw new Error(`redirect:${path}`); } }));
 import { createOrderAction, createOrderWithState } from "./checkout";
-function form(delivery = "pickup") { const value = new FormData(); for (const [key, field] of Object.entries({ name: "Synthetic buyer", phone: "+79991234567", email: "qa@example.test", delivery, legal: "on", expectedTotal: "240", ozonQuote: "qa-signed", ozonConsent: "on" })) value.set(key, field); return value; }
+function form(delivery = "pickup") { const value = new FormData(); for (const [key, field] of Object.entries({ name: "Synthetic buyer", phone: "+79991234567", email: "qa@example.test", delivery, legal: "on", expectedTotal: "240", ozonQuote: "qa-signed" })) value.set(key, field); return value; }
 beforeEach(() => {
   vi.resetAllMocks(); m.user.mockResolvedValue({ id: "buyer" }); m.method.mockResolvedValue({ active: true, code: "pickup", name: "Pickup", basePrice: 0 });
   m.reserve.mockResolvedValue(new Map([["product", 1]])); m.snapshot.mockResolvedValue(undefined);
   m.paymentConfig.mockResolvedValue({ enabled: false }); m.createYoo.mockResolvedValue(null);
   m.cart.mockResolvedValue({ id: "cart", items: [{ id: "item", productId: "product", available: true, canStartCheckout: true, quantity: 1, unitPrice: 240, updatedAt: new Date(), product: { name: "QA product", sku: "QA" }, quote: { config: {} } }] });
   m.create.mockResolvedValue({ id: "application", number: "QA-1" }); m.claim.mockResolvedValue({ count: 1 }); m.notify.mockResolvedValue(undefined);
-  m.verify.mockReturnValue({ config: "qa-config", cost: 125, days: 3, address: "QA pickup point", consentId: "qa-consent", request: { recipient: { phone_number: "+79991234567" }, delivery: { delivery_point: { delivery_point_id: 42 } }, postings: [{ request_id: 1, shipment_method_id: 7, cutoff_at: "2030-01-01T12:00:00Z", declared_value: { amount: "240.00", currency_code: "RUB" }, dimensions: { weight_g: 100, length_mm: 200, width_mm: 100, height_mm: 50 } }] } });
+  m.verify.mockReturnValue({ config: "qa-config", cost: 125, days: 3, address: "QA pickup point", quoteVersion: 2, request: { recipient: { phone_number: "+79991234567" }, delivery: { delivery_point: { delivery_point_id: 42 } }, postings: [{ request_id: 1, shipment_method_id: 7, cutoff_at: "2030-01-01T12:00:00Z", declared_value: { amount: "240.00", currency_code: "RUB" }, dimensions: { weight_g: 100, length_mm: 200, width_mm: 100, height_mm: 50 } }] } });
   m.checkout.mockResolvedValue({ value: { cost: 125, days: 3 }, attempts: 1 });
   m.transaction.mockImplementation(callback => callback({ $executeRaw: vi.fn(), $queryRaw: vi.fn(), deliveryMethod: { findFirst: m.method }, cartItem: { deleteMany: m.claim }, order: { create: m.create }, auditLog: { create: m.audit }, privacyConsent: { update: vi.fn() } }));
 });
@@ -70,12 +70,25 @@ describe("payment-free checkout application", () => {
     expect(m.bank).not.toHaveBeenCalled(); expect(m.grant).not.toHaveBeenCalled();
     expect(m.audit).toHaveBeenCalledWith({ data: expect.objectContaining({ action: "order.application.create" }) });
   });
-  it("atomically queues the chosen Ozon shipment with consent, without payment or receipts", async () => {
+  it("atomically queues a new Ozon shipment without a separate consent record", async () => {
     await expect(createOrderAction(form("ozon-delivery"))).rejects.toThrow("/checkout/success/QA-1/");
     const data = m.create.mock.calls[0][0].data;
     expect(data.shipment.create).toMatchObject({ provider: "ozon-delivery", payload: { pointId: 42, address: "QA pickup point" }, cost: 125 });
     expect(data.shipment.create.ozonJob.create).toMatchObject({ clientId: "qa", request: { recipient: { phone_number: "+79991234567", full_name: "Synthetic buyer" }, postings: [{ description: "QA product" }] } });
-    expect(data).not.toHaveProperty("payment"); expect(data).not.toHaveProperty("fiscalReceipts"); expect(m.consent).toHaveBeenCalledTimes(2);
+    expect(data).not.toHaveProperty("payment"); expect(data).not.toHaveProperty("fiscalReceipts"); expect(m.consent).not.toHaveBeenCalled();
+  });
+  it("continues checking a previously issued quote's consent before and inside the transaction", async () => {
+    m.verify.mockReturnValue({ ...m.verify(), quoteVersion: undefined, consentId: "qa-consent" });
+    await expect(createOrderAction(form("ozon-delivery"))).rejects.toThrow("/checkout/success/QA-1/");
+    expect(m.consent).toHaveBeenCalledTimes(2);
+    expect(m.consent).toHaveBeenCalledWith("qa-consent", "cart", "+79991234567");
+  });
+  it("does not create an order if a previous consent is revoked during checkout", async () => {
+    m.verify.mockReturnValue({ ...m.verify(), quoteVersion: undefined, consentId: "qa-consent" });
+    m.consent.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("delivery-consent-missing"));
+    await expect(createOrderAction(form("ozon-delivery"))).rejects.toThrow("/cart/?error=changed");
+    expect(m.consent).toHaveBeenCalledTimes(2);
+    expect(m.claim).not.toHaveBeenCalled(); expect(m.create).not.toHaveBeenCalled();
   });
   it("rolls back a concurrently claimed cart instead of submitting a duplicate", async () => { m.claim.mockResolvedValue({ count: 0 }); await expect(createOrderAction(form())).rejects.toThrow("/cart/?error=changed"); expect(m.create).not.toHaveBeenCalled(); });
   it("checks the product snapshot under the same transaction after reserving stock", async () => {
