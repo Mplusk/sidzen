@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
 import { legacyStockReviewProductIds } from "../src/lib/legacy-stock-availability";
 
@@ -8,7 +8,7 @@ const base = new URL(process.env.SMOKE_BASE_URL || "http://localhost:3101"), db 
 assert(["localhost", "127.0.0.1"].includes(base.hostname) && ["localhost", "127.0.0.1"].includes(db.hostname) && db.pathname === "/shop_qa");
 const prefix = `qa-stock-${randomUUID().slice(0, 8)}`, jar = new Map<string, string>();
 const ids: string[] = [], orders: { id: string; number: string }[] = [];
-let categoryId = "";
+let categoryId = "", sessionId = "";
 const decode = (s: string) => s.replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
 async function request(path: string, body?: FormData) {
   const response = await fetch(new URL(path, base), { method: body ? "POST" : "GET", body, redirect: "manual", headers: { Cookie: [...jar].map(([k, v]) => `${k}=${v}`).join("; "), ...(body ? { Origin: base.origin } : {}) } });
@@ -43,8 +43,10 @@ try {
     const order = await prisma.order.create({ data: { number: `${prefix}-order-${i}`, inventoryTracked: false, customerName: "QA", customerPhone: "+70000000000", customerEmail: "qa@example.test", subtotal: 100, total: 100, items: { create: { productId, productName: `${prefix} item ${i}`, sku: i === 1 ? `${prefix}-variant` : `${prefix}-sku-${i === 2 ? 1 : 0}`, quantity: 1, unitPrice: 100, totalPrice: 100 } } } });
     orders.push({ id: order.id, number: order.number });
   }
-  const login = await form("/login/", 'name="email"'); login.set("email", "qa@example.test"); login.set("password", "LocalGalleryQA-2026");
-  assert.equal((await request("/login/", login)).headers.get("location"), "/account/");
+  const actor = await prisma.user.findUniqueOrThrow({ where: { email: "qa@example.test" } });
+  const token = randomBytes(32).toString("base64url");
+  sessionId = (await prisma.session.create({ data: { userId: actor.id, tokenHash: createHash("sha256").update(token).digest("hex"), expiresAt: new Date(Date.now() + 600000) } })).id;
+  jar.set("3dp_session", token);
   const skuPage = await (await request(`/admin/orders/?view=stock-review&q=${encodeURIComponent(prefix + "-sku-0")}`)).text();
   assert(skuPage.includes(orders[0].number) && skuPage.includes(orders[1].number), "Search by current product SKU must include an old variant SKU");
   assert(!skuPage.includes(orders[2].number), "Unrelated order must not match");
@@ -75,6 +77,7 @@ try {
   await prisma.order.deleteMany({ where: { id: { in: orders.map(o => o.id) } } });
   await prisma.product.deleteMany({ where: { id: { in: ids } } });
   if (categoryId) await prisma.category.deleteMany({ where: { id: categoryId } });
+  if (sessionId) await prisma.session.deleteMany({ where: { id: sessionId } });
   await prisma.$disconnect();
 }
 
