@@ -1,0 +1,42 @@
+name: Inspect stock conditions (temporary)
+on:
+  pull_request:
+    types: [opened]
+jobs:
+  inspect:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'codex/stock-inspect-300030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: production
+    concurrency:
+      group: production-diagnostics
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - name: Inspect stock read-only
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          install -d -m 0700 "${HOME}/.ssh"
+          printf '%s\n' "${DEPLOY_SSH_PRIVATE_KEY}" > "${HOME}/.ssh/diagnostic_key"
+          printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > "${HOME}/.ssh/known_hosts"
+          chmod 0600 "${HOME}/.ssh/diagnostic_key" "${HOME}/.ssh/known_hosts"
+          ssh -i "${HOME}/.ssh/diagnostic_key" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "${DEPLOY_USER}@${DEPLOY_HOST}" 'docker exec -i 3dprinta-db-1 psql -X -q -U 3dprinta -d 3dprinta -v ON_ERROR_STOP=1 -A -t' <<'SQL'
+          BEGIN READ ONLY;
+          SELECT json_build_object('exists', EXISTS(SELECT 1 FROM "Product" WHERE sku='300030'),
+            'status', (SELECT status::text FROM "Product" WHERE sku='300030'),
+            'stock', (SELECT stock FROM "Product" WHERE sku='300030'),
+            'reserved', (SELECT "reservedStock" FROM "Product" WHERE sku='300030'),
+            'made_to_order', (SELECT "madeToOrder" FROM "Product" WHERE sku='300030'),
+            'legacy_orders_by_status', COALESCE((SELECT json_object_agg(t.status,t.count) FROM (SELECT o.status::text AS status,count(DISTINCT o.id) AS count FROM "Order" o JOIN "OrderItem" oi ON oi."orderId"=o.id JOIN "Product" p ON p.id=oi."productId" WHERE p.sku='300030' AND o."inventoryTracked"=false GROUP BY o.status) t),'{}'::json),
+            'active_reserved_lines', (SELECT count(*) FROM "OrderItem" oi JOIN "Product" p ON p.id=oi."productId" WHERE p.sku='300030' AND oi."stockReservationState"='ACTIVE')
+          );
+          COMMIT;
+          SQL
+      - name: Remove runner credentials
+        if: always()
+        run: rm -f -- "${HOME}/.ssh/diagnostic_key"
