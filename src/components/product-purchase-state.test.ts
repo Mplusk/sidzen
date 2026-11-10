@@ -50,7 +50,7 @@ it("does not offer a legacy-blocked product even when stock or made-to-order is 
   await act(async () => root.render(createElement(ProductPurchaseState, { product: value }, createElement(ProductMobilePrice, { stockReviewRequired: true }), createElement(ProductPurchaseForm, { product: value, stockReviewRequired: true }))));
   expect(container.querySelector(".product-mobile-price")!.textContent).toContain("Наличие уточняется");
   expect(container.querySelector(".mobile-purchase-bar button")).toBeNull();
-  expect(container.textContent).toContain("Наличие товара уточняется");
+  expect(container.querySelector(".purchase-form .notice")).toBeNull();
   expect(container.querySelector('button[type="submit"]')).toBeNull();
 });
 
