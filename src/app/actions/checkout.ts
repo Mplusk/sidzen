@@ -41,7 +41,8 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
   if (!parsed.success) { await writeDiagnostic("checkout.invalid"); return fail("invalid", undefined, parsed.error.flatten().fieldErrors); }
   const cart = await getCart();
   if (!cart?.items.length) redirect("/cart/?error=empty");
-  if (cart.items.some((item) => !item.available || !item.quote)) redirect("/cart/?error=unavailable");
+  if (cart.items.some((item) => !item.canStartCheckout || !item.quote)) redirect("/cart/?error=unavailable");
+  if (cart.items.some((item) => item.stockReviewRequired)) return fail("stock-review");
   const user = await getCurrentUser();
   const isOzon = parsed.data.delivery === OZON_DELIVERY_CODE;
   const isCdek = parsed.data.delivery === CDEK_DELIVERY_CODE;

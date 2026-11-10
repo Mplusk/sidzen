@@ -21,7 +21,7 @@ import { createOrderAction } from "./checkout";
 function form(total = "504") { const f = new FormData(); for (const [key, value] of Object.entries({ name: "Synthetic buyer", email: "qa@example.test", phone: "+79991234567", delivery: "cdek-delivery", legal: "on", expectedTotal: total, cdekQuote: "signed" })) f.set(key, value); return f; }
 beforeEach(() => {
   vi.resetAllMocks();
-  m.cart.mockResolvedValue({ id: "cart", items: [{ id: "item", productId: "p", available: true, quantity: 1, unitPrice: 240, updatedAt: new Date(), product: { name: "QA product", sku: "QA" }, quote: { config: {} } }] });
+  m.cart.mockResolvedValue({ id: "cart", items: [{ id: "item", productId: "p", available: true, canStartCheckout: true, quantity: 1, unitPrice: 240, updatedAt: new Date(), product: { name: "QA product", sku: "QA" }, quote: { config: {} } }] });
   m.config.mockResolvedValue({ clientId: "account", environment: "test", senderCityCode: 44, senderPoint: "MOS4", senderName: "QA seller", senderPhone: "+79990000000" });
   m.verify.mockReturnValue({ config: "config", point: "MOS4", cityCode: 44, address: "QA point", tariff: 483, cost: 264, daysMin: 1, daysMax: 3 });
   m.tariff.mockResolvedValue({ total_sum: 264, currency: "RUB" }); m.claim.mockResolvedValue({ count: 1 }); m.create.mockResolvedValue({ id: "order", number: "QA-1" });

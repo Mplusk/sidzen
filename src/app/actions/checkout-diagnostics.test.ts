@@ -21,7 +21,7 @@ const form = () => {
 beforeEach(() => {
   vi.resetAllMocks(); m.log.mockResolvedValue("00000000-0000-4000-8000-000000000001");
   m.config.mockResolvedValue({ enabled: true, clientId: "app", clientSecret: "fixture", shipmentMethodId: 7, checkedAt: "2030-01-01Z", dispatchDays: 1 });
-  m.cart.mockResolvedValue({ id: "cart", items: [{ available: true, quote: {}, unitPrice: 240, quantity: 1 }] });
+  m.cart.mockResolvedValue({ id: "cart", items: [{ available: true, canStartCheckout: true, quote: {}, unitPrice: 240, quantity: 1 }] });
   m.verify.mockReturnValue({ consentId: "consent", request: {}, cost: 180 }); m.checkout.mockResolvedValue({ cost: 180, days: 3 });
 });
 describe("checkout delivery failure diagnostics", () => {

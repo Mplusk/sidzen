@@ -94,10 +94,10 @@ export async function getCart() {
       const keys = Object.keys(config);
       const validConfig = item.config === null || (typeof item.config === "object" && !Array.isArray(item.config));
       const groupKey = validConfig && !item.modelFileId && keys.every(key => ["material", "materialName", "color", "colorName"].includes(key)) && item.variantId === (quote.variantId ?? null) ? JSON.stringify([item.productId, item.variantId, quote.config.material, quote.config.color, quote.unitPrice]) : null;
-      return { ...item, unitPrice: quote.unitPrice, config: quote.config, options, selection, stockReviewRequired, groupKey, groupState, available: !stockReviewRequired && (options.madeToOrder || options.stock >= (quantities.get(item.productId) ?? item.quantity)), quote };
+      const canStartCheckout = options.madeToOrder || options.stock >= (quantities.get(item.productId) ?? item.quantity);
+      return { ...item, unitPrice: quote.unitPrice, config: quote.config, options, selection, stockReviewRequired, groupKey, groupState, canStartCheckout, available: !stockReviewRequired && canStartCheckout, quote };
     } catch {
-      return { ...item, unitPrice: Number(item.unitPrice), options, selection: { ...defaults, quantity: item.quantity }, stockReviewRequired, groupKey: null, groupState, available: false, quote: null };
+      return { ...item, unitPrice: Number(item.unitPrice), options, selection: { ...defaults, quantity: item.quantity }, stockReviewRequired, groupKey: null, groupState, canStartCheckout: false, available: false, quote: null };
     }
   }) };
 }
-

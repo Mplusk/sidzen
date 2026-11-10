@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
 import { legacyStockReviewProductIds } from "../src/lib/legacy-stock-availability";
+import { assertInlineCheckoutError } from "./assert-inline-checkout-error";
 
 // The test must never be run against a production database or server.
 const base = new URL(process.env.SMOKE_BASE_URL || "http://localhost:3101"), db = new URL(process.env.DATABASE_URL || "");
 assert(["localhost", "127.0.0.1"].includes(base.hostname) && ["localhost", "127.0.0.1"].includes(db.hostname) && db.pathname === "/shop_qa");
 const prefix = `qa-stock-${randomUUID().slice(0, 8)}`, jar = new Map<string, string>();
 const ids: string[] = [], orders: { id: string; number: string }[] = [];
-let categoryId = "", sessionId = "";
+let categoryId = "", sessionId = "", cartId = "";
 const decode = (s: string) => s.replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
 async function request(path: string, body?: FormData) {
   const response = await fetch(new URL(path, base), { method: body ? "POST" : "GET", body, redirect: "manual", headers: { Cookie: [...jar].map(([k, v]) => `${k}=${v}`).join("; "), ...(body ? { Origin: base.origin } : {}) } });
@@ -43,6 +44,33 @@ try {
     const order = await prisma.order.create({ data: { number: `${prefix}-order-${i}`, inventoryTracked: false, customerName: "QA", customerPhone: "+70000000000", customerEmail: "qa@example.test", subtotal: 100, total: 100, items: { create: { productId, productName: `${prefix} item ${i}`, sku: i === 1 ? `${prefix}-variant` : `${prefix}-sku-${i === 2 ? 1 : 0}`, quantity: 1, unitPrice: 100, totalPrice: 100 } } } });
     orders.push({ id: order.id, number: order.number });
   }
+  // An otherwise valid guest cart can open checkout even while the final
+  // order remains protected by legacy inventory reconciliation.
+  const cartKey = randomBytes(24).toString("base64url");
+  const cart = await prisma.cart.create({ data: { sessionKey: cartKey, items: { create: { productId: ids[0], quantity: 1, unitPrice: 100, config: { material: "", materialName: "", color: "", colorName: "" } } } } });
+  cartId = cart.id; jar.set("3dp_cart", cartKey);
+  const cartResponse = await request("/cart/"); assert.equal(cartResponse.status, 200);
+  const cartHtml = await cartResponse.text();
+  assert.match(cartHtml, /href="\/checkout\/"[^>]*>ОФОРМИТЬ ЗАКАЗ<\/a>/);
+  assert(!cartHtml.includes("Способ доставки и окончательную сумму выберете на следующем шаге."));
+  const checkout = await request("/checkout/"); assert.equal(checkout.status, 200, "A valid legacy-blocked item can open checkout");
+  const checkoutHtml = await checkout.text();
+  assert(checkoutHtml.includes('name="name"') && checkoutHtml.includes("<form"), "Checkout must render the recipient form");
+  const submission = await form("/checkout/", 'name="expectedTotal"');
+  for (const [key, value] of Object.entries({ name: "QA Buyer", email: "qa-buyer@example.test", phone: "+79991234567", delivery: "pickup", legal: "on", expectedTotal: "100" })) submission.set(key, value);
+  const orderCount = await prisma.order.count();
+  const productBefore = await prisma.product.findUniqueOrThrow({ where: { id: ids[0] }, select: { stock: true, reservedStock: true } });
+  await assertInlineCheckoutError(await request("/checkout/", submission), "stock-review");
+  assert.equal(await prisma.order.count(), orderCount, "Review-blocked checkout must not create an order");
+  assert.equal(await prisma.cartItem.count({ where: { cartId } }), 1, "Review-blocked checkout must preserve the cart");
+  assert.deepEqual(await prisma.product.findUniqueOrThrow({ where: { id: ids[0] }, select: { stock: true, reservedStock: true } }), productBefore);
+  await prisma.product.update({ where: { id: ids[0] }, data: { status: "DRAFT" } });
+  assert((await (await request("/cart/")).text()).includes("ОФОРМИТЬ ЗАКАЗ"), "Cart action stays visible for a nonempty cart");
+  assert.match((await request("/checkout/")).headers.get("location") ?? "", /^\/cart\/?\?error=unavailable/);
+  await prisma.product.update({ where: { id: ids[0] }, data: { status: "PUBLISHED", stock: 0 } });
+  assert.match((await request("/checkout/")).headers.get("location") ?? "", /^\/cart\/?\?error=unavailable/);
+  await prisma.product.update({ where: { id: ids[0] }, data: { stock: 5 } });
+  jar.delete("3dp_cart");
   const actor = await prisma.user.findUniqueOrThrow({ where: { email: "qa@example.test" } });
   const token = randomBytes(32).toString("base64url");
   sessionId = (await prisma.session.create({ data: { userId: actor.id, tokenHash: createHash("sha256").update(token).digest("hex"), expiresAt: new Date(Date.now() + 600000) } })).id;
@@ -74,10 +102,10 @@ try {
   console.log("PASS: legacy SKU/name search, status for stock and made-to-order products, stock filter, and reconciliation via HTTP.");
 } finally {
   await prisma.auditLog.deleteMany({ where: { entityId: { in: orders.map(o => o.id) } } });
+  if (cartId) await prisma.cart.deleteMany({ where: { id: cartId } });
   await prisma.order.deleteMany({ where: { id: { in: orders.map(o => o.id) } } });
   await prisma.product.deleteMany({ where: { id: { in: ids } } });
   if (categoryId) await prisma.category.deleteMany({ where: { id: categoryId } });
   if (sessionId) await prisma.session.deleteMany({ where: { id: sessionId } });
   await prisma.$disconnect();
 }
-
