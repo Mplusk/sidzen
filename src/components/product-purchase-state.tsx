@@ -25,13 +25,14 @@ export function useProductPurchaseState(product: ProductOptions, initial?: Produ
   return { product, selection, setSelection, quote: priceProduct(product, selection) };
 }
 
-export function ProductMobilePrice({ oldPrice }: { oldPrice?: number | null }) {
+export function ProductMobilePrice({ oldPrice, stockReviewRequired = false }: { oldPrice?: number | null; stockReviewRequired?: boolean }) {
   const state = useContext(PurchaseContext);
   if (!state) throw new Error("ProductMobilePrice requires ProductPurchaseState");
   const { product, quote } = state;
   const discounted = oldPrice != null && oldPrice > quote.unitPrice;
   return <div className="product-mobile-price" aria-label="Цена товара">
     <div className="product-mobile-price__amount"><strong>{formatPrice(quote.unitPrice)}</strong>{discounted && <><s>{formatPrice(oldPrice)}</s><span className="product-card__discount">−{Math.round((1 - quote.unitPrice / oldPrice) * 100)}%</span></>}<small>за 1 шт.</small></div>
-    <span className={"product-card__availability" + (product.stock > 0 || product.madeToOrder ? " is-available" : "")}>{product.stock > 0 ? "В наличии" : product.madeToOrder ? "Под заказ" : "Нет в наличии"}</span>
+    <span className={"product-card__availability" + (!stockReviewRequired && (product.stock > 0 || product.madeToOrder) ? " is-available" : "")}>{stockReviewRequired ? "Наличие уточняется" : product.stock > 0 ? "В наличии" : product.madeToOrder ? "Под заказ" : "Нет в наличии"}</span>
   </div>;
 }
+

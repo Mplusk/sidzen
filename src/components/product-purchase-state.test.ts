@@ -45,3 +45,12 @@ it("keeps a cart editor's existing selection independent from the product page p
   expect(compact(container.querySelector(".product-price strong")!.textContent)).toBe("700₽");
   expect(container.querySelector(".mobile-purchase-bar")).toBeNull();
 });
+it("does not offer a legacy-blocked product even when stock or made-to-order is available", async () => {
+  const value = { ...product, madeToOrder: true };
+  await act(async () => root.render(createElement(ProductPurchaseState, { product: value }, createElement(ProductMobilePrice, { stockReviewRequired: true }), createElement(ProductPurchaseForm, { product: value, stockReviewRequired: true }))));
+  expect(container.querySelector(".product-mobile-price")!.textContent).toContain("Наличие уточняется");
+  expect(container.querySelector(".mobile-purchase-bar button")).toBeNull();
+  expect(container.textContent).toContain("Наличие товара уточняется");
+  expect(container.querySelector('button[type="submit"]')).toBeNull();
+});
+

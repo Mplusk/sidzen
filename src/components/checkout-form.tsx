@@ -5,7 +5,8 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { startTransition, useActionState, useRef, useState, useTransition } from "react";
 import { createOrderWithState } from "@/app/actions/checkout";
-import { updateCheckoutCartItem } from "@/app/actions/checkout-cart";
+import { updateCheckoutCartGroup } from "@/app/actions/checkout-cart";
+import type { CartGroupMember } from "@/lib/cart-groups";
 import type { CheckoutActionState } from "@/lib/checkout-action-state";
 import { formatPrice } from "@/lib/format";
 import { phoneMask } from "@/lib/phone-input";
@@ -46,7 +47,7 @@ function Submit({ needsQuote, noDelivery, pending, cartPending, onlinePayment }:
 }
 
 export function CheckoutForm({ items, methods, user, error, reference, ozonDelivery = false, cdekDelivery = false, packingReady = true, onlinePayment = false }: {
-  items: Array<{ id: string; name: string; sku?: string; image?: string | null; configuration: string; quantity: number; total: number; revision: string }>;
+  items: Array<{ id: string; name: string; sku?: string; image?: string | null; configuration: string; quantity: number; total: number; members: CartGroupMember[]; canAdjust?: boolean }>;
   methods: Delivery[]; user: { name: string; email: string; phone: string }; error?: string; reference?: string;
   ozonDelivery?: boolean;
   cdekDelivery?: boolean;
@@ -81,12 +82,12 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
   const [phone, setPhone] = useState(phoneMask(user.phone));
   const changePhone = (value: string) => { const next = phoneMask(value); setPhone(next); if (next !== phone) { if (currentError === "ozon-recipient") setDismissedRecipientError(state); setOzonQuote(null); setQuoteRevision(value => value + 1); } };
   const changeDelivery = (code: string) => { setDelivery(code); setOzonQuote(null); setQuoteRevision(value => value + 1); setCdekQuote(null); };
-  const changeQuantity = (id: string, current: number, next: number, revision: string) => {
+  const changeQuantity = (members: CartGroupMember[], next: number) => {
     if (pending || cartPending) return;
     setCartError(""); setOzonQuote(null); setCdekQuote(null); setQuoteRevision(value => value + 1); setCdekRevision(value => value + 1);
     updateCart(async () => {
       try {
-        const result = await updateCheckoutCartItem(id, current, next, revision);
+        const result = await updateCheckoutCartGroup(members, next);
         if (result.error) setCartError(result.error);
         router.refresh();
       } catch { setCartError("Не удалось обновить корзину. Повторите попытку."); }
@@ -108,8 +109,8 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
         {cartError && <p className="notice notice--danger" role="alert">{cartError}</p>}
         <ul className={styles.items} aria-busy={cartPending}>{items.map(item => <li className={styles.item} key={item.id}>
           {item.image ? <Image className={styles.itemImage} src={item.image} alt="" width={76} height={76} /> : <div className={styles.itemPlaceholder} aria-hidden="true" />}
-          <div className={styles.itemInfo}><strong>{item.name}</strong>{item.sku && <small>Арт. {item.sku}</small>}{item.configuration && <small>{item.configuration}</small>}<small>{formatPrice(item.total / item.quantity)} за шт.</small></div>
-          <div className={styles.itemActions}><div className={styles.quantity} aria-label={`Количество: ${item.name}`}><button type="button" aria-label={`Уменьшить количество: ${item.name}`} disabled={cartPending || pending || item.quantity <= 1} onClick={() => changeQuantity(item.id, item.quantity, item.quantity - 1, item.revision)}>−</button><span aria-live="polite">{item.quantity}</span><button type="button" aria-label={`Увеличить количество: ${item.name}`} disabled={cartPending || pending || item.quantity >= 999} onClick={() => changeQuantity(item.id, item.quantity, item.quantity + 1, item.revision)}>+</button></div><strong className={styles.itemTotal}>{formatPrice(item.total)}</strong><button type="button" className={styles.remove} aria-label={`Удалить из заказа: ${item.name}`} disabled={cartPending || pending} onClick={() => changeQuantity(item.id, item.quantity, 0, item.revision)}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5" /></svg></button></div>
+          <div className={styles.itemInfo}><strong>{item.name}</strong>{item.sku && <small>Арт. {item.sku}</small>}{item.configuration && <small>{item.configuration}</small>}{item.canAdjust === false && <small>Чтобы изменить количество, удалите позицию и добавьте товар заново.</small>}<small>{formatPrice(item.total / item.quantity)} за шт.</small></div>
+          <div className={styles.itemActions}><div className={styles.quantity} aria-label={`Количество: ${item.name}`}><button type="button" aria-label={`Уменьшить количество: ${item.name}`} disabled={cartPending || pending || item.canAdjust === false || item.quantity <= 1} onClick={() => changeQuantity(item.members, item.quantity - 1)}>−</button><span aria-live="polite">{item.quantity}</span><button type="button" aria-label={`Увеличить количество: ${item.name}`} disabled={cartPending || pending || item.canAdjust === false || item.quantity >= 999} onClick={() => changeQuantity(item.members, item.quantity + 1)}>+</button></div><strong className={styles.itemTotal}>{formatPrice(item.total)}</strong><button type="button" className={styles.remove} aria-label={`Удалить из заказа: ${item.name}`} disabled={cartPending || pending} onClick={() => changeQuantity(item.members, 0)}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5" /></svg></button></div>
         </li>)}</ul>
       </section>
 
@@ -150,3 +151,4 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
     </aside>
   </form>;
 }
+

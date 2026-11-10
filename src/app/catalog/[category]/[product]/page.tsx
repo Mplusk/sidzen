@@ -18,6 +18,7 @@ import { TruckIcon } from "@/components/icons";
 import { ProductReviews } from "@/components/product-reviews";
 import { requestPublicReviewWhere } from "@/lib/review-visibility";
 import { ProductGroupOptions, type GroupOption } from "@/components/product-group-options";
+import { legacyStockReviewProductIds } from "@/lib/legacy-stock-availability";
 
 type Params = Promise<{ category: string; product: string }>;
 
@@ -48,9 +49,11 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
     },
   });
   if (!product || product.status !== "PUBLISHED" || (product.type !== "READY" && product.type !== "PARAMETRIC")) notFound();
+  const stockReviewRequired = (await legacyStockReviewProductIds([product.id])).has(product.id);
   const category = product.categories.find((item) => item.category.slug === categorySlug)?.category ?? product.categories.find((item) => item.isPrimary)?.category ?? product.categories[0]?.category;
   if (!category || !category.visible || !product.categories.some((item) => item.category.slug === categorySlug)) notFound();
   const related = await prisma.product.findMany({ where: { status: "PUBLISHED", type: { in: ["READY", "PARAMETRIC"] }, id: { not: product.id }, categories: { some: { categoryId: category.id } } }, include: { ...productOptionInclude, images: { orderBy: { sortOrder: "asc" } }, categories: { include: { category: true } } }, take: 4 });
+  const relatedStockReviewIds = await legacyStockReviewProductIds(related.map(item => item.id));
   const members = product.groupId ? await prisma.product.findMany({
     where: { groupId: product.groupId, status: "PUBLISHED", type: { in: ["READY", "PARAMETRIC"] }, categories: { some: { category: { visible: true } } } },
     select: { id: true, name: true, sku: true, slug: true, groupLabel: true, images: { orderBy: { sortOrder: "asc" }, take: 1, select: { path: true } }, categories: { where: { category: { visible: true } }, orderBy: { isPrimary: "desc" }, take: 1, select: { category: { select: { slug: true } } } } },
@@ -71,10 +74,10 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
     description: product.shortDescription,
     sku: product.sku,
     brand: { "@type": "Brand", name: "SIDZEN" },
-    offers: { "@type": "Offer", url: `https://sidzen.shop/catalog/${category.slug}/${product.slug}/`, priceCurrency: "RUB", price: defaultPrice, availability: options.stock > 0 ? "https://schema.org/InStock" : product.madeToOrder ? "https://schema.org/PreOrder" : "https://schema.org/OutOfStock" },
+    offers: { "@type": "Offer", url: `https://sidzen.shop/catalog/${category.slug}/${product.slug}/`, priceCurrency: "RUB", price: defaultPrice, availability: stockReviewRequired ? "https://schema.org/OutOfStock" : options.stock > 0 ? "https://schema.org/InStock" : product.madeToOrder ? "https://schema.org/PreOrder" : "https://schema.org/OutOfStock" },
     ...(reviewCount ? { aggregateRating: { "@type": "AggregateRating", ratingValue: rating.toFixed(1), reviewCount } } : {}),
   };
-  const specs = productSpecificationRows(product);
+  const specs = productSpecificationRows(product).filter(([name]) => !stockReviewRequired || !["Отправка", "Срок изготовления"].includes(name));
   const description = product.description || product.shortDescription;
   return (
     <>
@@ -85,7 +88,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
           <div className="product-detail__grid">
             <div className="product-media">
               <ProductGallery key={product.id} images={product.images.map(({ path, alt, caption, width, height }) => ({ path, alt, caption, width, height }))} name={product.name} badge={product.badge} mobileActions={<FavoriteButton productId={product.id} name={product.name} />} />
-              <ProductMobilePrice oldPrice={product.oldPrice ? Number(product.oldPrice) : null} />
+              <ProductMobilePrice oldPrice={product.oldPrice ? Number(product.oldPrice) : null} stockReviewRequired={stockReviewRequired} />
             </div>
             <div className="product-summary">
               <div className="product-summary__heading">
@@ -98,16 +101,17 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
               <a className="product-description-link" href="#description">Перейти к описанию →</a>
             </div>
             <aside className="product-buy-panel" aria-label="Покупка товара">
-              <span className={"stock-label" + (options.stock < 1 && !product.madeToOrder ? " stock-label--unavailable" : "")}>{options.stock > 0 ? `В наличии: ${options.stock} шт.` : product.madeToOrder ? `Под заказ: ${product.leadDays}–${product.leadDays + 2} ${pluralRu(product.leadDays + 2, ["день", "дня", "дней"])}` : "Нет в наличии"}</span>
-              <ProductPurchaseForm product={options} />
+              <span className={"stock-label" + (stockReviewRequired || (options.stock < 1 && !product.madeToOrder) ? " stock-label--unavailable" : "")}>{stockReviewRequired ? "Наличие уточняется" : options.stock > 0 ? `В наличии: ${options.stock} шт.` : product.madeToOrder ? `Под заказ: ${product.leadDays}–${product.leadDays + 2} ${pluralRu(product.leadDays + 2, ["день", "дня", "дней"])}` : "Нет в наличии"}</span>
+              <ProductPurchaseForm product={options} stockReviewRequired={stockReviewRequired} />
               <Link className="product-delivery-note" href="/delivery/"><TruckIcon aria-hidden="true" /><span>Доставка в ПВЗ<small>Условия зависят от выбранного перевозчика</small></span></Link>
             </aside>
           </div>
         </ProductPurchaseState>
         <div className="content-tabs"><nav className="content-tabs__nav"><a href="#description">Описание</a>{specs.length > 0 && <a href="#specifications">Характеристики</a>}<a href="#delivery">Доставка</a></nav><div className="rich-text"><h2 id="description">Описание</h2>{description && <p className="product-description">{description}</p>}{product.usage && <p>{product.usage}</p>}{specs.length > 0 && <><h2 id="specifications">Характеристики</h2><table className="spec-table"><tbody>{specs.map(([key, value]) => <tr key={key}><th scope="row">{key}</th><td>{value}</td></tr>)}</tbody></table></>}<h2 id="delivery">Доставка и уход</h2><p>Способы доставки и их стоимость можно посмотреть при оформлении заказа. {product.instructions}</p></div></div>
         <ProductReviews productId={product.id} path={`/catalog/${category.slug}/${product.slug}/`} total={reviewCount} rating={rating} requestedPage={query.reviewsPage} />
-        {related.length > 0 && <section><h2>Вам также может подойти</h2><div className="product-grid">{related.map((item) => <ProductCard key={item.id} product={item} />)}</div></section>}
+        {related.length > 0 && <section><h2>Вам также может подойти</h2><div className="product-grid">{related.map((item) => <ProductCard key={item.id} product={item} stockReviewRequired={relatedStockReviewIds.has(item.id)} />)}</div></section>}
       </article>
     </>
   );
 }
+
