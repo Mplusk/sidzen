@@ -1,0 +1,38 @@
+name: Inspect cart structure (temporary)
+on:
+  pull_request:
+    types: [opened]
+jobs:
+  inspect:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'codex/cart-inspect-300030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: production
+    concurrency:
+      group: production-diagnostics
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - name: Inspect stock read-only
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          install -d -m 0700 "${HOME}/.ssh"
+          printf '%s\n' "${DEPLOY_SSH_PRIVATE_KEY}" > "${HOME}/.ssh/diagnostic_key"
+          printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > "${HOME}/.ssh/known_hosts"
+          chmod 0600 "${HOME}/.ssh/diagnostic_key" "${HOME}/.ssh/known_hosts"
+          ssh -i "${HOME}/.ssh/diagnostic_key" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "${DEPLOY_USER}@${DEPLOY_HOST}" 'docker exec -i 3dprinta-db-1 psql -X -q -U 3dprinta -d 3dprinta -v ON_ERROR_STOP=1 -A -t' <<'SQL'
+          BEGIN READ ONLY;
+          WITH rows AS (SELECT ci."cartId",ci."variantId",ci."modelFileId",ci.config FROM "CartItem" ci JOIN "Product" p ON p.id=ci."productId" WHERE p.sku='300030'),
+          duplicates AS (SELECT "cartId",count(*) n,count(DISTINCT coalesce("variantId",'<null>')) AS variants,bool_and("variantId" IS NULL) AS no_variant,bool_and("modelFileId" IS NULL) AS no_model FROM rows GROUP BY "cartId" HAVING count(*)>1),
+          shape AS (SELECT DISTINCT kv.key,jsonb_typeof(kv.value) AS type FROM rows r JOIN duplicates d ON d."cartId"=r."cartId" CROSS JOIN LATERAL jsonb_each(CASE WHEN jsonb_typeof(r.config)='object' THEN r.config ELSE '{}'::jsonb END) kv)
+          SELECT json_build_object('duplicate_carts', (SELECT count(*) FROM duplicates), 'same_variant_carts', (SELECT count(*) FROM duplicates WHERE variants=1), 'all_null_variant_carts', (SELECT count(*) FROM duplicates WHERE no_variant), 'all_no_model_carts', (SELECT count(*) FROM duplicates WHERE no_model), 'config_shapes', COALESCE((SELECT json_agg(json_build_object('key',key,'type',type) ORDER BY key,type) FROM shape),'[]'::json));
+          COMMIT;
+          SQL
+      - name: Remove runner credentials
+        if: always()
+        run: rm -f -- "${HOME}/.ssh/diagnostic_key"
