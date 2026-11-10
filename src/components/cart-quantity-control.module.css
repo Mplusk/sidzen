@@ -1,5 +1,5 @@
 .wrapper { display: grid; justify-items: end; gap: 8px; min-width: 0; }
-.control { display: grid; grid-template-columns: 40px minmax(32px, auto) 40px; align-items: center; min-height: 40px; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); text-align: center; }
+.control { display: grid; grid-template-columns: 40px 40px 40px; align-items: center; min-height: 40px; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); text-align: center; }
 .control button { display: grid; place-items: center; align-self: stretch; border: 0; color: var(--ink); background: transparent; font-size: 1.15rem; cursor: pointer; }
 .control button:hover:not(:disabled) { background: var(--paper-2); }
 .control button:disabled { color: var(--muted); opacity: .45; cursor: not-allowed; }
