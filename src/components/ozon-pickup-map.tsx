@@ -9,6 +9,7 @@ import type { MapBounds, PickupCluster, PickupViewport } from "@/lib/delivery/po
 
 const NO_CLUSTERS: PickupCluster[] = [];
 const NO_POINTS: PickupPoint[] = [];
+const TILE_RETRY_DELAYS = [2_000, 6_000, 60_000];
 
 function showSelection(button: HTMLButtonElement, selected: boolean) {
   button.classList.toggle("ozon-point-button--selected", selected);
@@ -30,7 +31,9 @@ export default function OzonPickupMap({ points, selected, onSelect, carrier = "O
   const pendingSelection = useRef(selected);
   const viewportRef = useRef(onViewportChange);
   const cameraBounds = useRef<string | null>(null);
+  const retryTiles = useRef<(() => void) | null>(null);
   const [tileError, setTileError] = useState(false);
+  const [tileRetrying, setTileRetrying] = useState(false);
   const located = useMemo(() => points.filter(hasPointCoordinates), [points]);
   const progressive = !!initialBounds;
   const focus = useMemo(() => progressive ? NO_POINTS : initialMapPoints(points), [points, progressive]);
@@ -69,12 +72,92 @@ export default function OzonPickupMap({ points, selected, onSelect, carrier = "O
     map.on("moveend zoomend", reportViewport);
     const cancelFocus = () => { pendingSelection.current = ""; };
     map.on("dragstart", cancelFocus);
-    const tiles = L.tileLayer("/api/maps/tiles/{z}/{x}/{y}/", { maxZoom: 18, keepBuffer: 0, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>' }).addTo(map);
-    tiles.on("tileerror", () => setTileError(true));
-    tiles.on("tileload", () => setTileError(false));
+    const tiles = L.tileLayer("/api/maps/tiles/{z}/{x}/{y}/", { maxZoom: 18, keepBuffer: 0, updateWhenIdle: true, updateWhenZooming: false, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>' }).addTo(map);
+    type TileState = { coords: L.Coords; failed: boolean; pending: boolean; retries: number; timer?: ReturnType<typeof setTimeout> };
+    const activeTiles = new Map<HTMLImageElement, TileState>();
+    let disposed = false;
+    const visible = ({ coords }: TileState) => {
+      if (coords.z !== map.getZoom()) return false;
+      const bounds = map.getPixelBounds(), size = tiles.getTileSize();
+      return (coords.x + 1) * size.x > bounds.min!.x && coords.x * size.x < bounds.max!.x
+        && (coords.y + 1) * size.y > bounds.min!.y && coords.y * size.y < bounds.max!.y;
+    };
+    const updateTileStatus = () => {
+      if (disposed) return;
+      const failed = [...activeTiles.values()].filter(state => state.failed && visible(state));
+      setTileError(failed.length > 0);
+      setTileRetrying(failed.length > 0 && failed.every(state => state.pending));
+    };
+    const retryTile = (tile: HTMLImageElement, state: TileState) => {
+      if (disposed || activeTiles.get(tile) !== state || !state.failed || state.pending || !visible(state)) return;
+      state.pending = true;
+      // Reuse Leaflet's image and its existing load/error listeners. Redrawing
+      // the layer would also request successful tiles and disturb recovery.
+      tile.src = tile.src;
+      updateTileStatus();
+    };
+    const scheduleRetry = (tile: HTMLImageElement, state: TileState) => {
+      if (!state.failed || state.pending || state.timer !== undefined || state.retries >= TILE_RETRY_DELAYS.length || !visible(state)) return;
+      state.timer = setTimeout(() => {
+        state.timer = undefined;
+        if (disposed || activeTiles.get(tile) !== state || !state.failed || state.pending || !visible(state)) return;
+        state.retries += 1;
+        retryTile(tile, state);
+      }, TILE_RETRY_DELAYS[state.retries]);
+    };
+    const onTileStart = ({ tile, coords }: L.TileEvent) => {
+      if (tile instanceof HTMLImageElement) activeTiles.set(tile, { coords, failed: false, pending: true, retries: 0 });
+    };
+    const onTileError = ({ tile }: L.TileEvent) => {
+      const state = activeTiles.get(tile as HTMLImageElement);
+      // Leaflet can emit tileerror after a tile has already been unloaded.
+      if (!state || disposed) return;
+      state.failed = true; state.pending = false;
+      scheduleRetry(tile as HTMLImageElement, state);
+      updateTileStatus();
+    };
+    const onTileLoad = ({ tile }: L.TileEvent) => {
+      const state = activeTiles.get(tile as HTMLImageElement);
+      if (!state || disposed) return;
+      clearTimeout(state.timer); state.timer = undefined;
+      state.failed = false; state.pending = false;
+      updateTileStatus();
+    };
+    const onTileUnload = ({ tile }: L.TileEvent) => {
+      const image = tile as HTMLImageElement;
+      clearTimeout(activeTiles.get(image)?.timer);
+      activeTiles.delete(image);
+      updateTileStatus();
+    };
+    const onTileViewportChange = () => {
+      for (const [tile, state] of activeTiles) scheduleRetry(tile, state);
+      updateTileStatus();
+    };
+    retryTiles.current = () => {
+      for (const [tile, state] of activeTiles) {
+        if (!state.failed || state.pending || !visible(state)) continue;
+        clearTimeout(state.timer); state.timer = undefined; state.retries = 0;
+        retryTile(tile, state);
+      }
+    };
+    tiles.on("tileloadstart", onTileStart);
+    tiles.on("tileerror", onTileError);
+    tiles.on("tileload", onTileLoad);
+    tiles.on("tileunload", onTileUnload);
+    tiles.on("tileabort", onTileUnload);
+    map.on("moveend zoomend", onTileViewportChange);
     const resize = new ResizeObserver(() => map.invalidateSize());
     resize.observe(container.current);
     return () => {
+      disposed = true; retryTiles.current = null;
+      for (const state of activeTiles.values()) clearTimeout(state.timer);
+      activeTiles.clear();
+      tiles.off("tileloadstart", onTileStart);
+      tiles.off("tileerror", onTileError);
+      tiles.off("tileload", onTileLoad);
+      tiles.off("tileunload", onTileUnload);
+      tiles.off("tileabort", onTileUnload);
+      map.off("moveend zoomend", onTileViewportChange);
       resize.disconnect(); map.off("moveend zoomend", reportViewport); map.off("dragstart", cancelFocus);
       map.remove(); mapRef.current = null; cameraBounds.current = null;
     };
@@ -170,5 +253,5 @@ export default function OzonPickupMap({ points, selected, onSelect, carrier = "O
     for (const [id, button] of buttonsRef.current) showSelection(button, id === selected);
     revealSelection();
   }, [located, selected, carrier, revealSelection]);
-  return <div className="ozon-map-wrapper"><div ref={container} className="ozon-pickup-map" role="region" aria-label={`Карта пунктов выдачи ${carrier}`} />{tileError && <p className="muted" role="status">Подложка карты временно недоступна. ПВЗ можно выбрать по метке или из списка ниже.</p>}</div>;
+  return <div className="ozon-map-wrapper"><div ref={container} className="ozon-pickup-map" role="region" aria-label={`Карта пунктов выдачи ${carrier}`} />{tileError && <div role="status"><p className="muted">Часть карты не загрузилась. ПВЗ можно выбрать по метке или из списка ниже.</p><button type="button" className="button button--outline button--small" disabled={tileRetrying} onClick={() => retryTiles.current?.()}>{tileRetrying ? "Загружаем карту…" : "Повторить загрузку карты"}</button></div>}</div>;
 }

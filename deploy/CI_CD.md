@@ -33,6 +33,9 @@ The Russian VPS may host other services/domains. Each service must have its own
 Compose project, volumes and private application network; only its web entry
 joins the shared reverse proxy. SIDZEN cleanup is limited to its own unused image
 tags and Compose project. Never run global Docker/container/volume prune.
+The app's `fetch-cache` volume retains cached public map tiles across releases;
+the runner creates the cache directory with ownership for uid 1001. Keep this
+volume alongside `image-cache` when applying host-specific Compose overrides.
 No extra public HTTP gateway or other application is installed on the Telegram
 host. New site domains and their routing belong on the Russian host.
 

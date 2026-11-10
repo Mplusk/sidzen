@@ -67,6 +67,7 @@ services:
       - model-files:/app/private-uploads
       - product-images:/app/public/uploads/products
       - image-cache:/app/.next/cache/images
+      - fetch-cache:/app/.next/cache/fetch-cache
       - privacy-ledger:/app/privacy-ledger
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
@@ -116,4 +117,5 @@ volumes:
   model-files:
   product-images:
   image-cache:
+  fetch-cache:
   privacy-ledger:

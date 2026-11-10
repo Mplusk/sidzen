@@ -2,11 +2,12 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ markers: [] as { content: HTMLElement | null; element: HTMLElement; remove: () => void; openPopup: () => void; bindPopup: ReturnType<typeof vi.fn>; click?: () => void; add?: () => void }[], events: new Map<string, () => void>(), map: { fitBounds: vi.fn(), panTo: vi.fn(), setView: vi.fn(), getZoom: vi.fn(), getBoundsZoom: vi.fn(), getBounds: vi.fn(), on: vi.fn(), off: vi.fn(), remove: vi.fn(), invalidateSize: vi.fn() }, addLayers: vi.fn(), zoomToShowLayer: vi.fn(), removeClusters: vi.fn() }));
+type TileEvent = { tile: HTMLImageElement; coords: { x: number; y: number; z: number } };
+const m = vi.hoisted(() => ({ markers: [] as { content: HTMLElement | null; element: HTMLElement; remove: () => void; openPopup: () => void; bindPopup: ReturnType<typeof vi.fn>; click?: () => void; add?: () => void }[], events: new Map<string, () => void>(), tileEvents: new Map<string, (event: TileEvent) => void>(), tileLayer: vi.fn(), tiles: { on: vi.fn(), off: vi.fn(), getTileSize: vi.fn() }, map: { fitBounds: vi.fn(), panTo: vi.fn(), setView: vi.fn(), getZoom: vi.fn(), getBoundsZoom: vi.fn(), getBounds: vi.fn(), getPixelBounds: vi.fn(), on: vi.fn(), off: vi.fn(), remove: vi.fn(), invalidateSize: vi.fn() }, addLayers: vi.fn(), zoomToShowLayer: vi.fn(), removeClusters: vi.fn() }));
 vi.mock("leaflet.markercluster", () => ({}));
 vi.mock("leaflet", () => ({ default: {
   map: () => m.map, divIcon: vi.fn(), latLngBounds: (values: unknown) => values, point: (x: number, y: number) => ({ x, y }),
-  tileLayer: () => ({ addTo: () => ({ on: vi.fn() }) }),
+  tileLayer: (...args: unknown[]) => { m.tileLayer(...args); return { addTo: () => m.tiles }; },
   markerClusterGroup: () => {
     const loaded = new Set<unknown>();
     const group = { addTo: () => group, addLayers: (layers: unknown[]) => { m.addLayers(layers); layers.forEach(layer => loaded.add(layer)); }, hasLayer: (layer: unknown) => loaded.has(layer), zoomToShowLayer: m.zoomToShowLayer, remove: m.removeClusters };
@@ -27,9 +28,21 @@ const select = vi.fn();
 async function render(selected: string, openPopupOnSelect = true, mapPoints = points, extra: { initialBounds?: MapBounds; onViewportChange?: (value: PickupViewport) => void; clusters?: PickupCluster[] } = {}) { await act(async () => root.render(createElement(OzonPickupMap, { points: mapPoints, selected, onSelect: select, openPopupOnSelect, ...extra }))); }
 const popupButton = (index: number) => m.markers[index].content!.querySelector("button")!;
 beforeEach(() => {
-  vi.clearAllMocks(); m.markers.length = 0; m.events.clear();
-  m.map.on.mockImplementation((names: string, handler: () => void) => { names.split(" ").forEach(name => m.events.set(name, handler)); });
-  m.map.off.mockImplementation((names: string) => { names.split(" ").forEach(name => m.events.delete(name)); });
+  vi.clearAllMocks(); m.markers.length = 0; m.events.clear(); m.tileEvents.clear();
+  const handlers = new Map<string, Set<() => void>>();
+  m.map.on.mockImplementation((names: string, handler: () => void) => { names.split(" ").forEach(name => {
+    if (!handlers.has(name)) handlers.set(name, new Set());
+    handlers.get(name)!.add(handler);
+    m.events.set(name, () => handlers.get(name)?.forEach(callback => callback()));
+  }); });
+  m.map.off.mockImplementation((names: string, handler: () => void) => { names.split(" ").forEach(name => {
+    handlers.get(name)?.delete(handler);
+    if (!handlers.get(name)?.size) { handlers.delete(name); m.events.delete(name); }
+  }); });
+  m.tiles.on.mockImplementation((names: string, handler: (event: TileEvent) => void) => { names.split(" ").forEach(name => m.tileEvents.set(name, handler)); });
+  m.tiles.off.mockImplementation((names: string) => { names.split(" ").forEach(name => m.tileEvents.delete(name)); });
+  m.tiles.getTileSize.mockReturnValue({ x: 256, y: 256 });
+  m.map.getPixelBounds.mockReturnValue({ min: { x: 0, y: 0 }, max: { x: 512, y: 512 } });
   m.map.getZoom.mockReturnValue(11);
   m.map.getBoundsZoom.mockReturnValue(14);
   m.map.getBounds.mockReturnValue({ getSouth: () => 55.5, getWest: () => 37.2, getNorth: () => 55.95, getEast: () => 37.95 });
@@ -133,6 +146,126 @@ describe("progressive viewport map", () => {
   });
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+describe("map tile recovery", () => {
+  function tile(x: number, y = 0, z = 11): TileEvent {
+    const image = document.createElement("img");
+    image.src = `/api/maps/tiles/${z}/${x}/${y}/`;
+    return { tile: image, coords: { x, y, z } };
+  }
+  async function emit(name: string, event: TileEvent) { await act(async () => m.tileEvents.get(name)!(event)); }
+
+  it("keeps a failed tile visible in the status when its neighbor loads successfully", async () => {
+    vi.useFakeTimers();
+    await render("", false);
+    const first = tile(0), neighbor = tile(1);
+    await emit("tileloadstart", first); await emit("tileloadstart", neighbor);
+    await emit("tileerror", first); await emit("tileload", neighbor);
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("Часть карты не загрузилась");
+    await emit("tileload", first);
+    expect(container.querySelector('[role="status"]')).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(m.tileLayer).toHaveBeenCalledWith("/api/maps/tiles/{z}/{x}/{y}/", expect.objectContaining({ updateWhenIdle: true, updateWhenZooming: false }));
+  });
+
+  it("retries only failed visible images with a bounded backoff, including rate-limit recovery", async () => {
+    vi.useFakeTimers();
+    await render("", false);
+    const failed = tile(0), successful = tile(1), offscreen = tile(4), oldZoom = tile(0, 0, 10);
+    const source = failed.tile.src;
+    const retry = vi.spyOn(failed.tile, "src", "set");
+    const successfulRetry = vi.spyOn(successful.tile, "src", "set");
+    const offscreenRetry = vi.spyOn(offscreen.tile, "src", "set");
+    const oldZoomRetry = vi.spyOn(oldZoom.tile, "src", "set");
+    for (const event of [failed, successful, offscreen, oldZoom]) await emit("tileloadstart", event);
+    await emit("tileload", successful);
+    for (const event of [failed, offscreen, oldZoom]) await emit("tileerror", event);
+    await act(async () => vi.advanceTimersByTime(1_999));
+    expect(retry).not.toHaveBeenCalled();
+    await act(async () => vi.advanceTimersByTime(1));
+    expect(retry).toHaveBeenCalledExactlyOnceWith(source);
+    expect(container.querySelector("button")?.disabled).toBe(true);
+    await emit("tileerror", failed);
+    await act(async () => vi.advanceTimersByTime(5_999));
+    expect(retry).toHaveBeenCalledTimes(1);
+    await act(async () => vi.advanceTimersByTime(1));
+    expect(retry).toHaveBeenCalledTimes(2);
+    await emit("tileerror", failed);
+    await act(async () => vi.advanceTimersByTime(59_999));
+    expect(retry).toHaveBeenCalledTimes(2);
+    await act(async () => vi.advanceTimersByTime(1));
+    expect(retry).toHaveBeenCalledTimes(3);
+    await emit("tileerror", failed);
+    await act(async () => vi.advanceTimersByTime(120_000));
+    expect(retry.mock.calls).toEqual([[source], [source], [source]]);
+    expect(successfulRetry).not.toHaveBeenCalled();
+    expect(offscreenRetry).not.toHaveBeenCalled();
+    expect(oldZoomRetry).not.toHaveBeenCalled();
+    expect(container.querySelector("button")?.textContent).toBe("Повторить загрузку карты");
+    expect(container.querySelector("button")?.disabled).toBe(false);
+  });
+
+  it("allows manual retry without resetting the camera, selected pickup point or successful tiles", async () => {
+    vi.useFakeTimers();
+    await render("42", false);
+    const failed = tile(0), successful = tile(1);
+    const retry = vi.spyOn(failed.tile, "src", "set"), neighborRetry = vi.spyOn(successful.tile, "src", "set");
+    await emit("tileloadstart", failed); await emit("tileloadstart", successful);
+    await emit("tileerror", failed); await emit("tileload", successful);
+    await act(async () => container.querySelector("button")!.click());
+    expect(retry).toHaveBeenCalledExactlyOnceWith(failed.tile.src);
+    expect(neighborRetry).not.toHaveBeenCalled();
+    expect(m.map.fitBounds).toHaveBeenCalledTimes(1);
+    expect(m.map.setView).not.toHaveBeenCalled();
+    expect(m.zoomToShowLayer).toHaveBeenCalledTimes(1);
+    expect(m.markers[0].element.classList.contains("ozon-map-pin--selected")).toBe(true);
+    expect(select).not.toHaveBeenCalled();
+    await emit("tileload", failed);
+    await act(async () => vi.advanceTimersByTime(60_000));
+    expect(retry).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it("does not retry tiles after panning away and resumes recovery when they become visible", async () => {
+    vi.useFakeTimers();
+    await render("", false);
+    const failed = tile(0), retry = vi.spyOn(failed.tile, "src", "set");
+    await emit("tileloadstart", failed); await emit("tileerror", failed);
+    m.map.getPixelBounds.mockReturnValue({ min: { x: 512, y: 0 }, max: { x: 1024, y: 512 } });
+    await act(async () => m.events.get("moveend")!());
+    expect(container.querySelector('[role="status"]')).toBeNull();
+    await act(async () => vi.advanceTimersByTime(2_000));
+    expect(retry).not.toHaveBeenCalled();
+    m.map.getPixelBounds.mockReturnValue({ min: { x: 0, y: 0 }, max: { x: 512, y: 512 } });
+    await act(async () => m.events.get("moveend")!());
+    await act(async () => vi.advanceTimersByTime(2_000));
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["tileunload", "tileabort"])("cancels pending retries and ignores late errors after %s", async eventName => {
+    vi.useFakeTimers();
+    await render("", false);
+    const failed = tile(0), retry = vi.spyOn(failed.tile, "src", "set");
+    await emit("tileloadstart", failed); await emit("tileerror", failed);
+    await emit(eventName, failed); await emit("tileerror", failed);
+    await act(async () => vi.advanceTimersByTime(60_000));
+    expect(retry).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it("clears retry timers and detaches tile handlers on close", async () => {
+    vi.useFakeTimers();
+    await render("", false);
+    const failed = tile(0), retry = vi.spyOn(failed.tile, "src", "set");
+    await emit("tileloadstart", failed); await emit("tileerror", failed);
+    const lateError = m.tileEvents.get("tileerror")!;
+    await act(async () => root.render(null));
+    expect(vi.getTimerCount()).toBe(0);
+    expect(m.tileEvents.size).toBe(0);
+    expect(m.events.size).toBe(0);
+    await act(async () => { lateError(failed); vi.advanceTimersByTime(60_000); });
+    expect(retry).not.toHaveBeenCalled();
+  });
+});
 describe("pickup map selection feedback", () => {
   it("restores the current selection when clustering recreates marker elements", async () => {
     await render("42", false);

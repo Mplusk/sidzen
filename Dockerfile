@@ -54,8 +54,8 @@ RUN groupadd --system --gid 1001 nodejs \
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-RUN mkdir -p /app/private-uploads /app/public/uploads/products /app/.next/cache/images \
-  && chown nextjs:nodejs /app/private-uploads /app/public/uploads/products /app/.next/cache/images
+RUN mkdir -p /app/private-uploads /app/public/uploads/products /app/.next/cache/images /app/.next/cache/fetch-cache \
+  && chown nextjs:nodejs /app/private-uploads /app/public/uploads/products /app/.next/cache /app/.next/cache/images /app/.next/cache/fetch-cache
 RUN mkdir -p /app/privacy-ledger && chown nextjs:nodejs /app/privacy-ledger
 RUN chmod 0700 /app/privacy-ledger
 

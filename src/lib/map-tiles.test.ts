@@ -20,15 +20,20 @@ describe("privacy-preserving map tile proxy", () => {
   });
   it("rejects invalid requests before contacting the provider", async () => {
     const transport = vi.fn<typeof fetch>();
-    expect((await getMapTile("18", "999999", "0", transport)).status).toBe(400);
+    const response = await getMapTile("18", "999999", "0", transport);
+    expect(response.status).toBe(400);
+    expect(response.headers.get("cache-control")).toBe("no-store");
     expect(transport).not.toHaveBeenCalled();
   });
   it("does not relay upstream errors, HTML or oversized responses", async () => {
     for (const response of [new Response("private error", { status: 403 }), new Response("html", { headers: { "Content-Type": "text/html" } }), new Response("not-png", { headers: { "Content-Type": "image/png" } }), new Response(png, { headers: { "Content-Type": "image/png", "Content-Length": "262145" } }), new Response(new Uint8Array(262145), { headers: { "Content-Type": "image/png" } })]) {
       const result = await getMapTile("3", "1", "2", vi.fn<typeof fetch>().mockResolvedValue(response));
       expect(result.status).toBe(502);
+      expect(result.headers.get("cache-control")).toBe("no-store");
       expect(await result.text()).toBe("");
     }
-    expect((await getMapTile("3", "1", "2", vi.fn<typeof fetch>().mockRejectedValue(new Error("private")))).status).toBe(502);
+    const failed = await getMapTile("3", "1", "2", vi.fn<typeof fetch>().mockRejectedValue(new Error("private")));
+    expect(failed.status).toBe(502);
+    expect(failed.headers.get("cache-control")).toBe("no-store");
   });
 });
