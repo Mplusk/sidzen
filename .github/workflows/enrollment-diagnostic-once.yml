@@ -1,0 +1,48 @@
+name: Inspect enrollment conditions (temporary)
+on:
+  pull_request:
+    types: [opened]
+jobs:
+  inspect:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'codex/inspect-enrollment-once'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: production
+    concurrency:
+      group: production-diagnostics
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - name: Inspect conditions read-only
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          install -d -m 0700 "${HOME}/.ssh"
+          printf '%s\n' "${DEPLOY_SSH_PRIVATE_KEY}" > "${HOME}/.ssh/diagnostic_key"
+          printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > "${HOME}/.ssh/known_hosts"
+          chmod 0600 "${HOME}/.ssh/diagnostic_key" "${HOME}/.ssh/known_hosts"
+          ssh -i "${HOME}/.ssh/diagnostic_key" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "${DEPLOY_USER}@${DEPLOY_HOST}" 'docker exec -i 3dprinta-db-1 psql -X -q -U 3dprinta -d 3dprinta -v ON_ERROR_STOP=1 -A -t' <<'SQL'
+          BEGIN READ ONLY;
+          WITH c AS (SELECT * FROM "AdminLoginChallenge" WHERE purpose='enroll' AND "createdAt" > now()-interval '1 day' ORDER BY "createdAt" DESC LIMIT 1)
+          SELECT json_build_object(
+           'flag_enabled', coalesce((SELECT value='true'::jsonb FROM "SiteSetting" WHERE key='security.admin_email_confirmation'),false),
+           'challenge_found', EXISTS(SELECT 1 FROM c),
+           'age_minutes', (SELECT floor(extract(epoch from now()-"createdAt")/60)::int FROM c),
+           'expired', (SELECT "expiresAt"<=now() FROM c),
+           'consumed', (SELECT "consumedAt" IS NOT NULL FROM c),
+           'user_active', (SELECT u."isActive" FROM c JOIN "User" u ON u.id=c."userId"),
+           'email_unchanged', (SELECT u.email=c.email FROM c JOIN "User" u ON u.id=c."userId"),
+           'superadmin', (SELECT EXISTS (SELECT 1 FROM "UserRole" ur JOIN "Role" r ON r.id=ur."roleId" WHERE ur."userId"=c."userId" AND r.code='superadmin') FROM c),
+           'original_session_valid', (SELECT EXISTS(SELECT 1 FROM "Session" s WHERE s."tokenHash"=c."sessionHash" AND s."userId"=c."userId" AND s."expiresAt">now()) FROM c),
+           'smtp_revision_unchanged', (SELECT EXISTS(SELECT 1 FROM "SiteSetting" ss WHERE ss.key='notifications.smtp.spaceweb' AND ss.value->>'revision'=c."smtpRevision" AND coalesce(ss.value->>'checkedAt','')<>'' AND coalesce(ss.value->>'password','')<>'') FROM c),
+           'other_active_staff', (SELECT EXISTS(SELECT 1 FROM "User" u JOIN "UserRole" ur ON ur."userId"=u.id JOIN "Role" r ON r.id=ur."roleId" WHERE u.id<>c."userId" AND u."isActive" AND (r.code='superadmin' OR EXISTS(SELECT 1 FROM "RolePermission" rp WHERE rp."roleId"=r.id))) FROM c)
+          );
+          COMMIT;
+          SQL
+      - name: Remove runner credentials
+        if: always()
+        run: rm -f -- "${HOME}/.ssh/diagnostic_key"
