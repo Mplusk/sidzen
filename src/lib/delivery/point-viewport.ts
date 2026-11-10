@@ -7,7 +7,15 @@ export type PickupViewport = { bounds: MapBounds; zoom: number };
 export type PickupViewportResult = { points: PickupPoint[]; clusters: PickupCluster[]; scope: string; nextOffset?: number | null };
 
 export const MAX_VIEWPORT_POINTS = 500;
-export const VIEWPORT_GRID_SIZE = 20;
+
+// Keep the city overview sparse; reveal more detail as the buyer zooms in.
+// The same budget applies to individual points, otherwise a city with fewer
+// than 500 points would bypass aggregation and still fill the entire map.
+// Maximum zoom uses explicit point pagination instead of this density.
+export function pickupViewportDensity(zoom: number) {
+  const gridSize = zoom <= 11 ? 5 : zoom <= 13 ? 6 : zoom <= 15 ? 7 : 8;
+  return { gridSize, pointBudget: gridSize * gridSize };
+}
 
 export function parsePickupViewport(bbox: string | null, zoomValue: string | null): PickupViewport | null {
   if (!bbox || bbox.length > 120 || !zoomValue || !/^\d{1,2}$/.test(zoomValue)) return null;

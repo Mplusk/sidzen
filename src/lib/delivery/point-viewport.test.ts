@@ -1,8 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { normalizePickupCity, parsePickupViewport, parseViewportOffset, pickupCityOverview, pickupCityPattern, pickupViewportResult } from "./point-viewport";
+import { normalizePickupCity, parsePickupViewport, parseViewportOffset, pickupCityOverview, pickupCityPattern, pickupViewportDensity, pickupViewportResult } from "./point-viewport";
 import { pickupCitySql, pickupViewportSql } from "./point-viewport-sql";
 
 describe("progressive pickup map boundaries", () => {
+  it.each([
+    [3, 5, 25], [10, 5, 25], [11, 5, 25], [12, 6, 36], [13, 6, 36],
+    [14, 7, 49], [15, 7, 49], [16, 8, 64], [17, 8, 64],
+  ])("keeps zoom %s at a bounded density without discarding any rows", (zoom, gridSize, pointBudget) => {
+    expect(pickupViewportDensity(zoom)).toEqual({ gridSize, pointBudget });
+    const sql = pickupViewportSql("client", 7n, parsePickupViewport("37.3,55.5,37.9,55.9", String(zoom))!);
+    // Both the threshold for individual points and both grid axes must follow
+    // the same budget. A 300-point overview must not use the old 500 bypass.
+    expect(sql.values[6]).toBe(pointBudget);
+    expect(sql.values.slice(7)).toEqual([gridSize - 1, 37.3, 37.9 - 37.3, gridSize, gridSize - 1, 55.5, 55.9 - 55.5, gridSize]);
+    expect(sql.values).not.toContain(500);
+    expect(sql.text).toContain("FROM cells GROUP BY cell");
+    expect(sql.text).not.toContain("LIMIT"); expect(sql.text).not.toContain("OFFSET");
+  });
   it("parses a Moscow viewport without asking for a complete city", () => {
     expect(parsePickupViewport("37.3,55.5,37.9,55.9", "11")).toEqual({ bounds: { west: 37.3, south: 55.5, east: 37.9, north: 55.9 }, zoom: 11 });
     expect(parsePickupViewport("-180,-85,180,85", "3")).not.toBeNull();

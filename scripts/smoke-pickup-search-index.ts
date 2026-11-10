@@ -83,18 +83,37 @@ try {
   assert.deepEqual(await prisma.$queryRaw(pickupCitySql(marker, 7n, "Тамбов")), [{ latitude: 52.72, longitude: 41.44 }, { latitude: 52.73, longitude: 41.45 }]);
   assert.deepEqual(await prisma.$queryRaw(pickupCitySql(marker, 7n, "Санкт-Петербург")), [{ latitude: 59.9, longitude: 30.3 }]);
   assert.deepEqual(await prisma.$queryRaw(pickupCitySql(marker, 7n, "Табмов")), []);
-  const broad = await prisma.$queryRaw<PickupViewportRow[]>(pickupViewportSql(marker, 7n, { bounds: { south: 55.5, west: 37.2, north: 56, east: 38 }, zoom: 10 }));
-  assert(broad.length <= 400 && broad.length > 0);
+  const broadBounds = { south: 55.5, west: 37.2, north: 56, east: 38 };
+  const broad = await prisma.$queryRaw<PickupViewportRow[]>(pickupViewportSql(marker, 7n, { bounds: broadBounds, zoom: 10 }));
+  assert(broad.length <= 25 && broad.length > 0, "A city overview must stay sparse");
   assert.equal(broad.reduce((sum, feature) => sum + feature.count, 0), 10000);
   const payload = pickupViewportResult(broad, "qa");
-  assert(payload.clusters.length > 0 && JSON.stringify(payload).length < 100000);
+  assert(payload.clusters.length > 0 && JSON.stringify(payload).length < 10000);
+  for (const [zoom, budget] of [[12, 36], [14, 49], [16, 64], [17, 64]]) {
+    const features = await prisma.$queryRaw<PickupViewportRow[]>(pickupViewportSql(marker, 7n, { bounds: broadBounds, zoom }));
+    assert(features.length > 0 && features.length <= budget, `Zoom ${zoom} must respect its marker budget`);
+    assert.equal(features.reduce((sum, feature) => sum + feature.count, 0), 10000, "Progressive detail must not discard pickup points");
+  }
+  // Even a district below the old 500-point cutoff needs aggregation at a
+  // broad zoom; the same addresses must remain reachable when zooming in.
+  const moderateBounds = { south: 55.5499, west: 37.2999, north: 55.6461, east: 37.3661 };
+  const moderate = await prisma.$queryRaw<PickupViewportRow[]>(pickupViewportSql(marker, 7n, { bounds: moderateBounds, zoom: 10 }));
+  assert(moderate.length <= 25 && moderate.some(feature => feature.count > 1));
+  assert.equal(moderate.reduce((sum, feature) => sum + feature.count, 0), 300);
+  const expanded = await prisma.$queryRaw<PickupViewportRow[]>(pickupViewportSql(marker, 7n, { bounds: moderateBounds, zoom: 18 }));
+  assert.equal(expanded.length, 300);
+  assert(expanded.every(feature => feature.count === 1 && feature.address));
   const district = async (south: number, west: number, north: number, east: number) => {
     const features = await prisma.$queryRaw<PickupViewportRow[]>(pickupViewportSql(marker, 7n, { bounds: { south, west, north, east }, zoom: 15 }));
     const expected = await prisma.ozonDeliveryPoint.count({ where: { clientId: marker, methodId: 7n, active: true, latitude: { gte: south, lte: north }, longitude: { gte: west, lte: east } } });
     assert(expected > 0 && expected <= 500);
-    assert.equal(features.length, expected);
-    assert(features.every(feature => feature.count === 1 && feature.address && feature.latitude >= south && feature.latitude <= north && feature.longitude >= west && feature.longitude <= east));
-    return features;
+    assert(features.length <= 49);
+    assert.equal(features.reduce((sum, feature) => sum + feature.count, 0), expected);
+    assert(features.every(feature => feature.latitude >= south && feature.latitude <= north && feature.longitude >= west && feature.longitude <= east));
+    const addresses = await prisma.$queryRaw<PickupViewportRow[]>(pickupViewportSql(marker, 7n, { bounds: { south, west, north, east }, zoom: 18 }));
+    assert.equal(addresses.length, expected);
+    assert(addresses.every(feature => feature.count === 1 && feature.address));
+    return addresses;
   };
   const southwest = await district(55.55, 37.3, 55.59, 37.36);
   const northeast = await district(55.9, 37.8, 55.946, 37.894);

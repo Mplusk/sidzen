@@ -156,7 +156,9 @@ export default function OzonPickupMap({ points, selected, onSelect, carrier = "O
       marker.on("click", () => {
         const bounds = L.latLngBounds([[cluster.bounds.south, cluster.bounds.west], [cluster.bounds.north, cluster.bounds.east]]);
         const zoom = Math.min(18, Math.max(map.getZoom() + 1, map.getBoundsZoom(bounds, false, L.point(28, 28))));
-        map.setView([cluster.latitude, cluster.longitude], zoom);
+        // The marker can be clipped to the visible edge; drill into the real
+        // cluster area rather than using that presentation-only position.
+        map.setView([(cluster.bounds.south + cluster.bounds.north) / 2, (cluster.bounds.west + cluster.bounds.east) / 2], zoom);
       });
       marker.addTo(map);
       return marker;

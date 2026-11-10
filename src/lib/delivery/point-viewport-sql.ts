@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import { MAX_VIEWPORT_POINTS, VIEWPORT_GRID_SIZE, normalizePickupCity, pickupCityPattern, type PickupViewport } from "./point-viewport";
+import { MAX_VIEWPORT_POINTS, normalizePickupCity, pickupCityPattern, pickupViewportDensity, type PickupViewport } from "./point-viewport";
 import { pointSearchQuery, pointSearchTerms } from "./point-search";
 
 export function pickupCitySql(clientId: string, methodId: bigint, search: string) {
@@ -17,7 +17,7 @@ export function pickupCitySql(clientId: string, methodId: bigint, search: string
   `;
 }
 
-// PostgreSQL returns at most 500 points or 20 x 20 compact cells. All matching
+// PostgreSQL returns a small zoom-dependent set of points/cells. All matching
 // points contribute: no arbitrary first-page cutoff and no full city payload.
 export function pickupViewportSql(clientId: string, methodId: bigint, viewport: PickupViewport, offset = 0) {
   const { south, west, north, east } = viewport.bounds;
@@ -33,6 +33,7 @@ export function pickupViewportSql(clientId: string, methodId: bigint, viewport: 
       AND NOT ("latitude" = 0 AND "longitude" = 0)
     ORDER BY "id" ASC LIMIT ${MAX_VIEWPORT_POINTS + 1} OFFSET ${offset}
   `;
+  const { gridSize, pointBudget } = pickupViewportDensity(viewport.zoom);
   return Prisma.sql`
     WITH visible AS MATERIALIZED (
       SELECT "id", "latitude", "longitude" FROM "OzonDeliveryPoint"
@@ -40,10 +41,10 @@ export function pickupViewportSql(clientId: string, methodId: bigint, viewport: 
         AND "latitude" BETWEEN ${south} AND ${north} AND "longitude" BETWEEN ${west} AND ${east}
         AND NOT ("latitude" = 0 AND "longitude" = 0)
     ), cells AS (
-      SELECT *, CASE WHEN (SELECT count(*) FROM visible) <= ${MAX_VIEWPORT_POINTS} THEN "id"
+      SELECT *, CASE WHEN (SELECT count(*) FROM visible) <= ${pointBudget} THEN "id"
         ELSE concat(
-          LEAST(${VIEWPORT_GRID_SIZE - 1}, floor(("longitude" - ${west}) / ${east - west} * ${VIEWPORT_GRID_SIZE})::integer), ':',
-          LEAST(${VIEWPORT_GRID_SIZE - 1}, floor(("latitude" - ${south}) / ${north - south} * ${VIEWPORT_GRID_SIZE})::integer)
+          LEAST(${gridSize - 1}, floor(("longitude" - ${west}) / ${east - west} * ${gridSize})::integer), ':',
+          LEAST(${gridSize - 1}, floor(("latitude" - ${south}) / ${north - south} * ${gridSize})::integer)
         ) END AS cell FROM visible
     ), grouped AS (
       SELECT min("id") AS id, count(*)::integer AS count, avg("latitude") AS latitude, avg("longitude") AS longitude,

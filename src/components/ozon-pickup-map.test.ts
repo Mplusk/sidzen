@@ -117,6 +117,20 @@ describe("progressive viewport map", () => {
     expect(m.events.size).toBe(0);
     expect(m.map.remove).toHaveBeenCalledTimes(1);
   });
+
+  it("opens the original cluster area when its marker was shifted to a screen edge", async () => {
+    const clusters: PickupCluster[] = [{ id: "edge", latitude: 55.51, longitude: 37.51, count: 300, bounds: { south: 55.5, west: 37.5, north: 56, east: 38 } }];
+    m.map.getZoom.mockReturnValue(17);
+    m.map.getBoundsZoom.mockReturnValue(20);
+    await render("", false, [], { initialBounds, clusters });
+    await act(async () => m.markers[0].click!());
+    expect(m.map.getBoundsZoom).toHaveBeenCalledWith([[55.5, 37.5], [56, 38]], false, { x: 28, y: 28 });
+    expect(m.map.setView).toHaveBeenLastCalledWith([55.75, 37.75], 18);
+    expect(select).not.toHaveBeenCalled();
+    await render("", false, points, { initialBounds, clusters: [] });
+    expect(m.map.setView).toHaveBeenCalledTimes(1);
+    expect(m.map.fitBounds).toHaveBeenCalledTimes(1);
+  });
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 describe("pickup map selection feedback", () => {
