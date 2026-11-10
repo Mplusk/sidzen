@@ -1,0 +1,17 @@
+name: Check confirmation headers (temporary)
+on:
+  pull_request:
+    types: [opened]
+jobs:
+  inspect:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'codex/check-confirm-headers-once'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Check public confirmation headers
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --max-time 20 --output /dev/null --dump-header "${RUNNER_TEMP}/headers" --write-out 'HTTP status: %{http_code}\n' https://sidzen.shop/admin-login-confirm/
+          awk 'BEGIN {IGNORECASE=1} /^(referrer-policy|content-security-policy|cache-control|x-frame-options):/ {gsub("\r", ""); print}' "${RUNNER_TEMP}/headers"
