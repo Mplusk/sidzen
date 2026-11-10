@@ -1,7 +1,7 @@
 name: Check backup integrity (temporary)
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize]
 jobs:
   inspect:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'codex/backup-readonly-check-20261110'
@@ -38,7 +38,7 @@ jobs:
             if [[ -f "$f" && -s "$f" && ! -L "$f" ]]; then printf '%s present, bytes: ' "$f"; wc -c < "$f"; else echo "Incomplete backup: $f"; exit 1; fi
           done
           [[ $(wc -l < SHA256SUMS) -eq 4 ]] || { echo 'Unexpected checksum manifest'; exit 1; }
-          for f in database.dump model-files.tar.gz product-images.tar.gz privacy-ledger.tar.gz; do grep -Eq "^[0-9a-f]{64}  ${f//./\.}$" SHA256SUMS || { echo 'Unexpected checksum manifest'; exit 1; }; done
+          for f in database.dump model-files.tar.gz product-images.tar.gz privacy-ledger.tar.gz; do awk -v expected="$root/$latest/$f" 'length($1)==64 && $2==expected {n++} END {exit n!=1}' SHA256SUMS || { echo 'Unexpected checksum manifest'; exit 1; }; done
           if timeout 240s sha256sum --quiet --status -c SHA256SUMS; then echo 'All backup file checksums: valid'; else echo 'Backup file checksums: FAILED or timed out'; exit 1; fi
           if timeout 90s docker exec -i 3dprinta-db-1 pg_restore --list < database.dump > /dev/null 2>&1; then echo 'PostgreSQL dump manifest: readable'; else echo 'PostgreSQL dump manifest: unreadable or timed out'; exit 1; fi
           REMOTE
