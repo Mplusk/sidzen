@@ -4,6 +4,8 @@
 .control button:hover:not(:disabled) { background: var(--paper-2); }
 .control button:disabled { color: var(--muted); opacity: .45; cursor: not-allowed; }
 .control button:focus-visible { outline: 2px solid var(--sage); outline-offset: -3px; }
-.control span { padding-inline: 4px; font-variant-numeric: tabular-nums; }
+.control input { width: 100%; min-width: 0; height: 38px; padding: 0 2px; border: 0; border-radius: 0; color: var(--ink); background: transparent; text-align: center; font: inherit; font-variant-numeric: tabular-nums; }
+.control input:focus-visible { outline: 2px solid var(--sage); outline-offset: -3px; }
+.control input:disabled { opacity: .6; }
 .error { max-width: 200px; margin: 0; color: #9b2428 !important; font-size: .8125rem; white-space: normal; }
 @media (max-width: 560px) { .wrapper { justify-items: start; flex-basis: 100%; } }

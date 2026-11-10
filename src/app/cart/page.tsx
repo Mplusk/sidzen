@@ -7,7 +7,7 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { CartQuantityControl } from "@/components/cart-quantity-control";
 import { configurationText } from "@/lib/product-options";
 import { formatPrice, pluralRu } from "@/lib/format";
-import { groupCartItems } from "@/lib/cart-groups";
+import { groupCartItems, maxCartGroupQuantity } from "@/lib/cart-groups";
 
 export const metadata: Metadata = { title: "Корзина", robots: { index: false, follow: false } };
 
@@ -25,7 +25,7 @@ export default async function CartPage({ searchParams }: { searchParams: Promise
         <div className="cart-item__body"><h2>{item.product ? category ? <Link href={`/catalog/${category.slug}/${item.product.slug}/`}>{item.product.name}</Link> : item.product.name : "Товар недоступен"}</h2><p>{configurationText(item.config)}</p><small>{item.product?.sku} · {item.quantity} шт.</small>
           {!item.available && !item.stockReviewRequired && <p className="notice notice--danger">Эта конфигурация недоступна. Удалите позицию и выберите товар заново.</p>}
           {!item.groupKey && item.available && <p className="muted">Чтобы изменить количество, удалите позицию и добавьте товар заново.</p>}
-        </div><div className="cart-item__total"><CartQuantityControl members={item.members} name={item.product?.name ?? "Товар"} quantity={item.quantity} max={item.product?.madeToOrder ? 999 : Math.max(0, Math.min((item.options?.stock ?? 0) - items.filter(other => other.id !== item.id && other.productId === item.productId).reduce((sum, other) => sum + other.quantity, 0), 999))} canAdjust={Boolean(item.quote && item.groupKey) && !item.stockReviewRequired} /><strong>{formatPrice(item.unitPrice * item.quantity)}</strong><form action={removeCartGroup}><input type="hidden" name="members" value={JSON.stringify(item.members)} /><SubmitButton className="admin-delete-link" pendingLabel="Удаляем…">Удалить</SubmitButton></form></div>
+        </div><div className="cart-item__total"><CartQuantityControl members={item.members} name={item.product?.name ?? "Товар"} quantity={item.quantity} max={maxCartGroupQuantity(item, items)} canAdjust={Boolean(item.quote && item.groupKey) && !item.stockReviewRequired} /><strong>{formatPrice(item.unitPrice * item.quantity)}</strong><form action={removeCartGroup}><input type="hidden" name="members" value={JSON.stringify(item.members)} /><SubmitButton className="admin-delete-link" pendingLabel="Удаляем…">Удалить</SubmitButton></form></div>
       </article>;
     })}</div><aside className="order-summary"><h2>Ваш заказ</h2><div className="summary-line"><span>Товары</span><strong>{formatPrice(subtotal)}</strong></div><Link className="button" href="/checkout/">ОФОРМИТЬ ЗАКАЗ</Link><Link className="text-link" href="/">Продолжить покупки</Link></aside></div> : <div className="empty-state"><h2>Корзина пока пуста</h2><p>Выберите товар, материал и цвет в каталоге.</p><Link className="button" href="/">Открыть каталог</Link></div>}
   </section></>;

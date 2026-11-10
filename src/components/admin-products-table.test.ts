@@ -7,7 +7,7 @@ vi.mock("@/app/actions/product-price", () => ({ updateProductPriceAction: vi.fn(
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 import { AdminProductsTable, type AdminProductRow } from "./admin-products-table";
 let root: Root, container: HTMLDivElement;
-const products: AdminProductRow[] = [0, 1, 2].map(index => ({ id: String(index), name: "Bowl", sku: `sku-${index}`, category: "—", price: "599 ₽", oldPrice: null, rawBasePrice: "599", rawOldPrice: null, productVersion: "2026-11-10T00:00:00.000Z", hasVariants: false, switchesToSite: false, stock: 0, status: index === 2 ? "PUBLISHED" : "DRAFT", canEdit: index !== 2 }));
+const products: AdminProductRow[] = [0, 1, 2].map(index => ({ id: String(index), name: "Bowl", sku: `sku-${index}`, category: "—", price: "599 ₽", oldPrice: null, rawBasePrice: "599", rawOldPrice: null, productVersion: "2026-11-10T00:00:00.000Z", hasVariants: false, switchesToSite: false, stock: 0, reservedStock: 0, madeToOrder: false, stockReviewRequired: false, status: index === 2 ? "PUBLISHED" : "DRAFT", canEdit: index !== 2 }));
 beforeEach(() => { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); container = document.createElement("div"); document.body.append(container); root = createRoot(container); });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); });
 it("selects only editable rows, supports partial/select-all/clear and submits selected IDs", async () => {
@@ -49,4 +49,24 @@ it("opens a separate price form and explains marketplace and variant effects", a
     expect(dialog.textContent).toContain("название, описание, фотографии и цену");
     expect(dialog.textContent).toContain("цена для покупателя может остаться прежней");
   } finally { delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).showModal; }
+});
+it("distinguishes saleable stock, reservations and products awaiting legacy review", async () => {
+  const values = [
+    { ...products[0], stock: 8, reservedStock: 3 },
+    { ...products[1], stock: 999, stockReviewRequired: true },
+    { ...products[2], stock: 0, madeToOrder: true },
+  ];
+  await act(async () => root.render(createElement(AdminProductsTable, { products: values, categories: [], canWrite: true, canPublish: true, canReadOrders: true })));
+  const rows = container.querySelectorAll("tbody tr");
+  expect(rows[0].textContent).toContain("5 доступно");
+  expect(rows[0].textContent).toContain("На складе: 8 · в резерве: 3");
+  expect(rows[1].textContent).toContain("999 в системе");
+  expect(rows[1].textContent).toContain("Продажа приостановлена: требуется сверка");
+  const href = [...rows[1].querySelectorAll("a")].find(link => link.textContent === "Сверить заказы")?.getAttribute("href");
+  const url = new URL(href!, "https://sidzen.shop");
+  expect(url.pathname.replace(/\/$/, "")).toBe("/admin/orders");
+  expect(url.searchParams.get("view")).toBe("stock-review"); expect(url.searchParams.get("q")).toBe("sku-1");
+  expect(rows[2].textContent).toContain("Можно заказать изготовление");
+  await act(async () => root.render(createElement(AdminProductsTable, { products: values, categories: [], canWrite: false, canPublish: false, canReadOrders: false })));
+  expect(container.querySelector('a[href*="view=stock-review"]')).toBeNull();
 });

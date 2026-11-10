@@ -12,11 +12,16 @@
 .itemInfo strong { font-size: .9375rem; line-height: 1.4; overflow-wrap: anywhere; }
 .itemInfo small { color: var(--muted); font-size: .78rem; line-height: 1.35; overflow-wrap: anywhere; }
 .itemActions { display: flex; align-items: center; gap: 16px; }
+.quantityWrapper { display: grid; gap: 4px; }
 .quantity { display: inline-grid; grid-template-columns: 36px 36px 36px; align-items: center; min-height: 40px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); text-align: center; }
 .quantity button, .remove { display: grid; place-items: center; min-width: 36px; min-height: 38px; padding: 0; border: 0; border-radius: 8px; color: var(--ink); background: transparent; cursor: pointer; }
 .quantity button:hover:not(:disabled), .remove:hover:not(:disabled) { background: var(--paper-2); }
 .quantity button:disabled, .remove:disabled { opacity: .45; cursor: not-allowed; }
-.quantity span, .itemTotal { font-variant-numeric: tabular-nums; }
+.quantity input { width: 100%; min-width: 0; height: 38px; padding: 0 2px; border: 0; border-radius: 0; color: var(--ink); background: transparent; text-align: center; font: inherit; font-variant-numeric: tabular-nums; }
+.quantity input:focus-visible { outline: 2px solid var(--sage); outline-offset: -3px; }
+.quantity input:disabled { opacity: .6; }
+.quantityError { max-width: 140px; margin: 0; color: #9b2428; font-size: .75rem; }
+.itemTotal { font-variant-numeric: tabular-nums; }
 .itemTotal { min-width: 66px; white-space: nowrap; text-align: right; }
 .remove { color: var(--muted); }
 .contacts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }

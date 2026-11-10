@@ -187,6 +187,30 @@ describe("delivery verification interaction", () => {
     expect(container.querySelector<HTMLInputElement>('[name="name"]')!.value).toBe("Покупатель");
     expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain(point.address);
   });
+  it("accepts a typed checkout quantity and invalidates the previous delivery quote", async () => {
+    m.cart.mockResolvedValue({});
+    const members = [{ id: "fixture", quantity: 1, revision: "2030-01-01T00:00:00.000Z", state: "a".repeat(64) }];
+    await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, maxQuantity: 5, members, total: 240 }], methods: [], user: { name: "Покупатель", email: "buyer@example.test", phone: "" }, ozonDelivery: true })));
+    await inputValue(container.querySelector<HTMLInputElement>('[name="phone"]')!, "89991234567");
+    await choosePoint(); await click("Проверить доставку");
+    const field = container.querySelector<HTMLInputElement>('input[aria-label="Количество товара: Fixture"]')!;
+    await act(async () => field.focus()); await inputValue(field, "4");
+    expect(m.cart).not.toHaveBeenCalled();
+    await act(async () => field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+    expect(m.cart).toHaveBeenCalledWith(members, 4);
+    expect(container.querySelector<HTMLInputElement>('[name="ozonQuote"]')!.value).toBe("");
+    expect(container.querySelector<HTMLInputElement>('[name="name"]')!.value).toBe("Покупатель");
+  });
+  it("does not submit an order while a typed quantity is outside available stock", async () => {
+    const members = [{ id: "fixture", quantity: 1, revision: "2030-01-01T00:00:00.000Z", state: "a".repeat(64) }];
+    await act(async () => root.render(createElement(CheckoutForm, { items: [{ id: "fixture", name: "Fixture", configuration: "", quantity: 1, maxQuantity: 5, members, total: 240 }], methods: [{ code: "pickup", name: "Самовывоз", description: null, basePrice: 0 }], user: { name: "Покупатель", email: "buyer@example.test", phone: "+79991234567" } })));
+    await act(async () => container.querySelector<HTMLInputElement>('[name="legal"]')!.click());
+    const field = container.querySelector<HTMLInputElement>('input[aria-label="Количество товара: Fixture"]')!;
+    await act(async () => field.focus()); await inputValue(field, "6"); await act(async () => field.blur());
+    expect(field.validity.valid).toBe(false);
+    await act(async () => container.querySelector<HTMLFormElement>(".checkout-form")!.requestSubmit());
+    expect(m.order).not.toHaveBeenCalled(); expect(m.cart).not.toHaveBeenCalled();
+  });
   it("ignores a delayed Ozon response for the previous cart after a new quote succeeds", async () => {
     m.cart.mockResolvedValue({});
     let finishOld!: (value: unknown) => void;

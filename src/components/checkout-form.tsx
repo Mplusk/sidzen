@@ -14,6 +14,7 @@ import { OzonDeliveryPicker, type DeliveryQuoteView } from "@/components/ozon-de
 import { CdekDeliveryPicker, type CdekQuoteView } from "@/components/cdek-delivery-picker";
 import { customerDeliveryPrice } from "@/lib/delivery/pricing";
 import { ValidatedInput } from "@/components/validated-input";
+import { QuantityStepper } from "@/components/quantity-stepper";
 import styles from "./checkout-form.module.css";
 
 type Delivery = { code: string; name: string; description: string | null; basePrice: number };
@@ -47,7 +48,7 @@ function Submit({ needsQuote, noDelivery, pending, cartPending, onlinePayment }:
 }
 
 export function CheckoutForm({ items, methods, user, error, reference, ozonDelivery = false, cdekDelivery = false, packingReady = true, onlinePayment = false }: {
-  items: Array<{ id: string; name: string; sku?: string; image?: string | null; configuration: string; quantity: number; total: number; members: CartGroupMember[]; canAdjust?: boolean }>;
+  items: Array<{ id: string; name: string; sku?: string; image?: string | null; configuration: string; quantity: number; maxQuantity?: number; total: number; members: CartGroupMember[]; canAdjust?: boolean; stockReviewRequired?: boolean }>;
   methods: Delivery[]; user: { name: string; email: string; phone: string }; error?: string; reference?: string;
   ozonDelivery?: boolean;
   cdekDelivery?: boolean;
@@ -58,6 +59,7 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
   const phoneInput = useRef<HTMLInputElement>(null);
   const editPhone = () => { phoneInput.current?.focus({ preventScroll: true }); phoneInput.current?.scrollIntoView({ block: "center", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" }); };
   const [cartPending, updateCart] = useTransition();
+  const cartUpdateInFlight = useRef(false);
   const [cartError, setCartError] = useState("");
   const [quoteRevision, setQuoteRevision] = useState(0);
   const [ozonQuoteEntry, setOzonQuoteEntry] = useState<{ revision: number; value: DeliveryQuoteView | null }>({ revision: 0, value: null });
@@ -83,7 +85,8 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
   const changePhone = (value: string) => { const next = phoneMask(value); setPhone(next); if (next !== phone) { if (currentError === "ozon-recipient") setDismissedRecipientError(state); setOzonQuote(null); setQuoteRevision(value => value + 1); } };
   const changeDelivery = (code: string) => { setDelivery(code); setOzonQuote(null); setQuoteRevision(value => value + 1); setCdekQuote(null); };
   const changeQuantity = (members: CartGroupMember[], next: number) => {
-    if (pending || cartPending) return;
+    if (pending || cartPending || cartUpdateInFlight.current) return;
+    cartUpdateInFlight.current = true;
     setCartError(""); setOzonQuote(null); setCdekQuote(null); setQuoteRevision(value => value + 1); setCdekRevision(value => value + 1);
     updateCart(async () => {
       try {
@@ -91,6 +94,7 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
         if (result.error) setCartError(result.error);
         router.refresh();
       } catch { setCartError("Не удалось обновить корзину. Повторите попытку."); }
+      finally { cartUpdateInFlight.current = false; }
     });
   };
   const subtotal = items.reduce((sum, item) => sum + item.total, 0);
@@ -99,7 +103,7 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
   const deliveryPrice = isCdek ? cdekQuote?.cost ?? 0 : customerDeliveryPrice();
   const total = subtotal + deliveryPrice;
   // Dispatch explicitly so expected server errors leave entered fields intact.
-  return <form action={formAction} onSubmit={event => { event.preventDefault(); if (pending || cartPending) return; const data = new FormData(event.currentTarget); startTransition(() => formAction(data)); }} className={`checkout-form ${styles.layout}`}>
+  return <form action={formAction} onSubmit={event => { event.preventDefault(); if (pending || cartPending || cartUpdateInFlight.current) return; const data = new FormData(event.currentTarget); startTransition(() => formAction(data)); }} className={`checkout-form ${styles.layout}`}>
     <div className={styles.main}>
       {currentError && <div className="notice notice--danger" role="alert" tabIndex={-1}><p>{deliveryErrors[currentError] ?? (currentError === "price" ? "Цена или условия доставки изменились. Проверьте обновлённую сумму и отправьте заявку заново." : "Проверьте контактные данные, адрес и согласие с условиями.")}</p>{currentError === "ozon-recipient" && <button type="button" className="text-link" onClick={editPhone}>Изменить телефон получателя</button>}{state.fields && <ul>{Object.entries(state.fields).map(([key, messages]) => <li key={key}>{({ name: "ФИО", email: "Email", phone: "Телефон", address: "Адрес", legal: "Согласие", ozonQuote: "Пункт выдачи" } as Record<string, string>)[key] ?? key}: {messages.join(". ")}</li>)}</ul>}{currentReference && /^[a-f0-9-]{36}$/i.test(currentReference) && <small>Код обращения: {currentReference}</small>}<p>Введённые данные остались в форме.</p></div>}
       <input type="hidden" name="paymentMode" value={onlinePayment ? "online" : "application"} />
@@ -109,8 +113,8 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
         {cartError && <p className="notice notice--danger" role="alert">{cartError}</p>}
         <ul className={styles.items} aria-busy={cartPending}>{items.map(item => <li className={styles.item} key={item.id}>
           {item.image ? <Image className={styles.itemImage} src={item.image} alt="" width={76} height={76} /> : <div className={styles.itemPlaceholder} aria-hidden="true" />}
-          <div className={styles.itemInfo}><strong>{item.name}</strong>{item.sku && <small>Арт. {item.sku}</small>}{item.configuration && <small>{item.configuration}</small>}{item.canAdjust === false && <small>Чтобы изменить количество, удалите позицию и добавьте товар заново.</small>}<small>{formatPrice(item.total / item.quantity)} за шт.</small></div>
-          <div className={styles.itemActions}><div className={styles.quantity} aria-label={`Количество: ${item.name}`}><button type="button" aria-label={`Уменьшить количество: ${item.name}`} disabled={cartPending || pending || item.canAdjust === false || item.quantity <= 1} onClick={() => changeQuantity(item.members, item.quantity - 1)}>−</button><span aria-live="polite">{item.quantity}</span><button type="button" aria-label={`Увеличить количество: ${item.name}`} disabled={cartPending || pending || item.canAdjust === false || item.quantity >= 999} onClick={() => changeQuantity(item.members, item.quantity + 1)}>+</button></div><strong className={styles.itemTotal}>{formatPrice(item.total)}</strong><button type="button" className={styles.remove} aria-label={`Удалить из заказа: ${item.name}`} disabled={cartPending || pending} onClick={() => changeQuantity(item.members, 0)}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5" /></svg></button></div>
+          <div className={styles.itemInfo}><strong>{item.name}</strong>{item.sku && <small>Арт. {item.sku}</small>}{item.configuration && <small>{item.configuration}</small>}{item.canAdjust === false && <small>{item.stockReviewRequired ? "Товар временно недоступен для заказа." : "Чтобы изменить количество, удалите позицию и добавьте товар заново."}</small>}<small>{formatPrice(item.total / item.quantity)} за шт.</small></div>
+          <div className={styles.itemActions}><div className={styles.quantityWrapper}><QuantityStepper name={item.name} quantity={item.quantity} max={item.maxQuantity ?? 999} disabled={item.canAdjust === false} pending={cartPending || pending} onChange={next => changeQuantity(item.members, next)} className={styles.quantity} errorClassName={styles.quantityError} /></div><strong className={styles.itemTotal}>{formatPrice(item.total)}</strong><button type="button" className={styles.remove} aria-label={`Удалить из заказа: ${item.name}`} disabled={cartPending || pending} onClick={() => changeQuantity(item.members, 0)}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5" /></svg></button></div>
         </li>)}</ul>
       </section>
 
