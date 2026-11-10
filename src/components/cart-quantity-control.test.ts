@@ -66,4 +66,11 @@ describe("cart quantity controls", () => {
     await act(async () => { const plus = control("Увеличить"); plus.dispatchEvent(new Event("pointerdown", { bubbles: true })); input().blur(); plus.click(); });
     expect(m.update).toHaveBeenCalledTimes(1); expect(m.update).toHaveBeenCalledWith(expect.any(Array), 5);
   });
+  it("discards an invalid draft when the available stock changes", async () => {
+    await render(2, 5); await type("6"); await act(async () => input().blur());
+    expect(input().validity.valid).toBe(false);
+    await render(2, 3);
+    expect(input().value).toBe("2"); expect(input().validity.valid).toBe(true);
+    expect(container.querySelector('[role="alert"]')).toBeNull(); expect(m.update).not.toHaveBeenCalled();
+  });
 });
