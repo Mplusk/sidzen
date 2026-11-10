@@ -53,7 +53,13 @@ try {
   let snapshot = await cartGroups();
   assert.equal(snapshot.groups.length, 2, "Two equal rows form one position; another variant remains separate");
   const red = snapshot.groups.find(g => g.members.length === 2); const blue = snapshot.groups.find(g => g.members.length === 1);
-  assert(red && blue); assert(red.article.includes("2 шт.")); assert(blue.article.includes("1 шт."));
+  assert(red && blue);
+  // React may insert comment nodes between adjacent server-rendered text pieces.
+  const visibleText = (html: string) => decode(html.replace(/<!--[\s\S]*?-->/g, "").replace(/<[^>]*>/g, ""));
+  assert.match(visibleText(red.article), /2\s*шт\./);
+  assert.match(visibleText(blue.article), /1\s*шт\./);
+  assert.equal(red.members.reduce((sum, row) => sum + row.quantity, 0), 2);
+  assert.equal(blue.members.reduce((sum, row) => sum + row.quantity, 0), 1);
   assert.equal(await prisma.cartItem.count({ where: { cartId } }), 3, "Rendering must not mutate cart");
   assert(!(await update(red.members, 3)).includes("Корзина изменилась"));
   assert.equal((await prisma.cartItem.findMany({ where: { cartId, variantId: variants[0].id } })).reduce((sum, row) => sum + row.quantity, 0), 3);
