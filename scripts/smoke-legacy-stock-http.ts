@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { legacyStockReviewProductIds } from "../src/lib/legacy-stock-availability";
 import { assertInlineCheckoutError } from "./assert-inline-checkout-error";
 
@@ -10,6 +11,8 @@ assert(["localhost", "127.0.0.1"].includes(base.hostname) && ["localhost", "127.
 const prefix = `qa-stock-${randomUUID().slice(0, 8)}`, jar = new Map<string, string>();
 const ids: string[] = [], orders: { id: string; number: string }[] = [];
 let categoryId = "", sessionId = "", cartId = "";
+const operatorKeys = ["legal.seller", "legal.address", "contacts.email"];
+const oldOperatorSettings = await prisma.siteSetting.findMany({ where: { key: { in: operatorKeys } } });
 const decode = (s: string) => s.replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
 async function request(path: string, body?: FormData) {
   const response = await fetch(new URL(path, base), { method: body ? "POST" : "GET", body, redirect: "manual", headers: { Cookie: [...jar].map(([k, v]) => `${k}=${v}`).join("; "), ...(body ? { Origin: base.origin } : {}) } });
@@ -35,6 +38,9 @@ async function reconcile(order: { number: string }) {
 }
 const cards = (s: string) => [...s.matchAll(/<article class="product-card">[\s\S]*?<\/article>/g)].map(m => m[0]);
 try {
+  for (const [key, value] of Object.entries({ "legal.seller": "Synthetic QA operator", "legal.address": "Synthetic QA address", "contacts.email": "operator@example.test" })) {
+    await prisma.siteSetting.upsert({ where: { key }, create: { key, value, group: "legal" }, update: { value } });
+  }
   const category = await prisma.category.create({ data: { slug: prefix, name: prefix, visible: true } }); categoryId = category.id;
   for (const [i, madeToOrder] of [[0, false], [1, true], [2, false]] as const) {
     const product = await prisma.product.create({ data: { name: `${prefix} name ${i}`, sku: `${prefix}-sku-${i}`, slug: `${prefix}-${i}`, basePrice: 100, stock: i === 1 ? 0 : 5, madeToOrder, status: "PUBLISHED", categories: { create: { categoryId, isPrimary: true } } } });
@@ -107,5 +113,10 @@ try {
   await prisma.product.deleteMany({ where: { id: { in: ids } } });
   if (categoryId) await prisma.category.deleteMany({ where: { id: categoryId } });
   if (sessionId) await prisma.session.deleteMany({ where: { id: sessionId } });
+  for (const key of operatorKeys) {
+    const old = oldOperatorSettings.find(row => row.key === key);
+    if (old) await prisma.siteSetting.update({ where: { key }, data: { value: old.value === null ? Prisma.JsonNull : old.value as Prisma.InputJsonValue } });
+    else await prisma.siteSetting.deleteMany({ where: { key } });
+  }
   await prisma.$disconnect();
 }
