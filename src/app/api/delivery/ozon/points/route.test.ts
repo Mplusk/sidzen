@@ -198,4 +198,76 @@ describe("public Ozon PVZ map directory", () => {
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(response.headers.get("etag")).toBeNull(); expect(m.find).not.toHaveBeenCalled();
   });
+  it("opens a city from compact metadata without returning or enriching all pickup addresses", async () => {
+    m.find.mockResolvedValue(Array.from({ length: 10000 }, (_, index) => ({ latitude: 55.55 + (index % 100) * 0.004, longitude: 37.3 + Math.floor(index / 100) * 0.006 })));
+    const response = await GET(new Request("https://sidzen.shop/api/delivery/ozon/points/?q=Москва&view=city"));
+    const data = await response.json();
+    expect(data.city.name).toBe("Москва");
+    expect(data.city.bounds.north - data.city.bounds.south).toBeGreaterThan(0.3);
+    expect(data.points).toBeUndefined(); expect(JSON.stringify(data).length).toBeLessThan(400);
+    expect(m.info).not.toHaveBeenCalled(); expect(m.update).not.toHaveBeenCalled();
+    expect(m.find.mock.calls[0][0].text).toContain('SELECT "latitude", "longitude"');
+  });
+  it("keeps an unknown or mistyped city unresolved for the suggestion flow", async () => {
+    m.find.mockResolvedValue([]);
+    const response = await GET(new Request("https://sidzen.shop/api/delivery/ozon/points/?q=Табмов&view=city"));
+    expect(await response.json()).toEqual({ city: null, scope: expect.any(String) });
+    expect(m.info).not.toHaveBeenCalled();
+  });
+  it("loads only bounded viewport features with no city or provider request", async () => {
+    m.find.mockResolvedValue([
+      { id: "p", count: 1, name: "ПВЗ", address: "Москва, улица 1", type: "pvz", latitude: 55.7, longitude: 37.5, south: 55.7, west: 37.5, north: 55.7, east: 37.5 },
+      { id: "c", count: 2000, name: null, address: null, type: null, latitude: 55.8, longitude: 37.6, south: 55.75, west: 37.55, north: 55.85, east: 37.65 },
+    ]);
+    const response = await GET(new Request("https://sidzen.shop/api/delivery/ozon/points/?view=viewport&bbox=37.3,55.5,37.9,55.9&zoom=11"));
+    const data = await response.json();
+    expect(data.points).toHaveLength(1); expect(data.clusters).toHaveLength(1);
+    expect(data.clusters[0].count).toBe(2000); expect(data.scope).toMatch(/^[a-f0-9]{64}$/);
+    expect(m.find.mock.calls[0][0].values).toEqual(expect.arrayContaining(["test-client", 7n, 37.3, 55.5, 37.9, 55.9]));
+    expect(m.find.mock.calls[0][0].text).toContain("GROUP BY cell");
+    expect(m.info).not.toHaveBeenCalled(); expect(m.update).not.toHaveBeenCalled();
+    expect(JSON.stringify(data)).not.toContain("test-secret");
+  });
+  it("caches the same viewport, changes area independently and invalidates after directory sync", async () => {
+    m.find.mockResolvedValue([]);
+    const url = "https://sidzen.shop/api/delivery/ozon/points/?view=viewport&bbox=37.3,55.5,37.9,55.9&zoom=11";
+    const first = await GET(new Request(url));
+    const data = await first.json();
+    const conditional = await GET(new Request(url, { headers: { "If-None-Match": first.headers.get("etag")! } }));
+    expect(conditional.status).toBe(304); expect(m.find).toHaveBeenCalledTimes(1);
+    await GET(new Request(url.replace("37.3,55.5,37.9,55.9", "37.4,55.6,37.8,55.8")));
+    expect(m.find).toHaveBeenCalledTimes(2);
+    m.sync.mockResolvedValue({ generation: "next-directory", status: "SUCCEEDED" });
+    const refreshed = await (await GET(new Request(url))).json();
+    expect(refreshed.scope).not.toBe(data.scope); expect(m.find).toHaveBeenCalledTimes(3);
+  });
+  it.each(["view=viewport&bbox=37,55,37,56&zoom=10", "view=viewport&bbox=37,55,38,56&zoom=99", "view=city&q=%25__"])("rejects invalid progressive map input before any database work: %s", async query => {
+    const response = await GET(new Request(`https://sidzen.shop/api/delivery/ozon/points/?${query}`));
+    expect(response.status).toBe(400); expect(m.find).not.toHaveBeenCalled(); expect(m.config).not.toHaveBeenCalled();
+  });
+  it("does not use cached city or viewport results after integration is disabled", async () => {
+    m.config.mockResolvedValue({ enabled: false });
+    const response = await GET(new Request("https://sidzen.shop/api/delivery/ozon/points/?view=viewport&bbox=37.3,55.5,37.9,55.9&zoom=11"));
+    expect(response.status).toBe(409); expect(m.find).not.toHaveBeenCalled();
+  });
+  it("pages even coincident addresses at maximum zoom without dropping points", async () => {
+    const rows = Array.from({ length: 650 }, (_, index) => ({ id: String(index), count: 1, name: "ПВЗ", address: `Москва, улица ${index}`, type: "pvz", latitude: 55.7, longitude: 37.5, south: 55.7, west: 37.5, north: 55.7, east: 37.5 }));
+    m.find.mockResolvedValueOnce(rows.slice(0, 501)).mockResolvedValueOnce(rows.slice(500));
+    const url = "https://sidzen.shop/api/delivery/ozon/points/?view=viewport&bbox=37.49,55.69,37.51,55.71&zoom=18";
+    const first = await (await GET(new Request(url))).json();
+    const last = await (await GET(new Request(`${url}&offset=${first.nextOffset}`))).json();
+    expect(first.points).toHaveLength(500); expect(first.nextOffset).toBe(500); expect(first.clusters).toEqual([]);
+    expect(last.points).toHaveLength(150); expect(last.nextOffset).toBeNull(); expect(last.scope).toBe(first.scope);
+    expect(new Set([...first.points, ...last.points].map(point => point.id)).size).toBe(650);
+    expect(m.find.mock.calls[1][0].values.slice(-2)).toEqual([501, 500]);
+  });
+  it.each(["zoom=17&offset=500", "zoom=18&offset=-1", "zoom=18&offset=1.2", "zoom=18&offset=1000001"])("rejects invalid viewport pagination: %s", async suffix => {
+    const response = await GET(new Request(`https://sidzen.shop/api/delivery/ozon/points/?view=viewport&bbox=37.49,55.69,37.51,55.71&${suffix}`));
+    expect(response.status).toBe(400); expect(m.find).not.toHaveBeenCalled();
+  });
+  it("returns a retriable failure instead of an empty area when PostgreSQL is unavailable", async () => {
+    m.find.mockRejectedValue(new Error("database"));
+    const response = await GET(new Request("https://sidzen.shop/api/delivery/ozon/points/?q=Москва&view=city"));
+    expect(response.status).toBe(503); expect(response.headers.get("cache-control")).toBe("private, no-store");
+  });
 });

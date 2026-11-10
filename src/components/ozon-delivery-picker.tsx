@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { quoteOzonDelivery } from "@/app/actions/ozon-delivery";
 import type { PickupPoint } from "@/lib/delivery/points";
+import type { PickupMapCity } from "@/lib/delivery/point-viewport";
 import { deliveryCheckIssue, withDeliveryDeadline } from "@/lib/delivery/picker-state";
 import { OzonPointSearch } from "@/components/ozon-point-search";
 import { PickupPointDialog } from "@/components/pickup-point-dialog";
@@ -12,11 +13,11 @@ export type DeliveryQuoteView = { token: string; cost: number; days: number; add
 
 export function OzonDeliveryPicker({ phone, onEditPhone, onQuote, packingReady = true, verificationRevision = 0 }: { phone: string; onEditPhone: () => void; onQuote: (value: DeliveryQuoteView | null) => void; packingReady?: boolean; verificationRevision?: number }) {
   const [consent, setConsent] = useState(false);
-  const [points, setPoints] = useState<PickupPoint[]>([]);
-  const [point, setPoint] = useState("");
+  const [city, setCity] = useState<PickupMapCity | null>(null);
+  const [selectedPoint, setSelectedPoint] = useState<PickupPoint | null>(null);
+  const point = selectedPoint?.id ?? "";
   const [pending, setPending] = useState<"quote" | null>(null);
   const [mapOpen, setMapOpen] = useState(false);
-  const [truncated, setTruncated] = useState(false);
   const [message, setMessage] = useState("");
   const [recipientError, setRecipientError] = useState(false);
   const [quote, setQuote] = useState<(DeliveryQuoteView & { phone: string; verificationRevision: number }) | null>(null);
@@ -32,8 +33,8 @@ export function OzonDeliveryPicker({ phone, onEditPhone, onQuote, packingReady =
   useEffect(() => () => { revision.current++; }, [verificationRevision]);
   useEffect(() => () => { revision.current++; if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current); }, []);
   function clearQuote() { revision.current++; setQuote(null); onQuote(null); setMessage(""); setRecipientError(false); setPending(null); if (scrollFrame.current !== null) { cancelAnimationFrame(scrollFrame.current); scrollFrame.current = null; } }
-  function selectPoint(id: string) {
-    setMapOpen(false); setPoint(id); clearQuote();
+  function selectPoint(id: string, value: PickupPoint) {
+    setMapOpen(false); setSelectedPoint(value); clearQuote();
     if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current);
     if (!id) return;
     scrollFrame.current = requestAnimationFrame(() => {
@@ -59,14 +60,13 @@ export function OzonDeliveryPicker({ phone, onEditPhone, onQuote, packingReady =
   return <div className="ozon-delivery-picker">
     <p className="ozon-free-delivery"><strong>Бесплатная доставка Ozon</strong><span>Расходы на перевозку и страховку оплачивает магазин.</span></p>
     {!packingReady && <p className="notice notice--danger">Для одного из товаров магазин ещё не указал вес и размеры упакованной посылки. Проверка Ozon недоступна — выберите другую доставку или обратитесь в магазин.</p>}
-    <OzonPointSearch onReset={() => { setMapOpen(false); setPoint(""); setPoints([]); setTruncated(false); clearQuote(); }} onResults={(values, more) => { clearQuote(); setPoints(values); setPoint(""); setTruncated(more); }} onOpenMap={() => setMapOpen(true)} />
-    {!!points.length && <>
+    <OzonPointSearch onReset={() => { setMapOpen(false); setSelectedPoint(null); setCity(null); clearQuote(); }} onCity={value => { setCity(value); setMapOpen(true); }} />
+    {city && <>
       <div className="ozon-map-toolbar"><button type="button" className="text-link" aria-haspopup="dialog" onClick={() => setMapOpen(true)}>{point ? "Изменить на карте" : "Выбрать на карте"}</button></div>
-      {mapOpen && <PickupPointDialog points={points} selected={point} carrier="Ozon" onSelect={selectPoint} onClose={() => setMapOpen(false)} />}
-      {truncated && <p className="muted">Показана часть найденных пунктов для этого города.</p>}
+      {mapOpen && <PickupPointDialog city={city} selectedPoint={selectedPoint ?? undefined} selected={point} carrier="Ozon" onSelect={selectPoint} onClose={() => setMapOpen(false)} />}
     </>}
     <div ref={nextStep} className="ozon-recipient-step" tabIndex={-1} aria-label="Телефон получателя и проверка доставки">
-    {point && <div className="notice ozon-point-confirmation" role="status"><strong>Пункт выдачи выбран</strong><span>{points.find(value => value.id === point)?.address}</span>{!quote && <small>Доставка и телефон ещё не проверены. Подтвердите согласие и нажмите «Проверить доставку» ниже.</small>}</div>}
+    {point && <div className="notice ozon-point-confirmation" role="status"><strong>Пункт выдачи выбран</strong><span>{selectedPoint?.address}</span>{!quote && <small>Доставка и телефон ещё не проверены. Подтвердите согласие и нажмите «Проверить доставку» ниже.</small>}</div>}
     <label className="checkout-consent"><input type="checkbox" name="ozonConsent" checked={consent} required onChange={event => { setConsent(event.target.checked); clearQuote(); }} /><span>Даю отдельное <Link href="/legal/consent/?purpose=ozon" target="_blank">согласие на передачу номера Ozon для проверки и расчёта доставки</Link>. Без согласия можно выбрать другой способ доставки.</span></label>
     {checkIssue && message !== checkIssue && <p className="notice" id="ozon-check-help">{checkIssue}</p>}
     <button type="button" className="button button--small" onClick={calculate} disabled={!!pending} aria-describedby={message ? "ozon-check-message" : checkIssue ? "ozon-check-help" : undefined}>{pending === "quote" ? "Проверяем доставку…" : "Проверить доставку в выбранный ПВЗ"}</button>

@@ -58,7 +58,7 @@ describe("pickup point dialog", () => {
     expect(pointButtons()[0].getAttribute("aria-pressed")).toBe("false");
     expect(pointButtons()[1].getAttribute("aria-pressed")).toBe("true");
     await act(async () => confirm().click());
-    expect(onSelect).toHaveBeenCalledExactlyOnceWith("two");
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith("two", points[1]);
   });
 
   it("cancels a preview without changing the previously confirmed point", async () => {
@@ -97,7 +97,7 @@ describe("pickup point dialog", () => {
     expect(container.textContent).not.toMatch(/undefined|null|09:00|21:00|Срок хранения|Макс\. вес/);
     expect(confirm().disabled).toBe(false);
     await act(async () => confirm().click());
-    expect(onSelect).toHaveBeenCalledExactlyOnceWith("one");
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith("one", points[0]);
   });
 
   it("keeps every map point while revealing the entire list in batches of 100", async () => {
@@ -117,7 +117,7 @@ describe("pickup point dialog", () => {
     expect(pointButtons()[234].textContent).toContain(directory[234].address);
     await act(async () => pointButtons()[234].click());
     await act(async () => confirm().click());
-    expect(onSelect).toHaveBeenCalledExactlyOnceWith("point-234");
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith("point-234", directory[234]);
   });
 
   it("previews and confirms points outside the visible list when selected on the map", async () => {
@@ -132,7 +132,7 @@ describe("pickup point dialog", () => {
     expect(pointButtons().every(button => button.getAttribute("aria-pressed") === "false")).toBe(true);
     expect(confirm().disabled).toBe(false);
     await act(async () => confirm().click());
-    expect(onSelect).toHaveBeenCalledExactlyOnceWith("point-234");
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith("point-234", directory[234]);
   });
 
   it("resets the list window for another result set and when reopened", async () => {
@@ -150,5 +150,27 @@ describe("pickup point dialog", () => {
     await act(async () => root.render(null));
     await renderDirectory();
     expect(pointButtons()).toHaveLength(100);
+  });
+
+  it("opens immediately for a city before any viewport points have loaded", async () => {
+    const city = { name: "Омск", bounds: { south: 54.8, west: 72.9, north: 55.2, east: 73.6 } };
+    await act(async () => root.render(createElement(PickupPointDialog, { city, selected: "", carrier: "Ozon", onSelect, onClose })));
+    expect(container.querySelector("dialog")?.open).toBe(true);
+    expect(map.measure).toHaveBeenLastCalledWith(true);
+    expect(confirm().disabled).toBe(true);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("keeps a selected point available when it leaves the visible viewport", async () => {
+    const city = { name: "Санкт-Петербург", bounds: { south: 59.9, west: 30.2, north: 60, east: 30.4 } };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ points: [points[1]], clusters: [], scope: "fixture" })));
+    await act(async () => root.render(createElement(PickupPointDialog, { city, selected: "one", selectedPoint: points[0], carrier: "Ozon", onSelect, onClose })));
+    const onViewportChange = map.render.mock.lastCall?.[0].onViewportChange as (value: unknown) => void;
+    await act(async () => { onViewportChange({ bounds: { south: 59.90, west: 30.305, north: 59.97, east: 30.35 }, zoom: 14 }); await new Promise(resolve => setTimeout(resolve, 260)); });
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(container.querySelector('section[aria-label="Выбранный пункт"]')?.textContent).toContain(points[0].address);
+    expect(confirm().disabled).toBe(false);
+    await act(async () => confirm().click());
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith("one", points[0]);
   });
 });

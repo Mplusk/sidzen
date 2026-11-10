@@ -10,11 +10,48 @@ import { pointSearchSql } from "@/lib/delivery/point-search-sql";
 import { destinationCity } from "@/lib/delivery/destination-city";
 import { pointMapCache } from "@/lib/delivery/point-map-cache";
 import { cityIndex, rankCities } from "@/lib/delivery/city-suggestions";
+import { MAX_VIEWPORT_POINTS, normalizePickupCity, parsePickupViewport, parseViewportOffset, pickupCityOverview, pickupCityPattern, pickupViewportResult, type PickupViewportRow } from "@/lib/delivery/point-viewport";
+import { pickupCitySql, pickupViewportSql } from "@/lib/delivery/point-viewport-sql";
+
+async function progressiveMap(request: Request, url: URL, search: string) {
+  const city = url.searchParams.get("view") === "city";
+  const viewport = city ? null : parsePickupViewport(url.searchParams.get("bbox"), url.searchParams.get("zoom"));
+  const offset = city ? 0 : parseViewportOffset(url.searchParams.get("offset"), viewport?.zoom ?? 0);
+  if (city ? search.length > 120 || !pickupCityPattern(search) || !pointSearchTerms(normalizePickupCity(search)).length : !viewport || offset === null) {
+    return Response.json({ error: "Некорректная область карты или название города." }, { status: 400, headers: { "Cache-Control": "private, no-store" } });
+  }
+  try {
+    const config = await getOzonDeliveryConfig();
+    if (!config.enabled || !config.shipmentMethodId || !config.checkedAt) {
+      return Response.json({ error: "Доставка временно недоступна." }, { status: 409, headers: { "Cache-Control": "private, no-store" } });
+    }
+    const sync = await prisma.ozonDeliverySync.findUnique({ where: { id: "ozon" }, select: { generation: true, status: true } });
+    const scope = createHash("sha256").update(JSON.stringify([deliveryConfigFingerprint(config), sync?.generation ?? null, sync?.status ?? null])).digest("hex");
+    const key = JSON.stringify([scope, city ? "city" : "viewport", city ? normalizePickupCity(search) : viewport, offset]);
+    const methodId = BigInt(config.shipmentMethodId);
+    const payload = await pointMapCache.get(key, async () => {
+      if (city) {
+        const rows = await prisma.$queryRaw<Array<{ latitude: number | null; longitude: number | null }>>(pickupCitySql(config.clientId, methodId, search));
+        return JSON.stringify({ city: pickupCityOverview(search, rows), scope });
+      }
+      const rows = await prisma.$queryRaw<PickupViewportRow[]>(pickupViewportSql(config.clientId, methodId, viewport!, offset!));
+      const paginated = viewport!.zoom === 18;
+      const result = pickupViewportResult(paginated ? rows.slice(0, MAX_VIEWPORT_POINTS) : rows, scope);
+      return JSON.stringify({ ...result, ...(paginated ? { nextOffset: rows.length > MAX_VIEWPORT_POINTS ? offset! + MAX_VIEWPORT_POINTS : null } : {}) });
+    });
+    const headers = { "Cache-Control": "private, no-cache", "ETag": payload.etag, "Content-Type": "application/json; charset=utf-8" };
+    const matches = request.headers.get("if-none-match")?.split(",").some(value => value.trim() === "*" || value.trim().replace(/^W\//, "") === payload.etag);
+    return new Response(matches ? null : payload.body, { status: matches ? 304 : 200, headers });
+  } catch {
+    return Response.json({ error: "Не удалось загрузить карту. Повторите попытку." }, { status: 503, headers: { "Cache-Control": "private, no-store" } });
+  }
+}
 
 export async function GET(request: Request) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
   if (!rateLimit(`ozon-points:${ip}`, 60, 60000).allowed) return Response.json({ error: "Слишком много запросов." }, { status: 429, headers: { "Cache-Control": "private, no-store" } });
   const url = new URL(request.url); const search = (url.searchParams.get("q") || "").trim();
+  if (url.searchParams.get("view") === "city" || url.searchParams.get("view") === "viewport") return progressiveMap(request, url, search);
   const cities = url.searchParams.get("view") === "cities";
   const empty = cities ? { cities: [] } : { points: [] };
   if (search.length < 2 || search.length > 120) return Response.json(empty, { headers: { "Cache-Control": "private, no-store" } });

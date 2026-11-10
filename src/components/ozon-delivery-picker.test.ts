@@ -8,11 +8,20 @@ vi.mock("@/app/actions/ozon-delivery", () => ({ quoteOzonDelivery: m.quote }));
 vi.mock("@/app/actions/checkout", () => ({ createOrderAction: m.order, createOrderWithState: m.order }));
 vi.mock("@/app/actions/checkout-cart", () => ({ updateCheckoutCartGroup: m.cart }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: m.refresh }) }));
-vi.mock("next/dynamic", () => ({ default: () => ({ points, selected, onSelect }: { points: { id: string }[]; selected: string; onSelect: (id: string) => void }) => createElement("div", null, ...points.map(point => createElement("button", { key: point.id, type: "button", "data-point": point.id, "aria-pressed": selected === point.id, onClick: () => onSelect(point.id) }, selected === point.id ? "✓ ПВЗ выбран" : "Выбрать этот ПВЗ"))) }));
+vi.mock("next/dynamic", async () => {
+  const { useEffect, useRef, createElement } = await import("react");
+  return { default: () => ({ points, selected, onSelect, initialBounds, onViewportChange }: { points: { id: string }[]; selected: string; onSelect: (id: string) => void; initialBounds?: { south: number; west: number; north: number; east: number }; onViewportChange?: (value: unknown) => void }) => {
+    const sent = useRef(false);
+    useEffect(() => { if (!sent.current && initialBounds && onViewportChange) { sent.current = true; onViewportChange({ bounds: initialBounds, zoom: 12 }); } }, [initialBounds, onViewportChange]);
+    return createElement("div", null, ...points.map(point => createElement("button", { key: point.id, type: "button", "data-point": point.id, "aria-pressed": selected === point.id, onClick: () => onSelect(point.id) }, selected === point.id ? "✓ ПВЗ выбран" : "Выбрать этот ПВЗ")));
+  } };
+});
 import { OzonDeliveryPicker } from "./ozon-delivery-picker";
 import { CheckoutForm } from "./checkout-form";
 
 const point = { id: "42", name: "Ozon", address: "Санкт-Петербург, Туристская улица, 4 корпус 1", type: "pvz", latitude: 60, longitude: 30.2 };
+const city = { name: "Санкт-Петербург", bounds: { south: 59.7, west: 29.7, north: 60.3, east: 30.8 } };
+let viewportPoints = [point];
 const result = { token: "signed-fixture", cost: 0, days: 3, address: point.address };
 let root: Root, container: HTMLDivElement;
 let phone = "", packingReady = true;
@@ -26,9 +35,11 @@ async function click(text: string) { await act(async () => button(text).click())
 async function inputValue(input: HTMLInputElement, value: string) {
   await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); });
 }
+async function waitViewport() { await act(async () => { await new Promise(resolve => setTimeout(resolve, 260)); }); }
 async function choosePoint() {
   await inputValue(container.querySelector<HTMLInputElement>(".ozon-point-search input")!, "Туристская");
   await click("Найти ПВЗ на карте");
+  await waitViewport(); await vi.waitFor(() => expect(button("Выбрать этот ПВЗ")).toBeTruthy(), { timeout: 3000 });
   await click("Выбрать этот ПВЗ");
   await click("Выбрать пункт");
   await flushFrames();
@@ -44,7 +55,8 @@ describe("delivery verification interaction", () => {
     vi.stubGlobal("cancelAnimationFrame", (id: number) => frames.delete(id));
     vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: false }));
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scroll });
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ points: [point] })));
+    viewportPoints = [point];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((url: string) => Promise.resolve(Response.json(url.includes("view=city") ? { city, scope: "fixture" } : { points: viewportPoints, clusters: [], scope: "fixture" }))));
     m.quote.mockResolvedValue(result);
     await render();
   });
@@ -60,7 +72,7 @@ describe("delivery verification interaction", () => {
   });
   it("confirms a map selection and scrolls/focuses the next step without submitting or opening a keyboard", async () => {
     await inputValue(container.querySelector<HTMLInputElement>(".ozon-point-search input")!, "Туристская"); await click("Найти ПВЗ на карте");
-    await click("Выбрать этот ПВЗ");
+    await waitViewport(); await vi.waitFor(() => expect(button("Выбрать этот ПВЗ")).toBeTruthy(), { timeout: 3000 }); await click("Выбрать этот ПВЗ");
     expect(container.querySelector(".ozon-point-confirmation")).toBeNull();
     expect(m.quote).not.toHaveBeenCalled();
     await click("Выбрать пункт"); await flushFrames();
@@ -83,16 +95,16 @@ describe("delivery verification interaction", () => {
   });
   it("invalidates a checked quote on a different selection without sending the phone automatically", async () => {
     const other = { ...point, id: "43", address: "QA другой ПВЗ" };
-    vi.mocked(fetch).mockResolvedValue(Response.json({ points: [point, other] }));
+    viewportPoints = [point, other];
     phone = "+7 (999) 123-45-67"; await render(); await choosePoint(); await consent(); await click("Проверить доставку");
-    await click("Изменить на карте"); await act(async () => container.querySelector<HTMLButtonElement>('button[data-point="43"]')!.click()); await click("Выбрать пункт"); await flushFrames();
+    await click("Изменить на карте"); await waitViewport(); await act(async () => container.querySelector<HTMLButtonElement>('button[data-point="43"]')!.click()); await click("Выбрать пункт"); await flushFrames();
     expect(onQuote).toHaveBeenLastCalledWith(null);
     expect(container.textContent).not.toContain("Проверка действительна"); expect(m.quote).toHaveBeenCalledTimes(1);
     expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain(other.address);
   });
   it("cancels pending scrolling when the picker unmounts", async () => {
     await inputValue(container.querySelector<HTMLInputElement>(".ozon-point-search input")!, "Туристская"); await click("Найти ПВЗ на карте");
-    await click("Выбрать этот ПВЗ"); await click("Выбрать пункт"); expect(frames.size).toBe(1);
+    await waitViewport(); await vi.waitFor(() => expect(button("Выбрать этот ПВЗ")).toBeTruthy(), { timeout: 3000 }); await click("Выбрать этот ПВЗ"); await click("Выбрать пункт"); expect(frames.size).toBe(1);
     await act(async () => root.render(null)); expect(frames.size).toBe(0); expect(scroll).not.toHaveBeenCalled();
   });
   it("explains the missing phone instead of silently disabling the button; keeps the selected PVZ and consent", async () => {
@@ -255,8 +267,8 @@ describe("delivery verification interaction", () => {
   it("never requests device location and retains manual map search", async () => {
     const locate = vi.fn(); Object.defineProperty(navigator, "geolocation", { configurable: true, value: { getCurrentPosition: locate } });
     await choosePoint(); expect(locate).not.toHaveBeenCalled();
-    expect(fetch).toHaveBeenCalledWith("/api/delivery/ozon/points/?q=%D0%A2%D1%83%D1%80%D0%B8%D1%81%D1%82%D1%81%D0%BA%D0%B0%D1%8F&view=map", expect.objectContaining({ cache: "no-cache" }));
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("view=city"))).toBe(true);
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("view=viewport"))).toBe(true);
     expect(container.textContent).not.toContain("рядом со мной"); expect(container.textContent).toContain("Изменить на карте");
   });
 });
-
