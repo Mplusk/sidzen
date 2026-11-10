@@ -41,6 +41,7 @@ try {
   assert(page.headers.get("content-security-policy")?.includes(`sha256-${createHash("sha256").update(inline).digest("base64")}`));
   assert(page.headers.get("content-security-policy")?.includes("default-src 'none'"));
   assert.equal(page.headers.get("x-frame-options"), "DENY"); assert.match(page.headers.get("cache-control") ?? "", /no-store/);
+  assert.equal(page.headers.get("referrer-policy"), "same-origin", "Chrome form submissions must retain their Origin");
   assert.equal((await confirm(await issue("enroll", new Date(Date.now() - 1000)))).status, 400);
   const token = await issue();
   assert.equal((await confirm(token, "login")).status, 400, "Intent mismatch cannot enable protection");
