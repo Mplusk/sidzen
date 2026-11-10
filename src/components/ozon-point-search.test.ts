@@ -49,6 +49,17 @@ describe("city search for the pickup map", () => {
     await act(async () => finish(Response.json({ city, scope: "fixture" })));
     expect(onCity).not.toHaveBeenCalled();
   });
+  it("clears the city and aborts a pending search without reopening the map", async () => {
+    let finish!: (value: Response) => void;
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    await type("Омск"); await search();
+    const signal = vi.mocked(fetch).mock.calls[0][1]!.signal!;
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Очистить город"]')!.click());
+    expect(input().value).toBe(""); expect(document.activeElement).toBe(input());
+    expect(signal.aborted).toBe(true); expect(button().disabled).toBe(true);
+    await act(async () => finish(Response.json({ city, scope: "fixture" })));
+    expect(onCity).not.toHaveBeenCalled();
+  });
   it("does not display late suggestions after the user changes the city", async () => {
     vi.useFakeTimers();
     let finish!: (value: Response) => void;

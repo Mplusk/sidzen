@@ -215,18 +215,38 @@ describe("public Ozon PVZ map directory", () => {
     expect(m.info).not.toHaveBeenCalled();
   });
   it("loads only bounded viewport features with no city or provider request", async () => {
-    m.find.mockResolvedValue([
+    const preview = { ...point, id: "nearest", address: "Москва, улица Ближайшая, 1", latitude: 55.7, longitude: 37.6 };
+    m.find.mockResolvedValueOnce([
       { id: "p", count: 1, name: "ПВЗ", address: "Москва, улица 1", type: "pvz", latitude: 55.7, longitude: 37.5, south: 55.7, west: 37.5, north: 55.7, east: 37.5 },
       { id: "c", count: 2000, name: null, address: null, type: null, latitude: 55.8, longitude: 37.6, south: 55.75, west: 37.55, north: 55.85, east: 37.65 },
-    ]);
+    ]).mockResolvedValueOnce([preview]);
     const response = await GET(new Request("https://sidzen.shop/api/delivery/ozon/points/?view=viewport&bbox=37.3,55.5,37.9,55.9&zoom=11"));
     const data = await response.json();
     expect(data.points).toHaveLength(1); expect(data.clusters).toHaveLength(1);
+    expect(data.listPoints).toEqual([preview]); expect(data.points[0].id).toBe("p");
     expect(data.clusters[0].count).toBe(2000); expect(data.scope).toMatch(/^[a-f0-9]{64}$/);
     expect(m.find.mock.calls[0][0].values).toEqual(expect.arrayContaining(["test-client", 7n, 37.3, 55.5, 37.9, 55.9]));
     expect(m.find.mock.calls[0][0].text).toContain("GROUP BY cell");
+    expect(m.find).toHaveBeenCalledTimes(2);
+    expect(m.find.mock.calls[1][0].values.at(-1)).toBe(20);
+    expect(m.find.mock.calls[1][0].text).toContain('"latitude" BETWEEN');
     expect(m.info).not.toHaveBeenCalled(); expect(m.update).not.toHaveBeenCalled();
     expect(JSON.stringify(data)).not.toContain("test-secret");
+    expect(data.listPoints[0].workTime).toBeUndefined();
+  });
+  it("caches clustered addresses with their markers and retries a failed preview query", async () => {
+    const cluster = { id: "c", count: 2000, name: null, address: null, type: null, latitude: 55.8, longitude: 37.6, south: 55.75, west: 37.55, north: 55.85, east: 37.65 };
+    const preview = { ...point, latitude: 55.8, longitude: 37.6 };
+    m.find.mockResolvedValueOnce([cluster]).mockRejectedValueOnce(new Error("database"))
+      .mockResolvedValueOnce([cluster]).mockResolvedValueOnce([preview]);
+    const url = "https://sidzen.shop/api/delivery/ozon/points/?view=viewport&bbox=37.3,55.5,37.9,55.9&zoom=11";
+    expect((await GET(new Request(url))).status).toBe(503);
+    const recovered = await GET(new Request(url));
+    const payload = await recovered.json();
+    expect(payload.points).toEqual([]); expect(payload.listPoints).toEqual([preview]);
+    const cached = await GET(new Request(url, { headers: { "If-None-Match": recovered.headers.get("etag")! } }));
+    expect(cached.status).toBe(304); expect(m.find).toHaveBeenCalledTimes(4);
+    expect(m.info).not.toHaveBeenCalled();
   });
   it("caches the same viewport, changes area independently and invalidates after directory sync", async () => {
     m.find.mockResolvedValue([]);
@@ -257,6 +277,8 @@ describe("public Ozon PVZ map directory", () => {
     const first = await (await GET(new Request(url))).json();
     const last = await (await GET(new Request(`${url}&offset=${first.nextOffset}`))).json();
     expect(first.points).toHaveLength(500); expect(first.nextOffset).toBe(500); expect(first.clusters).toEqual([]);
+    expect(first.listPoints).toBeUndefined(); expect(last.listPoints).toBeUndefined();
+    expect(m.find).toHaveBeenCalledTimes(2);
     expect(last.points).toHaveLength(150); expect(last.nextOffset).toBeNull(); expect(last.scope).toBe(first.scope);
     expect(new Set([...first.points, ...last.points].map(point => point.id)).size).toBe(650);
     expect(m.find.mock.calls[1][0].values.slice(-2)).toEqual([501, 500]);

@@ -102,6 +102,32 @@ it("keeps border clusters visible while preserving their drill-down bounds", asy
   expect(state.clusters[0].bounds).toEqual(bounds);
 });
 
+it("shows clustered address previews separately, bounds them to the camera and restores them from cache", async () => {
+  const cluster = { id: "area", latitude: 55.75, longitude: 37.35, count: 2000, bounds: west.bounds };
+  vi.mocked(fetch).mockResolvedValueOnce(Response.json({ points: [], clusters: [cluster], listPoints: [point("nearest", 37.35), point("nearest", 37.35), point("padded", 37.405)], scope: "directory" }))
+    .mockResolvedValueOnce(Response.json({ ...data("east", 37.75), listPoints: [point("east-preview", 37.75)] }));
+  await move(west); await settle();
+  expect(state.points).toEqual([]); expect(state.clusters).toHaveLength(1);
+  expect(state.listPoints.map(p => p.id)).toEqual(["nearest"]);
+  await move(east); expect(state.listPoints).toEqual([]); await settle();
+  expect(state.listPoints.map(p => p.id)).toEqual(["east-preview"]);
+  await move(west);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(state.listPoints.map(p => p.id)).toEqual(["nearest"]);
+  expect(state.points).toEqual([]);
+});
+
+it("rejects malformed or unbounded sidebar previews as a recoverable viewport error", async () => {
+  const invalid = [{ address: "bad" }, [null], [{ ...point("invalid", 37.35), latitude: null }], Array.from({ length: 21 }, (_, index) => point(String(index), 37.35))];
+  for (const [index, listPoints] of invalid.entries()) {
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ ...data(), listPoints }));
+    if (index === 0) await move(west);
+    else await act(async () => state.retry());
+    await settle();
+    expect(state.error).not.toBe(""); expect(state.listPoints).toEqual([]);
+  }
+});
+
 it("loads dense max-zoom points only on demand and caches the expanded list", async () => {
   const detail = { ...west, zoom: 18 };
   vi.mocked(fetch).mockResolvedValueOnce(Response.json({ ...data(), nextOffset: 500 }))
@@ -112,6 +138,7 @@ it("loads dense max-zoom points only on demand and caches the expanded list", as
   await act(async () => { await state.loadMore(); });
   expect(String(vi.mocked(fetch).mock.calls[1][0])).toContain("&offset=500");
   expect(state.points.map(point => point.id)).toEqual(["west", "second"]); expect(state.nextOffset).toBeNull();
+  expect(state.listPoints.map(point => point.id)).toEqual(["west", "second"]);
   await move({ ...east, zoom: 18 }); await settle(); await move(detail); await settle();
   expect(fetch).toHaveBeenCalledTimes(3);
   expect(state.points.map(point => point.id)).toEqual(["west", "second"]);

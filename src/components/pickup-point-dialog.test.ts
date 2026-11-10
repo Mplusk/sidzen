@@ -22,7 +22,7 @@ const points = [
 const onSelect = vi.fn(), onClose = vi.fn();
 let root: Root, container: HTMLDivElement;
 const pointButtons = () => [...container.querySelectorAll<HTMLButtonElement>("button[aria-pressed]")];
-const confirm = () => [...container.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Выбрать пункт")!;
+const confirm = () => [...container.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Выбрать этот пункт")!;
 const showMore = () => [...container.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Показать ещё");
 const manyPoints = () => Array.from({ length: 235 }, (_, index) => ({ ...points[0], id: `point-${index}`, address: `Санкт-Петербург, улица Тестовая, ${index + 1}` }));
 async function render(carrier: "Ozon" | "СДЭК" = "Ozon", selected = "") {
@@ -34,7 +34,7 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
-afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); });
+afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("pickup point dialog", () => {
   it("opens the dialog before the map measures its container, including on reopen", async () => {
@@ -48,10 +48,13 @@ describe("pickup point dialog", () => {
 
   it("previews a list selection and confirms only through the explicit action", async () => {
     await render();
-    expect(confirm().disabled).toBe(true);
+    expect(confirm()).toBeUndefined();
     await act(async () => pointButtons()[0].click());
     expect(pointButtons()[0].getAttribute("aria-pressed")).toBe("true");
     expect(confirm().disabled).toBe(false);
+    expect(confirm().closest('section[aria-label="Выбранный пункт"]')).not.toBeNull();
+    expect(container.querySelector("footer")).toBeNull();
+    expect(container.textContent).not.toContain("Найдите удобный адрес на карте или в списке");
     expect(onSelect).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
     await act(async () => pointButtons()[1].click());
@@ -157,7 +160,7 @@ describe("pickup point dialog", () => {
     await act(async () => root.render(createElement(PickupPointDialog, { city, selected: "", carrier: "Ozon", onSelect, onClose })));
     expect(container.querySelector("dialog")?.open).toBe(true);
     expect(map.measure).toHaveBeenLastCalledWith(true);
-    expect(confirm().disabled).toBe(true);
+    expect(confirm()).toBeUndefined();
     expect(onSelect).not.toHaveBeenCalled();
   });
 
@@ -172,5 +175,59 @@ describe("pickup point dialog", () => {
     expect(confirm().disabled).toBe(false);
     await act(async () => confirm().click());
     expect(onSelect).toHaveBeenCalledExactlyOnceWith("one", points[0]);
+  });
+
+  it("shows real overview addresses without turning all preview entries into markers", async () => {
+    vi.useFakeTimers();
+    const bounds = { south: 59.9, west: 30.2, north: 60, east: 30.4 };
+    const city = { name: "Санкт-Петербург", bounds };
+    const clusters = [{ id: "overview", latitude: 59.94, longitude: 30.3, count: 500, bounds }];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ points: [], listPoints: points, clusters, scope: "overview" })));
+    await act(async () => root.render(createElement(PickupPointDialog, { city, selected: "", carrier: "Ozon", onSelect, onClose })));
+    await act(async () => { map.render.mock.lastCall?.[0].onViewportChange({ bounds, zoom: 11 }); await vi.advanceTimersByTimeAsync(221); });
+    expect(pointButtons()).toHaveLength(2);
+    expect(map.render.mock.lastCall?.[0].points).toEqual([]);
+    expect(map.render.mock.lastCall?.[0].clusters).toEqual(clusters);
+    expect(container.textContent).not.toContain("Приблизьте нужный район");
+    await act(async () => pointButtons()[1].click());
+    expect(map.render.mock.lastCall?.[0].points).toEqual([points[1]]);
+    expect(map.render.mock.lastCall?.[0].selected).toBe("two");
+    expect(map.render.mock.lastCall?.[0].focusRequest).toEqual({ id: "two", revision: 1 });
+    expect(document.activeElement).toBe(confirm());
+    expect(onSelect).not.toHaveBeenCalled();
+    await act(async () => confirm().click());
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith("two", points[1]);
+  });
+
+  it("previews map-only points and keeps them through an overview response change", async () => {
+    vi.useFakeTimers();
+    const bounds = { south: 59.9, west: 30.2, north: 60, east: 30.4 };
+    const city = { name: "Санкт-Петербург", bounds };
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(Response.json({ points: [points[0]], listPoints: [points[1]], clusters: [], scope: "overview" }))
+      .mockResolvedValueOnce(Response.json({ points: [], listPoints: [], clusters: [], scope: "overview" })));
+    await act(async () => root.render(createElement(PickupPointDialog, { city, selected: "", carrier: "Ozon", onSelect, onClose })));
+    await act(async () => { map.render.mock.lastCall?.[0].onViewportChange({ bounds, zoom: 11 }); await vi.advanceTimersByTimeAsync(221); });
+    expect(pointButtons()).toHaveLength(1);
+    expect(pointButtons()[0].textContent).toContain(points[1].address);
+    expect(map.render.mock.lastCall?.[0].points).toEqual([points[0]]);
+    await act(async () => map.render.mock.lastCall?.[0].onSelect("one"));
+    expect(container.querySelector('section[aria-label="Выбранный пункт"]')?.textContent).toContain(points[0].address);
+    expect(map.render.mock.lastCall?.[0].focusRequest).toBeUndefined();
+    expect(onSelect).not.toHaveBeenCalled();
+    await act(async () => { map.render.mock.lastCall?.[0].onViewportChange({ bounds: { ...bounds, west: 30.5, east: 30.7 }, zoom: 14 }); await vi.advanceTimersByTimeAsync(221); });
+    expect(pointButtons()).toHaveLength(0);
+    expect(map.render.mock.lastCall?.[0].points).toEqual([points[0]]);
+    await act(async () => confirm().click());
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith("one", points[0]);
+  });
+
+  it("can focus the same list address again after the map has been moved", async () => {
+    await render();
+    await act(async () => pointButtons()[0].click());
+    expect(map.render.mock.lastCall?.[0].focusRequest).toEqual({ id: "one", revision: 1 });
+    await act(async () => pointButtons()[0].click());
+    expect(map.render.mock.lastCall?.[0].focusRequest).toEqual({ id: "one", revision: 2 });
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });

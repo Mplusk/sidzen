@@ -4,9 +4,10 @@ export type MapBounds = { south: number; west: number; north: number; east: numb
 export type PickupCluster = { id: string; latitude: number; longitude: number; count: number; bounds: MapBounds };
 export type PickupMapCity = { name: string; bounds: MapBounds };
 export type PickupViewport = { bounds: MapBounds; zoom: number };
-export type PickupViewportResult = { points: PickupPoint[]; clusters: PickupCluster[]; scope: string; nextOffset?: number | null };
+export type PickupViewportResult = { points: PickupPoint[]; clusters: PickupCluster[]; scope: string; nextOffset?: number | null; listPoints?: PickupPoint[] };
 
 export const MAX_VIEWPORT_POINTS = 500;
+export const MAX_VIEWPORT_LIST_POINTS = 20;
 
 // Keep the city overview sparse; reveal more detail as the buyer zooms in.
 // The same budget applies to individual points, otherwise a city with fewer

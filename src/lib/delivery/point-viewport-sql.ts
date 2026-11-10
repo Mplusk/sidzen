@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import { MAX_VIEWPORT_POINTS, normalizePickupCity, pickupCityPattern, pickupViewportDensity, type PickupViewport } from "./point-viewport";
+import { MAX_VIEWPORT_LIST_POINTS, MAX_VIEWPORT_POINTS, normalizePickupCity, pickupCityPattern, pickupViewportDensity, type PickupViewport } from "./point-viewport";
 import { pointSearchQuery, pointSearchTerms } from "./point-search";
 
 export function pickupCitySql(clientId: string, methodId: bigint, search: string) {
@@ -54,5 +54,23 @@ export function pickupViewportSql(clientId: string, methodId: bigint, viewport: 
     SELECT g.*, p."name", p."address", p."type" FROM grouped g
     LEFT JOIN "OzonDeliveryPoint" p ON g.count = 1 AND p."id" = g.id
     ORDER BY g.id
+  `;
+}
+
+// A clustered overview still offers actual addresses in its sidebar. Rank only
+// active points inside this camera area; never load the whole city's addresses.
+// Haversine distance also keeps the nearest ordering correct at high latitudes.
+export function pickupViewportListSql(clientId: string, methodId: bigint, viewport: PickupViewport) {
+  const { south, west, north, east } = viewport.bounds;
+  const latitude = (south + north) / 2, longitude = (west + east) / 2;
+  return Prisma.sql`
+    SELECT "id", "name", "address", "type", "latitude", "longitude"
+    FROM "OzonDeliveryPoint"
+    WHERE "clientId" = ${clientId} AND "methodId" = ${methodId} AND "active" = true
+      AND "latitude" BETWEEN ${south} AND ${north} AND "longitude" BETWEEN ${west} AND ${east}
+      AND NOT ("latitude" = 0 AND "longitude" = 0)
+    ORDER BY power(sin(radians("latitude" - ${latitude}) / 2), 2)
+      + cos(radians(${latitude})) * cos(radians("latitude")) * power(sin(radians("longitude" - ${longitude}) / 2), 2), "id" ASC
+    LIMIT ${MAX_VIEWPORT_LIST_POINTS}
   `;
 }

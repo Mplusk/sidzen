@@ -17,9 +17,10 @@ function showSelection(button: HTMLButtonElement, selected: boolean) {
   button.setAttribute("aria-pressed", String(selected));
 }
 
-export default function OzonPickupMap({ points, selected, onSelect, carrier = "Ozon", openPopupOnSelect = true, initialBounds, onViewportChange, clusters: areaClusters = NO_CLUSTERS }: {
+export default function OzonPickupMap({ points, selected, onSelect, carrier = "Ozon", openPopupOnSelect = true, initialBounds, onViewportChange, clusters: areaClusters = NO_CLUSTERS, focusRequest }: {
   points: PickupPoint[]; selected: string; onSelect: (id: string) => void; carrier?: string; openPopupOnSelect?: boolean;
   initialBounds?: MapBounds; onViewportChange?: (viewport: PickupViewport) => void; clusters?: PickupCluster[];
+  focusRequest?: { id: string; revision: number };
 }) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -31,6 +32,7 @@ export default function OzonPickupMap({ points, selected, onSelect, carrier = "O
   const pendingSelection = useRef(selected);
   const viewportRef = useRef(onViewportChange);
   const cameraBounds = useRef<string | null>(null);
+  const appliedFocus = useRef<string | null>(null);
   const retryTiles = useRef<(() => void) | null>(null);
   const [tileError, setTileError] = useState(false);
   const [tileRetrying, setTileRetrying] = useState(false);
@@ -253,5 +255,16 @@ export default function OzonPickupMap({ points, selected, onSelect, carrier = "O
     for (const [id, button] of buttonsRef.current) showSelection(button, id === selected);
     revealSelection();
   }, [located, selected, carrier, revealSelection]);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focusRequest) return;
+    const identity = `${focusRequest.id}:${focusRequest.revision}`;
+    if (appliedFocus.current === identity) return;
+    const point = located.find(point => point.id === focusRequest.id);
+    if (!point) return;
+    appliedFocus.current = identity;
+    pendingSelection.current = "";
+    map.setView([point.latitude, point.longitude], Math.min(18, Math.max(15, map.getZoom())));
+  }, [focusRequest, located]);
   return <div className="ozon-map-wrapper"><div ref={container} className="ozon-pickup-map" role="region" aria-label={`Карта пунктов выдачи ${carrier}`} />{tileError && <div role="status"><p className="muted">Часть карты не загрузилась. ПВЗ можно выбрать по метке или из списка ниже.</p><button type="button" className="button button--outline button--small" disabled={tileRetrying} onClick={() => retryTiles.current?.()}>{tileRetrying ? "Загружаем карту…" : "Повторить загрузку карты"}</button></div>}</div>;
 }

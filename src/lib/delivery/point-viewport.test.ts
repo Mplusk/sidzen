@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizePickupCity, parsePickupViewport, parseViewportOffset, pickupCityOverview, pickupCityPattern, pickupViewportDensity, pickupViewportResult } from "./point-viewport";
-import { pickupCitySql, pickupViewportSql } from "./point-viewport-sql";
+import { pickupCitySql, pickupViewportListSql, pickupViewportSql } from "./point-viewport-sql";
 
 describe("progressive pickup map boundaries", () => {
   it.each([
@@ -74,6 +74,17 @@ describe("progressive pickup map boundaries", () => {
     expect(sql.text).toContain("GROUP BY cell");
     expect(sql.text).toContain("count(*)::integer");
     expect(sql.text).not.toContain("OFFSET"); expect(sql.text).not.toContain("LIMIT");
+  });
+  it("loads at most twenty scoped addresses nearest the viewport center separately from map aggregation", () => {
+    const sql = pickupViewportListSql("client", 7n, parsePickupViewport("37.3,55.5,37.9,55.9", "11")!);
+    expect(sql.text).toContain('SELECT "id", "name", "address", "type", "latitude", "longitude"');
+    expect(sql.text).toContain('"active" = true');
+    expect(sql.text).toContain('ORDER BY power(sin(radians("latitude" -');
+    expect(sql.text).toContain('"id" ASC');
+    expect(sql.text).toMatch(/LIMIT \$\d+/);
+    expect(sql.values).toEqual(["client", 7n, 55.5, 55.9, 37.3, 37.9, (55.5 + 55.9) / 2, (55.5 + 55.9) / 2, (37.3 + 37.9) / 2, 20]);
+    expect(sql.text).not.toContain("'client'");
+    expect(sql.text).not.toContain("OFFSET");
   });
   it("permits explicit paging only at maximum zoom and binds its cursor", () => {
     expect(parseViewportOffset(null, 10)).toBe(0);

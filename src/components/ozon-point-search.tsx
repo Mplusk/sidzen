@@ -1,15 +1,20 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { PickupMapCity } from "@/lib/delivery/point-viewport";
+import styles from "./ozon-point-search.module.css";
 
 type Results = { city: PickupMapCity | null; scope?: string };
 
-export function OzonPointSearch({ onReset, onCity }: {
+export function OzonPointSearch({ onReset, onCity, renderAction, actionLabel = "Выбрать на карте", onOpen }: {
   onReset: () => void;
   onCity: (city: PickupMapCity) => void;
+  renderAction?: (button: ReactNode) => ReactNode;
+  actionLabel?: string;
+  onOpen?: () => void;
 }) {
   const id = useId();
+  const input = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -85,7 +90,7 @@ export function OzonPointSearch({ onReset, onCity }: {
       } finally { clearTimeout(deadline); }
       if (version !== generation.current) return;
       if (controller.signal.aborted) throw new Error("timeout");
-      if (result.city) onCity(result.city);
+      if (result.city) { setQuery(result.city.name); onCity(result.city); }
       else {
         // The user may submit before the debounced suggestions arrive. Offer
         // corrections again, without silently changing the requested city.
@@ -105,17 +110,17 @@ export function OzonPointSearch({ onReset, onCity }: {
       }
     } catch (error) {
       if (version !== generation.current) return;
-      setMessage(error instanceof Error && error.message === "rate-limit" ? "Слишком много запросов. Подождите немного и повторите поиск." : "Не удалось загрузить пункты. Нажмите «Найти ПВЗ на карте», чтобы повторить поиск.");
+      setMessage(error instanceof Error && error.message === "rate-limit" ? "Слишком много запросов. Подождите немного и повторите поиск." : "Не удалось открыть карту. Попробуйте ещё раз.");
     } finally {
       if (version === generation.current) { setBusy(false); request.current = null; }
     }
   }
 
   return <div className="ozon-search" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
-    <div className="ozon-point-search">
+    <div className={`ozon-point-search ${renderAction ? styles.compact : ""}`}>
       <div className="ozon-search-field">
         <label className="field" htmlFor={id}><span>Город</span></label>
-        <input id={id} role="combobox" aria-autocomplete="list" aria-expanded={open && cities.length > 0} aria-controls={open && cities.length ? `${id}-list` : undefined} aria-activedescendant={open && active >= 0 ? `${id}-option-${active}` : undefined} aria-describedby={`${id}-help ${id}-status`} autoComplete="off" value={query} maxLength={120}
+        <input ref={input} className={styles.input} id={id} role="combobox" aria-autocomplete="list" aria-expanded={open && cities.length > 0} aria-controls={open && cities.length ? `${id}-list` : undefined} aria-activedescendant={open && active >= 0 ? `${id}-option-${active}` : undefined} aria-describedby={`${id}-help ${id}-status`} autoComplete="off" value={query} maxLength={120}
           onChange={event => change(event.target.value)}
           onFocus={() => { if (cities.length) setOpen(true); }}
           onKeyDown={event => {
@@ -132,17 +137,19 @@ export function OzonPointSearch({ onReset, onCity }: {
             }
           }}
           placeholder="Например, Омск" />
+        {query && <button type="button" className={styles.clear} aria-label="Очистить город" onClick={() => { change(""); input.current?.focus(); }}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="m6 6 12 12M18 6 6 18" /></svg></button>}
         {open && cities.length > 0 && <div className="ozon-search-popover">
           <div id={`${id}-list`} role="listbox" aria-label="Варианты города">
             {cities.map((city, index) => <button key={city} id={`${id}-option-${index}`} type="button" role="option" aria-selected={active === index} tabIndex={-1} className="ozon-search-option" onPointerDown={event => event.preventDefault()} onClick={() => choose(city)}><strong>{city}</strong></button>)}
           </div>
         </div>}
       </div>
-      <button type="button" className="button button--outline" onClick={() => void search()} disabled={busy || query.trim().length < 2} aria-busy={busy}>{busy ? "Открываем карту…" : "Найти ПВЗ на карте"}</button>
+      {!renderAction && <button type="button" className="button button--outline" onClick={() => void search()} disabled={busy || query.trim().length < 2} aria-busy={busy}>{busy ? "Открываем карту…" : "Найти ПВЗ на карте"}</button>}
     </div>
-    <p className="ozon-search-help muted" id={`${id}-help`}>Введите не менее двух букв.</p>
+    <p className={renderAction ? "sr-only" : "ozon-search-help muted"} id={`${id}-help`}>Введите не менее двух букв и выберите город из подсказок.</p>
     <p className="sr-only" id={`${id}-status`} role="status">{suggesting ? "Ищем города…" : open && cities.length ? `Вариантов города: ${cities.length}. Используйте стрелки и Enter для выбора.` : ""}</p>
     {suggestionsUnavailable && <p className="muted" role="status">Подсказки временно недоступны. Проверьте название города и выполните поиск вручную.</p>}
     {message && <p className="notice" role="alert">{message}</p>}
+    {renderAction?.(<button type="button" className="button button--small" aria-haspopup="dialog" disabled={busy || query.trim().length < 2} aria-busy={busy} onClick={() => onOpen ? onOpen() : void search()}>{busy ? "Открываем…" : actionLabel}</button>)}
   </div>;
 }

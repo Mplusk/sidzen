@@ -11,7 +11,7 @@ import { destinationCity } from "@/lib/delivery/destination-city";
 import { pointMapCache } from "@/lib/delivery/point-map-cache";
 import { cityIndex, rankCities } from "@/lib/delivery/city-suggestions";
 import { MAX_VIEWPORT_POINTS, normalizePickupCity, parsePickupViewport, parseViewportOffset, pickupCityOverview, pickupCityPattern, pickupViewportResult, type PickupViewportRow } from "@/lib/delivery/point-viewport";
-import { pickupCitySql, pickupViewportSql } from "@/lib/delivery/point-viewport-sql";
+import { pickupCitySql, pickupViewportListSql, pickupViewportSql } from "@/lib/delivery/point-viewport-sql";
 
 async function progressiveMap(request: Request, url: URL, search: string) {
   const city = url.searchParams.get("view") === "city";
@@ -37,6 +37,9 @@ async function progressiveMap(request: Request, url: URL, search: string) {
       const rows = await prisma.$queryRaw<PickupViewportRow[]>(pickupViewportSql(config.clientId, methodId, viewport!, offset!));
       const paginated = viewport!.zoom === 18;
       const result = pickupViewportResult(paginated ? rows.slice(0, MAX_VIEWPORT_POINTS) : rows, scope);
+      if (result.clusters.length) {
+        result.listPoints = await prisma.$queryRaw<PickupPoint[]>(pickupViewportListSql(config.clientId, methodId, viewport!));
+      }
       return JSON.stringify({ ...result, ...(paginated ? { nextOffset: rows.length > MAX_VIEWPORT_POINTS ? offset! + MAX_VIEWPORT_POINTS : null } : {}) });
     });
     const headers = { "Cache-Control": "private, no-cache", "ETag": payload.etag, "Content-Type": "application/json; charset=utf-8" };

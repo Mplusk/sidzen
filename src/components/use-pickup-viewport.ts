@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { MapBounds, PickupViewport, PickupViewportResult } from "@/lib/delivery/point-viewport";
+import { MAX_VIEWPORT_LIST_POINTS, type MapBounds, type PickupViewport, type PickupViewportResult } from "@/lib/delivery/point-viewport";
+import { hasPointCoordinates, type PickupPoint } from "@/lib/delivery/points";
 
 const EMPTY: PickupViewportResult = { points: [], clusters: [], scope: "" };
 const CACHE_TTL = 60_000;
@@ -9,6 +10,12 @@ const MAX_CACHED_AREAS = 12;
 type CachedArea = { viewport: PickupViewport; result: PickupViewportResult; expires: number };
 const contains = (outer: MapBounds, inner: MapBounds) => outer.west <= inner.west && outer.south <= inner.south && outer.east >= inner.east && outer.north >= inner.north;
 const intersects = (a: MapBounds, b: MapBounds) => a.west <= b.east && a.east >= b.west && a.south <= b.north && a.north >= b.south;
+
+function validListPoints(value: unknown): value is PickupPoint[] | undefined {
+  return value === undefined || (Array.isArray(value) && value.length <= MAX_VIEWPORT_LIST_POINTS && value.every(point =>
+    point && typeof point.id === "string" && point.id.length > 0 && typeof point.name === "string"
+    && typeof point.address === "string" && typeof point.type === "string" && hasPointCoordinates(point)));
+}
 
 function padded(bounds: MapBounds): MapBounds {
   const lat = (bounds.north - bounds.south) * .12, lon = (bounds.east - bounds.west) * .12;
@@ -64,7 +71,8 @@ export function usePickupViewport(enabled: boolean) {
         const response = await fetch(`/api/delivery/ozon/points/?view=viewport&bbox=${encodeURIComponent(bbox)}&zoom=${next.zoom}`, { cache: "no-cache", signal: request.signal });
         if (!response.ok) throw new Error(response.status === 429 ? "rate-limit" : "points");
         const data = await response.json() as PickupViewportResult;
-        if (!Array.isArray(data.points) || !Array.isArray(data.clusters) || typeof data.scope !== "string") throw new Error("points");
+        if (!Array.isArray(data.points) || !Array.isArray(data.clusters) || typeof data.scope !== "string"
+          || !validListPoints(data.listPoints)) throw new Error("points");
         if (generation.current !== version) return;
         if (request.signal.aborted) throw new Error("timeout");
         if (scope.current !== data.scope) { cache.current = []; scope.current = data.scope; }
@@ -99,7 +107,7 @@ export function usePickupViewport(enabled: boolean) {
       if (!response.ok) throw new Error("points");
       const data = await response.json() as PickupViewportResult;
       if (generation.current !== version) return;
-      if (request.signal.aborted || !Array.isArray(data.points) || !Array.isArray(data.clusters) || data.scope !== result.scope || (data.nextOffset != null && (!Number.isSafeInteger(data.nextOffset) || data.nextOffset <= offset))) throw new Error("points");
+      if (request.signal.aborted || !Array.isArray(data.points) || !Array.isArray(data.clusters) || !validListPoints(data.listPoints) || data.scope !== result.scope || (data.nextOffset != null && (!Number.isSafeInteger(data.nextOffset) || data.nextOffset <= offset))) throw new Error("points");
       const joined = { ...data, points: [...new Map([...result.points, ...data.points].map(point => [point.id, point])).values()] };
       const entry = cache.current.find(entry => entry.viewport === area);
       if (entry) entry.result = joined;
@@ -116,10 +124,13 @@ export function usePickupViewport(enabled: boolean) {
   // Markers from the previous district must not appear as results for the new
   // district while its request is pending. The selected point lives separately.
   const visible = useMemo(() => {
-    if (!viewport) return EMPTY;
+    if (!viewport) return { ...EMPTY, listPoints: [] };
     const b = viewport.bounds;
+    const inViewport = (p: PickupPoint) => p.latitude !== null && p.longitude !== null && p.latitude >= b.south && p.latitude <= b.north && p.longitude >= b.west && p.longitude <= b.east;
     return {
-      points: result.points.filter(p => p.latitude !== null && p.longitude !== null && p.latitude >= b.south && p.latitude <= b.north && p.longitude >= b.west && p.longitude <= b.east),
+      points: result.points.filter(inViewport),
+      // Sidebar previews must not become markers on top of the same clusters.
+      listPoints: [...new Map((result.listPoints ?? result.points).filter(inViewport).map(point => [point.id, point])).values()],
       clusters: result.clusters.filter(cluster => intersects(cluster.bounds, b)).map(cluster => ({
         ...cluster,
         // A padded request may group border points around a center outside

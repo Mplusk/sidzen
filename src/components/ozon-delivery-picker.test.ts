@@ -38,10 +38,10 @@ async function inputValue(input: HTMLInputElement, value: string) {
 async function waitViewport() { await act(async () => { await new Promise(resolve => setTimeout(resolve, 260)); }); }
 async function choosePoint() {
   await inputValue(container.querySelector<HTMLInputElement>(".ozon-point-search input")!, "Туристская");
-  await click("Найти ПВЗ на карте");
+  await click("Выбрать на карте");
   await waitViewport(); await vi.waitFor(() => expect(button("Выбрать этот ПВЗ")).toBeTruthy(), { timeout: 3000 });
   await click("Выбрать этот ПВЗ");
-  await click("Выбрать пункт");
+  await click("Выбрать этот пункт");
   await flushFrames();
 }
 async function consent() { await act(async () => container.querySelector<HTMLInputElement>('input[name="ozonConsent"]')!.click()); }
@@ -65,17 +65,17 @@ describe("delivery verification interaction", () => {
     expect(container.querySelector(".ozon-search-field label")?.textContent).toBe("Город");
     await inputValue(container.querySelector<HTMLInputElement>('.ozon-point-search input')!, "Санкт-Петербург");
     expect(fetch).not.toHaveBeenCalled();
-    await click("Найти ПВЗ на карте");
+    await click("Выбрать на карте");
     expect(container.querySelector("dialog")).toBeTruthy();
     expect(container.querySelector("select")).toBeNull();
     expect(container.querySelector(".ozon-point-confirmation")).toBeNull();
   });
   it("confirms a map selection and scrolls/focuses the next step without submitting or opening a keyboard", async () => {
-    await inputValue(container.querySelector<HTMLInputElement>(".ozon-point-search input")!, "Туристская"); await click("Найти ПВЗ на карте");
+    await inputValue(container.querySelector<HTMLInputElement>(".ozon-point-search input")!, "Туристская"); await click("Выбрать на карте");
     await waitViewport(); await vi.waitFor(() => expect(button("Выбрать этот ПВЗ")).toBeTruthy(), { timeout: 3000 }); await click("Выбрать этот ПВЗ");
     expect(container.querySelector(".ozon-point-confirmation")).toBeNull();
     expect(m.quote).not.toHaveBeenCalled();
-    await click("Выбрать пункт"); await flushFrames();
+    await click("Выбрать этот пункт"); await flushFrames();
     expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain(point.address);
     expect(container.querySelector("dialog")).toBeNull();
     expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain(point.address);
@@ -83,7 +83,7 @@ describe("delivery verification interaction", () => {
     expect(document.activeElement).toBe(container.querySelector(".ozon-recipient-step"));
     expect(scroll).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
     expect(m.quote).not.toHaveBeenCalled(); expect(m.order).not.toHaveBeenCalled();
-    await click("Изменить на карте"); await click("Выбрать пункт"); await flushFrames(); expect(scroll).toHaveBeenCalledTimes(2);
+    await click("Изменить"); await click("Выбрать этот пункт"); await flushFrames(); expect(scroll).toHaveBeenCalledTimes(2);
   });
   it("uses reduced motion and clears the selection when the city changes", async () => {
     vi.mocked(matchMedia).mockReturnValue({ matches: true } as MediaQueryList);
@@ -91,20 +91,20 @@ describe("delivery verification interaction", () => {
     expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain("ещё не проверены");
     await inputValue(container.querySelector<HTMLInputElement>(".ozon-point-search input")!, "Омск"); await flushFrames();
     expect(container.querySelector(".ozon-point-confirmation")).toBeNull(); expect(scroll).toHaveBeenCalledTimes(1);
-    expect(button("Найти ПВЗ на карте")).toBeTruthy();
+    expect(button("Выбрать на карте")).toBeTruthy();
   });
   it("invalidates a checked quote on a different selection without sending the phone automatically", async () => {
     const other = { ...point, id: "43", address: "QA другой ПВЗ" };
     viewportPoints = [point, other];
     phone = "+7 (999) 123-45-67"; await render(); await choosePoint(); await consent(); await click("Проверить доставку");
-    await click("Изменить на карте"); await waitViewport(); await act(async () => container.querySelector<HTMLButtonElement>('button[data-point="43"]')!.click()); await click("Выбрать пункт"); await flushFrames();
+    await click("Изменить"); await waitViewport(); await act(async () => container.querySelector<HTMLButtonElement>('button[data-point="43"]')!.click()); await click("Выбрать этот пункт"); await flushFrames();
     expect(onQuote).toHaveBeenLastCalledWith(null);
     expect(container.textContent).not.toContain("Проверка действительна"); expect(m.quote).toHaveBeenCalledTimes(1);
     expect(container.querySelector(".ozon-point-confirmation")?.textContent).toContain(other.address);
   });
   it("cancels pending scrolling when the picker unmounts", async () => {
-    await inputValue(container.querySelector<HTMLInputElement>(".ozon-point-search input")!, "Туристская"); await click("Найти ПВЗ на карте");
-    await waitViewport(); await vi.waitFor(() => expect(button("Выбрать этот ПВЗ")).toBeTruthy(), { timeout: 3000 }); await click("Выбрать этот ПВЗ"); await click("Выбрать пункт"); expect(frames.size).toBe(1);
+    await inputValue(container.querySelector<HTMLInputElement>(".ozon-point-search input")!, "Туристская"); await click("Выбрать на карте");
+    await waitViewport(); await vi.waitFor(() => expect(button("Выбрать этот ПВЗ")).toBeTruthy(), { timeout: 3000 }); await click("Выбрать этот ПВЗ"); await click("Выбрать этот пункт"); expect(frames.size).toBe(1);
     await act(async () => root.render(null)); expect(frames.size).toBe(0); expect(scroll).not.toHaveBeenCalled();
   });
   it("explains the missing phone instead of silently disabling the button; keeps the selected PVZ and consent", async () => {
@@ -269,6 +269,6 @@ describe("delivery verification interaction", () => {
     await choosePoint(); expect(locate).not.toHaveBeenCalled();
     expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("view=city"))).toBe(true);
     expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("view=viewport"))).toBe(true);
-    expect(container.textContent).not.toContain("рядом со мной"); expect(container.textContent).toContain("Изменить на карте");
+    expect(container.textContent).not.toContain("рядом со мной"); expect(container.textContent).toContain("Изменить");
   });
 });

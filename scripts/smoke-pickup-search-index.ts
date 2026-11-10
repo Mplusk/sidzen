@@ -4,8 +4,9 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
 import { pointSearchTerms } from "../src/lib/delivery/point-search";
 import { pointSearchSql } from "../src/lib/delivery/point-search-sql";
-import { pickupCitySql, pickupViewportSql } from "../src/lib/delivery/point-viewport-sql";
+import { pickupCitySql, pickupViewportListSql, pickupViewportSql } from "../src/lib/delivery/point-viewport-sql";
 import { pickupCityOverview, pickupViewportResult, type PickupViewportRow } from "../src/lib/delivery/point-viewport";
+import type { PickupPoint } from "../src/lib/delivery/points";
 
 // Synthetic public addresses only. Refuse all production databases.
 const db = new URL(process.env.DATABASE_URL || "");
@@ -89,6 +90,19 @@ try {
   assert.equal(broad.reduce((sum, feature) => sum + feature.count, 0), 10000);
   const payload = pickupViewportResult(broad, "qa");
   assert(payload.clusters.length > 0 && JSON.stringify(payload).length < 10000);
+  const nearby = await prisma.$queryRaw<PickupPoint[]>(pickupViewportListSql(marker, 7n, { bounds: broadBounds, zoom: 10 }));
+  assert.equal(nearby.length, 20, "Only a small address preview should accompany overview clusters");
+  assert.equal(new Set(nearby.map(point => point.id)).size, 20);
+  assert(nearby.every(point => point.id.startsWith(marker + "-moscow-")), "Preview must exclude inactive points and other integrations");
+  const center = { latitude: (broadBounds.south + broadBounds.north) / 2, longitude: (broadBounds.west + broadBounds.east) / 2 };
+  const radians = (value: number) => value * Math.PI / 180;
+  const distance = (point: { latitude: number; longitude: number }) => Math.sin(radians(point.latitude - center.latitude) / 2) ** 2
+    + Math.cos(radians(center.latitude)) * Math.cos(radians(point.latitude)) * Math.sin(radians(point.longitude - center.longitude) / 2) ** 2;
+  const expectedDistance = cityCoordinates.map(distance).sort((a, b) => a - b)[19];
+  const previewDistances = nearby.map(point => distance({ latitude: point.latitude!, longitude: point.longitude! }));
+  assert(previewDistances.every(value => value <= expectedDistance + 1e-15), "Preview must contain nearest addresses, not the first directory rows");
+  assert(previewDistances.every((value, index) => index === 0 || value >= previewDistances[index - 1] - 1e-15));
+  assert.equal(payload.points.length, 0, "Sidebar addresses must not increase the overview marker density");
   for (const [zoom, budget] of [[12, 36], [14, 49], [16, 64], [17, 64]]) {
     const features = await prisma.$queryRaw<PickupViewportRow[]>(pickupViewportSql(marker, 7n, { bounds: broadBounds, zoom }));
     assert(features.length > 0 && features.length <= budget, `Zoom ${zoom} must respect its marker budget`);
@@ -118,6 +132,12 @@ try {
   const southwest = await district(55.55, 37.3, 55.59, 37.36);
   const northeast = await district(55.9, 37.8, 55.946, 37.894);
   assert(!southwest.some(point => northeast.some(other => point.id === other.id)));
+  const westernPreview = await prisma.$queryRaw<PickupPoint[]>(pickupViewportListSql(marker, 7n, { bounds: { south: 55.55, west: 37.3, north: 55.59, east: 37.36 }, zoom: 15 }));
+  const easternPreview = await prisma.$queryRaw<PickupPoint[]>(pickupViewportListSql(marker, 7n, { bounds: { south: 55.9, west: 37.8, north: 55.946, east: 37.894 }, zoom: 15 }));
+  assert.equal(westernPreview.length, 20); assert.equal(easternPreview.length, 20);
+  assert(westernPreview.every(point => southwest.some(other => other.id === point.id)));
+  assert(easternPreview.every(point => northeast.some(other => other.id === point.id)));
+  assert(!westernPreview.some(point => easternPreview.some(other => point.id === other.id)), "Panning must replace sidebar addresses with the new district");
   await prisma.$executeRaw(Prisma.sql`
     INSERT INTO "OzonDeliveryPoint" ("id", "name", "address", "type", "active", "clientId", "methodId", "generation", "latitude", "longitude", "updatedAt")
     SELECT ${marker} || '-coincident-' || n, 'Synthetic coincident point', 'Россия, Москва, улица Совпадающая, ' || n,
@@ -130,7 +150,7 @@ try {
   assert.equal(firstPage.length, 501); assert.equal(lastPage.length, 150);
   assert.equal(new Set([...firstPage.slice(0, 500), ...lastPage].map(point => point.id)).size, 650);
   assert([...firstPage, ...lastPage].every(point => point.count === 1 && point.address));
-  console.log("PASS: compact Moscow overview, complete server cluster coverage of 10,000 points, district zoom/pan, exact city matching, and integration scope.");
+  console.log("PASS: compact Moscow overview, complete server cluster coverage of 10,000 points, twenty nearest scoped sidebar addresses, district zoom/pan, exact city matching, and integration scope.");
   console.log("PASS: indexed prefix lookup on 100,000 synthetic addresses, unchanged word/house matching, scope, ё/е, hyphens, updates and deactivation. No provider calls or customer data.");
 } finally {
   await prisma.ozonDeliveryPoint.deleteMany({ where: { generation: marker, clientId: { in: [marker, marker + "-other"] } } });

@@ -1,0 +1,7 @@
+.compact { max-width: 420px; margin-bottom: 20px; }
+.compact > div { width: 100%; }
+.input.input { padding-right: 48px; background: var(--paper, #f8f5ef); border-color: transparent; border-radius: 12px; }
+.input:focus-visible { outline: 2px solid var(--sage, #6b6f5b); outline-offset: 2px; }
+.clear { position: absolute; right: 2px; bottom: 2px; display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); cursor: pointer; }
+.clear:hover { color: var(--ink); background: var(--paper-2, #eee8de); }
+.clear:focus-visible { outline: 2px solid var(--sage, #6b6f5b); outline-offset: -3px; }

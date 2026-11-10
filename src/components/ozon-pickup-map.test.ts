@@ -25,7 +25,7 @@ import type { MapBounds, PickupCluster, PickupViewport } from "@/lib/delivery/po
 const points = [42, 43].map(id => ({ id: String(id), name: "ПВЗ Ozon", address: `QA адрес ${id}`, type: "pvz", latitude: 60, longitude: 30.2 + id / 10000 }));
 let root: Root, container: HTMLDivElement;
 const select = vi.fn();
-async function render(selected: string, openPopupOnSelect = true, mapPoints = points, extra: { initialBounds?: MapBounds; onViewportChange?: (value: PickupViewport) => void; clusters?: PickupCluster[] } = {}) { await act(async () => root.render(createElement(OzonPickupMap, { points: mapPoints, selected, onSelect: select, openPopupOnSelect, ...extra }))); }
+async function render(selected: string, openPopupOnSelect = true, mapPoints = points, extra: { initialBounds?: MapBounds; onViewportChange?: (value: PickupViewport) => void; clusters?: PickupCluster[]; focusRequest?: { id: string; revision: number } } = {}) { await act(async () => root.render(createElement(OzonPickupMap, { points: mapPoints, selected, onSelect: select, openPopupOnSelect, ...extra }))); }
 const popupButton = (index: number) => m.markers[index].content!.querySelector("button")!;
 beforeEach(() => {
   vi.clearAllMocks(); m.markers.length = 0; m.events.clear(); m.tileEvents.clear();
@@ -143,6 +143,18 @@ describe("progressive viewport map", () => {
     await render("", false, points, { initialBounds, clusters: [] });
     expect(m.map.setView).toHaveBeenCalledTimes(1);
     expect(m.map.fitBounds).toHaveBeenCalledTimes(1);
+  });
+
+  it("focuses an address on explicit list requests without repeating on data updates", async () => {
+    await render("42", false, points, { initialBounds, focusRequest: { id: "42", revision: 1 } });
+    expect(m.map.setView).toHaveBeenCalledExactlyOnceWith([points[0].latitude, points[0].longitude], 15);
+    await render("42", false, [...points], { initialBounds, focusRequest: { id: "42", revision: 1 } });
+    expect(m.map.setView).toHaveBeenCalledTimes(1);
+    m.map.getZoom.mockReturnValue(18);
+    await render("42", false, points, { initialBounds, focusRequest: { id: "42", revision: 2 } });
+    expect(m.map.setView).toHaveBeenLastCalledWith([points[0].latitude, points[0].longitude], 18);
+    expect(m.map.setView).toHaveBeenCalledTimes(2);
+    expect(select).not.toHaveBeenCalled();
   });
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });

@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { quoteOzonDelivery } from "@/app/actions/ozon-delivery";
 import type { PickupPoint } from "@/lib/delivery/points";
 import type { PickupMapCity } from "@/lib/delivery/point-viewport";
 import { deliveryCheckIssue, withDeliveryDeadline } from "@/lib/delivery/picker-state";
 import { OzonPointSearch } from "@/components/ozon-point-search";
 import { PickupPointDialog } from "@/components/pickup-point-dialog";
+import styles from "./ozon-delivery-picker.module.css";
 
 export type DeliveryQuoteView = { token: string; cost: number; days: number; address: string };
 
@@ -57,16 +59,18 @@ export function OzonDeliveryPicker({ phone, onEditPhone, onQuote, packingReady =
     finally { if (version === revision.current) setPending(null); }
   }
   const checkIssue = deliveryCheckIssue(phone, point, consent, packingReady);
-  return <div className="ozon-delivery-picker">
-    <p className="ozon-free-delivery"><strong>Бесплатная доставка Ozon</strong><span>Расходы на перевозку и страховку оплачивает магазин.</span></p>
+  return <div className={`ozon-delivery-picker ${styles.picker}`}>
     {!packingReady && <p className="notice notice--danger">Для одного из товаров магазин ещё не указал вес и размеры упакованной посылки. Проверка Ozon недоступна — выберите другую доставку или обратитесь в магазин.</p>}
-    <OzonPointSearch onReset={() => { setMapOpen(false); setSelectedPoint(null); setCity(null); clearQuote(); }} onCity={value => { setCity(value); setMapOpen(true); }} />
-    {city && <>
-      <div className="ozon-map-toolbar"><button type="button" className="text-link" aria-haspopup="dialog" onClick={() => setMapOpen(true)}>{point ? "Изменить на карте" : "Выбрать на карте"}</button></div>
-      {mapOpen && <PickupPointDialog city={city} selectedPoint={selectedPoint ?? undefined} selected={point} carrier="Ozon" onSelect={selectPoint} onClose={() => setMapOpen(false)} />}
-    </>}
+    <OzonPointSearch onReset={() => { setMapOpen(false); setSelectedPoint(null); setCity(null); clearQuote(); }} onCity={value => { setCity(value); setMapOpen(true); }} onOpen={city ? () => setMapOpen(true) : undefined} actionLabel={point ? "Изменить" : "Выбрать на карте"} renderAction={action => <div className={styles.carrier} data-selected={!!point}>
+      <span className={styles.logo}><Image src="/brand/ozon-delivery.svg" alt="Ozon" width={83} height={20} /></span>
+      <div className={styles.service}><strong>Ozon Доставка</strong><small>{quote ? `Примерно ${quote.days} дн. после отгрузки` : "Пункт выдачи или постамат"}</small></div>
+      <strong className={styles.price}>Бесплатно</strong>
+      <div className={styles.address}>{selectedPoint ? <div className={`ozon-point-confirmation ${styles.confirmation}`} role="status"><span>{selectedPoint.address}</span>{!quote && <small>Доставка и телефон ещё не проверены</small>}</div> : <span className={styles.placeholder}>Выберите пункт выдачи</span>}</div>
+      <div className={styles.mapButton}>{action}</div>
+    </div>} />
+    {city && mapOpen && <PickupPointDialog city={city} selectedPoint={selectedPoint ?? undefined} selected={point} carrier="Ozon" onSelect={selectPoint} onClose={() => setMapOpen(false)} />}
     <div ref={nextStep} className="ozon-recipient-step" tabIndex={-1} aria-label="Телефон получателя и проверка доставки">
-    {point && <div className="notice ozon-point-confirmation" role="status"><strong>Пункт выдачи выбран</strong><span>{selectedPoint?.address}</span>{!quote && <small>Доставка и телефон ещё не проверены. Подтвердите согласие и нажмите «Проверить доставку» ниже.</small>}</div>}
+    {point && <div className={styles.verification}>
     <label className="checkout-consent"><input type="checkbox" name="ozonConsent" checked={consent} required onChange={event => { setConsent(event.target.checked); clearQuote(); }} /><span>Даю отдельное <Link href="/legal/consent/?purpose=ozon" target="_blank">согласие на передачу номера Ozon для проверки и расчёта доставки</Link>. Без согласия можно выбрать другой способ доставки.</span></label>
     {checkIssue && message !== checkIssue && <p className="notice" id="ozon-check-help">{checkIssue}</p>}
     <button type="button" className="button button--small" onClick={calculate} disabled={!!pending} aria-describedby={message ? "ozon-check-message" : checkIssue ? "ozon-check-help" : undefined}>{pending === "quote" ? "Проверяем доставку…" : "Проверить доставку в выбранный ПВЗ"}</button>
@@ -74,6 +78,7 @@ export function OzonDeliveryPicker({ phone, onEditPhone, onQuote, packingReady =
     {message && <p className="notice" role="alert" id="ozon-check-message">{message}</p>}
     {message && recipientError && <button type="button" className="text-link" onClick={onEditPhone}>Изменить телефон получателя</button>}
     {quote && quote.phone === phone && quote.verificationRevision === verificationRevision && <p className="notice notice--success" role="status"><strong>Доставка бесплатная · 0 ₽</strong><br />Ozon подтвердил доступность доставки для этого номера.<br />{quote.address}<br />Примерно {quote.days} дн. в пути после отгрузки. Проверка действительна 15 минут.</p>}
+    </div>}
     </div>
   </div>;
 }
