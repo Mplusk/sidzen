@@ -27,6 +27,11 @@ export async function createSession(userId: string) {
     }),
     prisma.user.updateMany({ where: { id: userId, isActive: true, OR: [{ lastVisitedAt: null }, { lastVisitedAt: { lt: now } }] }, data: { lastVisitedAt: now } }),
   ]);
+  await finishSession(token, userId);
+}
+
+// Called only after the corresponding session row has committed.
+export async function finishSession(token: string, userId: string) {
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE, token, {
     httpOnly: true,
@@ -93,7 +98,11 @@ export const getCurrentUser = cache(async () => {
   const permissions = new Set(
     session.user.roles.flatMap(({ role }) => role.permissions.map(({ permission }) => permission.code)),
   );
-  return { ...session.user, roles, permissions };
+  const { adminEmailProtectionEnabled } = await import("@/lib/admin-login-challenge");
+  if (!session.adminVerifiedAt && (roles.includes("superadmin") || permissions.size > 0) && await adminEmailProtectionEnabled()) {
+    return { ...session.user, roles: roles.filter(role => role === "customer"), permissions: new Set<string>(), adminConfirmationRequired: true };
+  }
+  return { ...session.user, roles, permissions, adminConfirmationRequired: false };
 });
 
 export async function requireUser(returnTo = "/account") {
@@ -104,6 +113,8 @@ export async function requireUser(returnTo = "/account") {
 
 export async function requirePermission(permission: string, returnTo = "/admin") {
   const user = await requireUser(returnTo);
+  if (user.adminConfirmationRequired) redirect(`/login?error=admin-confirmation-required&returnTo=${encodeURIComponent(returnTo)}`);
   if (!user.permissions.has(permission) && !user.roles.includes("superadmin")) redirect("/account?error=forbidden");
   return user;
 }
+

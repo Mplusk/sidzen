@@ -5,9 +5,12 @@ import { removeUserRole } from "./user-role-removal";
 const input = { actorId: "actor", userId: "target", roleId: "role", ip: "127.0.0.1" };
 const tx = {
   $executeRaw: vi.fn(),
+  $queryRaw: vi.fn(),
   user: { findFirst: vi.fn(), count: vi.fn() },
   userRole: { findUnique: vi.fn(), findFirst: vi.fn(), delete: vi.fn() },
   auditLog: { create: vi.fn() },
+  session: { updateMany: vi.fn() },
+  adminLoginChallenge: { updateMany: vi.fn() },
 };
 const db = { $transaction: vi.fn(async (callback) => callback(tx)) } as unknown as PrismaClient;
 
@@ -49,6 +52,7 @@ describe("removing user roles", () => {
   it("removes the selected assignment and records the actor and role", async () => {
     expect(await removeUserRole(db, input)).toBe("removed");
     expect(tx.userRole.delete).toHaveBeenCalledWith({ where: { userId_roleId: { userId: "target", roleId: "role" } } });
+    expect(tx.session.updateMany).toHaveBeenCalledWith({ where: { userId: "target", adminVerifiedAt: { not: null } }, data: { adminVerifiedAt: null } });
     expect(tx.auditLog.create).toHaveBeenCalledWith({ data: { actorId: "actor", action: "user.role.remove", entityType: "User", entityId: "target", before: { roleId: "role", roleCode: "admin" }, ip: "127.0.0.1" } });
   });
 });

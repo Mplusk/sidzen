@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { setUserArchived } from "./user-archive";
 
-const tx = { $executeRaw: vi.fn(), user: { findFirst: vi.fn(), findUnique: vi.fn(), count: vi.fn(), update: vi.fn() }, session: { deleteMany: vi.fn() }, auditLog: { create: vi.fn() } };
+const tx = { $executeRaw: vi.fn(), user: { findFirst: vi.fn(), findUnique: vi.fn(), count: vi.fn(), update: vi.fn() }, session: { deleteMany: vi.fn() }, adminLoginChallenge: { updateMany: vi.fn() }, auditLog: { create: vi.fn() } };
 const db = { $transaction: vi.fn(async callback => callback(tx)) } as unknown as PrismaClient;
 const input = { actorId: "actor", userId: "target", archive: true };
 
@@ -18,6 +18,7 @@ describe("user archive", () => {
     expect(await setUserArchived(db, input)).toBe("archived");
     expect(tx.user.update).toHaveBeenCalledWith({ where: { id: "target" }, data: { isActive: false } });
     expect(tx.session.deleteMany).toHaveBeenCalledWith({ where: { userId: "target" } });
+    expect(tx.adminLoginChallenge.updateMany).toHaveBeenCalledWith({ where: { userId: "target", consumedAt: null }, data: { consumedAt: expect.any(Date) } });
     expect(tx.auditLog.create).toHaveBeenCalledOnce();
   });
   it("restores an archived account without reviving sessions", async () => {

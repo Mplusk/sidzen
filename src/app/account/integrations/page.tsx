@@ -78,13 +78,13 @@ function DeliveryForm({ method }: { method?: { id: string; name: string; descrip
 }
 
 export default async function IntegrationsPage({ searchParams }: { searchParams: Promise<{ result?: string }> }) {
-  await requirePermission("settings.write");
+  const actor = await requirePermission("settings.write");
   const [config, methods, params] = await Promise.all([getTochkaConfig(), prisma.deliveryMethod.findMany({ where: { deletedAt: null }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }), searchParams]);
   return <div className="integrations-page">
     <h1>Подключения магазина</h1><p className="muted">Управляйте оплатой, чеками и способами доставки магазина.</p>
     <p><Link className="text-link" href="/account/marketplaces/">Подключить Ozon / Wildberries и синхронизировать товары →</Link></p>
     <nav className="integrations-nav" aria-label="Разделы подключений">
-      <a href="#yookassa-online">Оплата</a><a href="#ozon-delivery">Ozon Доставка</a><a href="#cdek-delivery">СДЭК</a><a href="#category-ai">DeepSeek</a><a href="#communications">Уведомления</a><a href="#smtp">Почта</a>
+      <a href="#yookassa-online">Оплата</a><a href="#ozon-delivery">Ozon Доставка</a><a href="#cdek-delivery">СДЭК</a><a href="#category-ai">DeepSeek</a><a href="#communications">Уведомления</a>{actor.roles.includes("superadmin") && <><a href="#smtp">Почта</a><Link href="/admin/security/">Безопасность входа</Link></>}
     </nav>
     {params.result && !params.result.startsWith("smtp-") && messages[params.result] && <p role="status" className="content-card">{messages[params.result]}</p>}
     <YooKassaSettings />
@@ -115,7 +115,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
     <CdekDeliverySettings />
     <CategoryAiSettings />
     <CommunicationsSettings />
-    <SmtpSettings message={params.result?.startsWith("smtp-") ? messages[params.result] : undefined} error={Boolean(params.result?.startsWith("smtp-") && !["smtp-saved", "smtp-checked"].includes(params.result))} />
+    {actor.roles.includes("superadmin") && <SmtpSettings message={params.result?.startsWith("smtp-") ? messages[params.result] : undefined} error={Boolean(params.result?.startsWith("smtp-") && !["smtp-saved", "smtp-checked"].includes(params.result))} />}
     <h2>Другие способы доставки</h2><p className="muted">Управляйте способами с фиксированными тарифами. Эти способы не используют API перевозчика. Ozon Delivery API подключается отдельно выше. Способ можно отключить или удалить с подтверждением — старые заказы не меняются.</p>
     {!methods.length && <p className="notice">Другие способы доставки не добавлены. При включённом Ozon покупателю доступна только Ozon Доставка.</p>}
     {methods.map((method) => <section className="content-card" key={method.id}><h3>{method.name} · {method.active ? "включён" : "выключен"}</h3>{method.code === "cdek" && <p className="notice">Этот старый фиксированный способ не отображается при оформлении. Подключите СДЭК API выше для расчёта тарифа.</p>}<DeliveryForm method={{ ...method, basePrice: Number(method.basePrice) }} /><AdminDeleteDelivery id={method.id} name={method.name} /></section>)}
