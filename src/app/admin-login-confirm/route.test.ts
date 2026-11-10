@@ -13,12 +13,16 @@ it("serves an isolated no-store confirmation document with a matching script CSP
   expect(response.headers.get("content-security-policy")).toContain(`script-src 'sha256-${hash}'`);
   expect(response.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
   expect(response.headers.get("cache-control")).toContain("no-store");
-  expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+  expect(response.headers.get("referrer-policy")).toBe("same-origin");
   expect(html).not.toMatch(/<script[^>]+src=|<iframe|metrika/i);
   expect(m.consume).not.toHaveBeenCalled();
 });
 it("rejects cross-origin confirmation before consuming any token", async () => {
   const response = await POST(new Request("https://sidzen.shop/admin-login-confirm/", { method: "POST", headers: { Origin: "https://evil.example", "Content-Type": "application/x-www-form-urlencoded", "Content-Length": "10" }, body: "token=abc" }));
+  expect(response.status).toBe(400); expect(m.consume).not.toHaveBeenCalled();
+});
+it("rejects an opaque Origin before consuming a token", async () => {
+  const response = await POST(new Request("https://sidzen.shop/admin-login-confirm/", { method: "POST", headers: { Origin: "null", "Content-Type": "application/x-www-form-urlencoded", "Content-Length": "10" }, body: "token=abc" }));
   expect(response.status).toBe(400); expect(m.consume).not.toHaveBeenCalled();
 });
 

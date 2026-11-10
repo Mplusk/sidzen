@@ -6,7 +6,10 @@ import { adminConfirmScript, adminConfirmCsp } from "@/lib/admin-confirm-documen
 // application scripts. GET never uses up the one-time link.
 const securityHeaders = {
   "Cache-Control": "private, no-store, max-age=0",
-  "Referrer-Policy": "no-referrer",
+  // A normal form POST under no-referrer sends Origin: null in Chrome.
+  // same-origin keeps the strict Origin check usable without sending the URL
+  // to external sites; the fragment token is removed before submission.
+  "Referrer-Policy": "same-origin",
   "X-Frame-Options": "DENY",
   "X-Content-Type-Options": "nosniff",
   "Content-Security-Policy": adminConfirmCsp,

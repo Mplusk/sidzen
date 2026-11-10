@@ -93,6 +93,7 @@ jobs:
           pnpm exec tsx scripts/smoke-product-delete-http.ts
           pnpm exec tsx scripts/smoke-category-ai-http.ts
           pnpm exec tsx scripts/smoke-admin-email-http.ts
+          node scripts/smoke-admin-confirm-browser.mjs
           pnpm exec tsx scripts/smoke-communications-http.ts
           pnpm exec tsx scripts/smoke-clients-http.ts
           pnpm exec tsx scripts/smoke-privacy-http.ts
