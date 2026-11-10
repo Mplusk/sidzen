@@ -21,9 +21,12 @@ function actionForm(html: string, containing: string) {
   const markup = [...html.matchAll(/<form\b[\s\S]*?<\/form>/g)].map(match => match[0]).find(text => text.includes(containing));
   assert(markup, `Missing form ${containing}`);
   const form = new FormData();
+  // React escapes hidden JSON attributes. Decode HTML entities just as a
+  // browser does when submitting the form, before putting them in FormData.
+  const decode = (value: string) => value.replace(/&(?:quot|amp|lt|gt|#x27|#39);/g, entity => ({ "&quot;": '"', "&amp;": "&", "&lt;": "<", "&gt;": ">", "&#x27;": "'", "&#39;": "'" })[entity]!);
   for (const match of markup.matchAll(/<input\b[^>]*>/g)) {
     const name = match[0].match(/name="([^"]*)"/)?.[1], value = match[0].match(/value="([^"]*)"/)?.[1] || "";
-    if (name && (name.startsWith("$ACTION") || match[0].includes('type="hidden"'))) form.set(name.replace(/&amp;/g, "&"), value.replace(/&amp;/g, "&"));
+    if (name && (name.startsWith("$ACTION") || match[0].includes('type="hidden"'))) form.set(decode(name), decode(value));
   }
   return form;
 }
@@ -110,7 +113,9 @@ try {
   await prisma.cartItem.update({ where: { id: item.id }, data: { unitPrice: 9999, config: { quality: legacyQuality.slug, qualityName: "QA retired quality", technology: "sla", postProcesses: ["painting"] } } });
   html = await (await request("/cart/")).text(); assert(html.includes(product.name));
   assert(!html.includes("QA retired") && !html.includes('name="quality"'));
-  assert.equal((await request("/cart/", actionForm(html, ">Удалить</button>"))).headers.get("location"), "/cart/");
+  const removeLegacy = actionForm(html, ">Удалить</button>");
+  assert.equal(JSON.parse(String(removeLegacy.get("members"))).length, 1, "The hidden group must round-trip through HTML decoding");
+  assert.equal((await request("/cart/", removeLegacy)).headers.get("location"), "/cart/");
   assert.equal(await prisma.cartItem.count({ where: { productId } }), 0);
   await prisma.product.update({ where: { id: productId }, data: { stock: 0, madeToOrder: true } });
   html = await (await request(path)).text(); assert(html.includes("Срок изготовления") && html.includes("3–5 рабочих дней"), html.match(/<table class="spec-table">[\s\S]*?<\/table>/)?.[0] || "Missing specification table");
@@ -155,3 +160,4 @@ try {
   if (categoryId) await prisma.category.deleteMany({ where: { id: categoryId } });
   await prisma.$disconnect();
 }
+

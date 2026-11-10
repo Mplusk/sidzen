@@ -48,7 +48,8 @@ try {
   const product = await prisma.product.create({ data: { sku: prefix, name: prefix, slug: `${prefix}-product`, basePrice: 100, status: "PUBLISHED", stock: 5, madeToOrder: false, categories: { create: { categoryId, isPrimary: true } }, colors: { connect: colorIds.map(id => ({ id })) } } }); productId = product.id;
   const variants = await Promise.all(colorIds.map((colorId, i) => prisma.productVariant.create({ data: { productId, colorId, sku: `${prefix}-v${i}`, price: 100, stock: 5 } })));
   const cart = await prisma.cart.create({ data: { sessionKey } }); cartId = cart.id;
-  for (const [i, color] of ["red", "red", "blue"].entries()) await prisma.cartItem.create({ data: { cartId, productId, variantId: variants[color === "red" ? 0 : 1].id, quantity: 1, unitPrice: 100, config: { material: "", materialName: "", color: `${prefix}-${color}`, colorName: color }, createdAt: new Date(Date.now() + i) } });
+  const createdAt = new Date();
+  for (const color of ["red", "red", "blue"]) await prisma.cartItem.create({ data: { cartId, productId, variantId: variants[color === "red" ? 0 : 1].id, quantity: 1, unitPrice: 100, config: { material: "", materialName: "", color: `${prefix}-${color}`, colorName: color }, createdAt } });
   let snapshot = await cartGroups();
   assert.equal(snapshot.groups.length, 2, "Two equal rows form one position; another variant remains separate");
   const red = snapshot.groups.find(g => g.members.length === 2); const blue = snapshot.groups.find(g => g.members.length === 1);
