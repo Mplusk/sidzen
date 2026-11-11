@@ -9,7 +9,7 @@ export function ContinuePayment({ order }: { order: PaymentOrder }) {
     <StockHoldNotice expiresAt={order.reservationExpiresAt?.toISOString() ?? null} />
     <form action={continueYooKassaPayment} className={styles.form}>
       <input type="hidden" name="number" value={order.number} />
-      <button type="submit" className={styles.action} aria-label={`Перейти к оплате заказа ${order.number}`}>
+      <button type="submit" className={styles.action} aria-label={`Оплатить заказ ${order.number}`}>
         Оплатить <span aria-hidden="true">→</span>
       </button>
     </form>
