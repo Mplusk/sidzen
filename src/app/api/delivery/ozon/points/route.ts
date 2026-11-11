@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
-import { deliveryConfigFingerprint, getOzonDeliveryConfig } from "@/lib/delivery/ozon-config";
+import { deliveryConfigFingerprint, getOzonDeliveryConfig, type OzonDeliveryConfig } from "@/lib/delivery/ozon-config";
 import { OzonDeliveryClient } from "@/lib/delivery/ozon-client";
 import { hasPointCoordinates } from "@/lib/delivery/points";
 import type { PickupPoint } from "@/lib/delivery/points";
@@ -12,6 +12,32 @@ import { pointMapCache } from "@/lib/delivery/point-map-cache";
 import { cityIndex, rankCities } from "@/lib/delivery/city-suggestions";
 import { MAX_VIEWPORT_POINTS, normalizePickupCity, parsePickupViewport, parseViewportOffset, pickupCityOverview, pickupCityPattern, pickupViewportResult, type PickupViewportRow } from "@/lib/delivery/point-viewport";
 import { pickupCitySql, pickupViewportListSql, pickupViewportSql } from "@/lib/delivery/point-viewport-sql";
+
+async function loadCities(config: OzonDeliveryConfig) {
+  const sync = await prisma.ozonDeliverySync.findUnique({ where: { id: "ozon" }, select: { generation: true, status: true } });
+  const key = JSON.stringify([deliveryConfigFingerprint(config), sync?.generation ?? null, sync?.status ?? null]);
+  const methodId = BigInt(config.shipmentMethodId!);
+  return cityIndex(key, () => prisma.$queryRaw<{ address: string }[]>`
+    SELECT DISTINCT "address" FROM "OzonDeliveryPoint"
+    WHERE "clientId" = ${config.clientId} AND "methodId" = ${methodId} AND "active" = true
+  `);
+}
+
+async function cityDirectory() {
+  try {
+    const config = await getOzonDeliveryConfig();
+    if (!config.enabled || !config.shipmentMethodId || !config.checkedAt) {
+      return Response.json({ error: "Доставка временно недоступна." }, { status: 409, headers: { "Cache-Control": "private, no-store" } });
+    }
+    const cities = await loadCities(config);
+    // Public locality names contain no customer data. A short browser cache
+    // lets subsequent checkout visits search immediately; the map verifies
+    // the current pickup directory when a city is opened.
+    return Response.json({ cities }, { headers: { "Cache-Control": cities.length ? "private, max-age=300" : "private, no-store" } });
+  } catch {
+    return Response.json({ error: "Не удалось загрузить города." }, { status: 503, headers: { "Cache-Control": "private, no-store" } });
+  }
+}
 
 async function progressiveMap(request: Request, url: URL, search: string) {
   const city = url.searchParams.get("view") === "city";
@@ -54,6 +80,7 @@ export async function GET(request: Request) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
   if (!rateLimit(`ozon-points:${ip}`, 60, 60000).allowed) return Response.json({ error: "Слишком много запросов." }, { status: 429, headers: { "Cache-Control": "private, no-store" } });
   const url = new URL(request.url); const search = (url.searchParams.get("q") || "").trim();
+  if (url.searchParams.get("view") === "directory") return cityDirectory();
   if (url.searchParams.get("view") === "city" || url.searchParams.get("view") === "viewport") return progressiveMap(request, url, search);
   const cities = url.searchParams.get("view") === "cities";
   const empty = cities ? { cities: [] } : { points: [] };
@@ -108,17 +135,10 @@ export async function GET(request: Request) {
       if (key.startsWith(prefix) && !seen.has(key)) { seen.add(key); names.push(city); }
       if (names.length === 8) break;
     }
-    // A typo cannot match the indexed prefix search above. Build a shared
-    // directory index only for meaningful input, not for every keystroke.
+    // Preserve typo suggestions for clients that cannot preload the directory.
     if (prefix.length >= 4 && prefix.length <= 80) {
       try {
-        const sync = await prisma.ozonDeliverySync.findUnique({ where: { id: "ozon" }, select: { generation: true, status: true } });
-        const key = JSON.stringify([deliveryConfigFingerprint(config), sync?.generation ?? null, sync?.status ?? null]);
-        const methodId = BigInt(config.shipmentMethodId);
-        const dictionary = await cityIndex(key, () => prisma.$queryRaw<{ address: string }[]>`
-          SELECT DISTINCT "address" FROM "OzonDeliveryPoint"
-          WHERE "clientId" = ${config.clientId} AND "methodId" = ${methodId} AND "active" = true
-        `);
+        const dictionary = await loadCities(config);
         return Response.json({ cities: rankCities(search, dictionary, names) }, { headers: { "Cache-Control": "private, no-store" } });
       } catch {
         // Keep exact prefix results usable, but tell the client that typo

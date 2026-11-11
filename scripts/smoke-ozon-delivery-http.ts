@@ -32,7 +32,7 @@ const operatorKeys = ["legal.seller", "legal.address", "contacts.email"];
 const oldOperator = await prisma.siteSetting.findMany({ where: { key: { in: operatorKeys } } });
 const oldDeliveryAuditIds = (await prisma.auditLog.findMany({ where: { entityType: "DeliveryMethod" }, select: { id: true } })).map(row => row.id);
 const pointId = "9100000001";
-const extraPointIds = ["9100000002", "9100000003", "9100000004", "9100000005", "9100000006"];
+const extraPointIds = ["9100000002", "9100000003", "9100000004", "9100000005", "9100000006", "9100000007", "9100000008"];
 const paginationGeneration = `qa-pagination-${randomUUID()}`;
 const paginationCity = `Тестоград-${randomUUID().slice(0, 8)}`;
 const paginationIdBase = 1000000000000 + Number.parseInt(randomUUID().slice(0, 8), 16) * 1000;
@@ -118,7 +118,16 @@ try {
     { id: extraPointIds[2], name: "QA ПВЗ", address: "Россия, Томск, улица Гагарина, 2", type: "pvz", active: true, clientId: config.clientId, methodId: 7n, generation: "qa-only" },
     { id: extraPointIds[3], name: "QA ПВЗ", address: "Россия, Омск, улица Бульварная, 20", type: "pvz", active: true, clientId: config.clientId, methodId: 7n, generation: "qa-only" },
     { id: extraPointIds[4], name: "QA ПВЗ", address: "Россия, Адыгея Республика, Тахтамукайский Район, Яблоновский, улица Гагарина, 190/2", type: "pvz", active: true, clientId: config.clientId, methodId: 7n, generation: "qa-only" },
+    { id: extraPointIds[5], name: "QA другой магазин", address: "Россия, Чужеград, улица Ленина, 1", type: "pvz", active: true, clientId: "different-fixture-client", methodId: 7n, generation: "qa-only" },
+    { id: extraPointIds[6], name: "QA закрытый ПВЗ", address: "Россия, Скрытоград, улица Ленина, 1", type: "pvz", active: false, clientId: config.clientId, methodId: 7n, generation: "qa-only" },
   ] });
+  const cityDirectory = await request("/api/delivery/ozon/points/?view=directory", undefined, false);
+  assert.equal(cityDirectory.status, 200);
+  assert.equal(cityDirectory.headers.get("cache-control"), "private, max-age=300");
+  const cityList = (await cityDirectory.json()).cities as string[];
+  for (const city of ["Омск", "Томск", "Орёл", "Яблоновский"]) assert(cityList.includes(city));
+  assert(!cityList.includes("Чужеград") && !cityList.includes("Скрытоград"));
+  assert(!JSON.stringify(cityList).includes(secret), "The public directory must never contain credentials");
   const points = await request("/api/delivery/ozon/points/?q=Москва", undefined, false);
   assert.match(points.headers.get("cache-control") || "", /no-store/);
   const pointResult = await points.json();

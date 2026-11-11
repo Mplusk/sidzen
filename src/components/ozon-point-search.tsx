@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { PickupMapCity } from "@/lib/delivery/point-viewport";
+import { prepareCityNames, rankPreparedCities, type PreparedCity } from "@/lib/delivery/city-suggestions";
 import styles from "./ozon-point-search.module.css";
 
 type Results = { city: PickupMapCity | null; scope?: string };
@@ -27,6 +28,8 @@ export function OzonPointSearch({ onReset, onCity, renderAction, actionLabel = "
   const generation = useRef(0);
   const suggestRequest = useRef<AbortController | null>(null);
   const suggestGeneration = useRef(0);
+  const directory = useRef<PreparedCity[] | null>(null);
+  const suggestionQuery = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   function cancelSuggestions() {
     suggestGeneration.current++;
@@ -41,11 +44,42 @@ export function OzonPointSearch({ onReset, onCity, renderAction, actionLabel = "
     request.current = null;
   }
   useEffect(() => () => { generation.current++; request.current?.abort(); cancelSuggestions(); }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    const deadline = setTimeout(() => controller.abort(), 15000);
+    let mounted = true;
+    // Start while the buyer fills the rest of checkout, not after typing.
+    void fetch("/api/delivery/ozon/points/?view=directory", { signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) throw new Error("directory");
+        const data = await response.json() as { cities?: unknown };
+        if (!Array.isArray(data.cities) || !data.cities.every(city => typeof city === "string")) throw new Error("directory");
+        return prepareCityNames(data.cities);
+      })
+      .then(cities => {
+        if (!mounted) return;
+        directory.current = cities;
+        if (suggestionQuery.current !== null) {
+          cancelSuggestions();
+          setCities(rankPreparedCities(suggestionQuery.current, cities));
+          setSuggesting(false); setSuggestionsUnavailable(false);
+        }
+      })
+      .catch(() => { /* The per-query search remains available if preloading fails. */ })
+      .finally(() => clearTimeout(deadline));
+    return () => { mounted = false; clearTimeout(deadline); controller.abort(); };
+  }, []);
 
   function change(value: string) {
     cancel(); cancelSuggestions(); setBusy(false); setQuery(value); setMessage(""); setCities([]); setActive(-1); setSuggestionsUnavailable(false); onReset();
     const ready = value.trim().length >= 2;
-    setOpen(ready); setSuggesting(ready);
+    suggestionQuery.current = ready ? value.trim() : null;
+    setOpen(ready);
+    if (ready && directory.current) {
+      setCities(rankPreparedCities(value, directory.current)); setSuggesting(false);
+      return;
+    }
+    setSuggesting(ready);
     if (!ready) return;
     const version = suggestGeneration.current;
     timer.current = setTimeout(async () => {
@@ -63,15 +97,17 @@ export function OzonPointSearch({ onReset, onCity, renderAction, actionLabel = "
         clearTimeout(deadline);
         if (version === suggestGeneration.current) { setSuggesting(false); suggestRequest.current = null; }
       }
-    }, 300);
+    }, 100);
   }
   function choose(city: string) {
     cancel(); setBusy(false);
+    suggestionQuery.current = null;
     cancelSuggestions(); setSuggesting(false); setSuggestionsUnavailable(false); setQuery(city); setCities([]); setOpen(false); setActive(-1); setMessage(""); onReset();
   }
 
   async function search() {
     if (query.trim().length < 2 || busy) return;
+    suggestionQuery.current = null;
     cancelSuggestions(); setSuggesting(false); setOpen(false); setActive(-1);
     cancel();
     const version = generation.current;

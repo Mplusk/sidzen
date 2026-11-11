@@ -111,6 +111,36 @@ describe("public Ozon PVZ map directory", () => {
     expect(m.find.mock.calls[0][0].values.slice(-2)).toEqual([9, 0]);
     expect(m.info).not.toHaveBeenCalled(); expect(m.update).not.toHaveBeenCalled();
   });
+  it("provides a compact shared city directory and rebuilds it after a sync", async () => {
+    m.sync.mockResolvedValue({ generation: "city-directory-first", status: "SUCCEEDED" });
+    m.find.mockResolvedValueOnce([
+      { address: "Россия, Москва, улица Тверская, 1" },
+      { address: "Россия, Москва, улица Ленина, 2" },
+      { address: "Россия, Омск, улица Ленина, 1" },
+    ]).mockResolvedValueOnce([{ address: "Россия, Тамбов, улица Ленина, 1" }]);
+    const url = "https://sidzen.shop/api/delivery/ozon/points/?view=directory";
+    const first = await GET(new Request(url));
+    expect(await first.json()).toEqual({ cities: ["Москва", "Омск"] });
+    expect(first.headers.get("cache-control")).toBe("private, max-age=300");
+    expect(await (await GET(new Request(url))).json()).toEqual({ cities: ["Москва", "Омск"] });
+    expect(m.find).toHaveBeenCalledTimes(1);
+    expect(m.find.mock.calls[0][0].join(" ")).toContain('SELECT DISTINCT "address"');
+    expect(m.info).not.toHaveBeenCalled();
+    m.sync.mockResolvedValue({ generation: "city-directory-second", status: "SUCCEEDED" });
+    expect(await (await GET(new Request(url))).json()).toEqual({ cities: ["Тамбов"] });
+    expect(m.find).toHaveBeenCalledTimes(2);
+  });
+  it("does not cache a disabled or failed city directory", async () => {
+    const url = "https://sidzen.shop/api/delivery/ozon/points/?view=directory";
+    m.config.mockResolvedValueOnce({ enabled: false });
+    const disabled = await GET(new Request(url));
+    expect(disabled.status).toBe(409); expect(disabled.headers.get("cache-control")).toBe("private, no-store");
+    m.sync.mockResolvedValue({ generation: "city-directory-failure", status: "SUCCEEDED" });
+    m.find.mockRejectedValueOnce(new Error("db")).mockResolvedValueOnce([{ address: "Россия, Омск, улица Ленина, 1" }]);
+    const failed = await GET(new Request(url));
+    expect(failed.status).toBe(503); expect(failed.headers.get("cache-control")).toBe("private, no-store");
+    expect(await (await GET(new Request(url))).json()).toEqual({ cities: ["Омск"] });
+  });
   it("suggests distinct matching localities instead of pickup addresses", async () => {
     m.find.mockResolvedValue([
       { ...point, address: "Россия, Адыгея Республика, Тахтамукайский Район, Яблоновский, улица Андрухаева, 53" },

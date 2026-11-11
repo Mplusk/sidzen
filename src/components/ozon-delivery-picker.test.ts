@@ -55,9 +55,10 @@ describe("delivery verification interaction", () => {
     vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: false }));
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scroll });
     viewportPoints = [point];
-    vi.stubGlobal("fetch", vi.fn().mockImplementation((url: string) => Promise.resolve(Response.json(url.includes("view=city") ? { city, scope: "fixture" } : { points: viewportPoints, clusters: [], scope: "fixture" }))));
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((url: string) => Promise.resolve(Response.json(url.includes("view=directory") ? { cities: ["Санкт-Петербург", "Омск"] } : url.includes("view=city") ? { city, scope: "fixture" } : { points: viewportPoints, clusters: [], scope: "fixture" }))));
     m.quote.mockResolvedValue(result);
     await render();
+    vi.mocked(fetch).mockClear();
   });
   afterEach(async () => { await act(async () => root.unmount()); container.remove(); Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView"); vi.unstubAllGlobals(); vi.useRealTimers(); });
   it("asks for a city and selects a point in the map dialog", async () => {

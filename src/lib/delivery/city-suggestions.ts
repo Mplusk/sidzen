@@ -16,41 +16,62 @@ function distance(a: string, b: string) {
 }
 
 export function cityNames(addresses: { address: string }[]) {
-  const names = new Map<string, string>();
+  const names = new Map<string, { name: string; count: number }>();
   for (const row of addresses) {
     const city = destinationCity(row.address, "ozon-delivery");
-    if (city && city.length <= 80) names.set(normalize(city), city);
+    if (!city || city.length > 80) continue;
+    const key = normalize(city);
+    const entry = names.get(key);
+    if (entry) entry.count++;
+    else names.set(key, { name: city, count: 1 });
   }
-  return [...names.values()];
+  // For short prefixes, put cities with more pickup addresses first.
+  return [...names.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ru")).map(entry => entry.name);
+}
+
+export type PreparedCity = { name: string; normalized: string };
+export function prepareCityNames(names: string[]): PreparedCity[] {
+  const seen = new Set<string>();
+  return names.flatMap(name => {
+    const normalized = normalize(name);
+    if (!normalized || seen.has(normalized)) return [];
+    seen.add(normalized);
+    return [{ name, normalized }];
+  });
+}
+
+export function rankPreparedCities(query: string, names: PreparedCity[]) {
+  const q = normalize(query);
+  if (q.length < 2 || q.length > 80) return [];
+  const prefix: string[] = [];
+  const corrections: { name: string; score: number }[] = [];
+  for (const { name, normalized: n } of names) {
+    if (n.startsWith(q)) {
+      prefix.push(name);
+      if (prefix.length === 8) return prefix;
+      continue;
+    }
+    if (q.length < 4 || q.length > 80 || Math.abs(q.length - n.length) > (q.length >= 8 ? 2 : 1)) continue;
+    const edits = distance(q, n);
+    if (edits <= (q.length >= 8 ? 2 : 1)) corrections.push({ name, score: edits });
+  }
+  corrections.sort((a, b) => a.score - b.score);
+  return prefix.concat(corrections.map(entry => entry.name)).slice(0, 8);
 }
 
 export function rankCities(query: string, names: string[], exact: string[] = []) {
-  const q = normalize(query);
-  const results = new Map<string, { name: string; score: number }>();
-  const add = (name: string, score: number) => {
-    const key = normalize(name), current = results.get(key);
-    if (!current || score < current.score) results.set(key, { name, score });
-  };
-  for (const name of exact) add(name, 0);
-  for (const name of names) {
-    const n = normalize(name);
-    if (n.startsWith(q)) { add(name, 0); continue; }
-    if (q.length < 4 || q.length > 80 || Math.abs(q.length - n.length) > (q.length >= 8 ? 2 : 1)) continue;
-    const edits = distance(q, n);
-    if (edits <= (q.length >= 8 ? 2 : 1)) add(name, edits);
-  }
-  return [...results.values()].sort((a, b) => a.score - b.score).slice(0, 8).map(entry => entry.name);
+  return rankPreparedCities(query, prepareCityNames([...exact, ...names]));
 }
 
 // One bounded cache slot per process; concurrent requests share the build.
 // Identity includes configuration and sync generation/status, so completing a
-// directory refresh cannot reuse an old index for the next ten minutes.
+// directory refresh invalidates it. The TTL also catches out-of-band changes.
 let cached: { key: string; expires: number; value: Promise<string[]> } | undefined;
 export function cityIndex(key: string, load: () => Promise<{ address: string }[]>) {
   const now = Date.now();
   if (cached?.key === key && cached.expires > now) return cached.value;
   const value = load().then(cityNames);
-  const entry = { key, expires: now + 10 * 60_000, value };
+  const entry = { key, expires: now + 60 * 60_000, value };
   cached = entry;
   value.catch(() => { if (cached === entry) cached = undefined; });
   return value;
