@@ -23,6 +23,7 @@ import { categoryAiReady, getCategoryAiConfig, queueCategoryAi } from "@/lib/cat
 import { applicationStatuses, orderStatuses } from "@/lib/order-status";
 import { terminalOrderStatuses } from "@/lib/privacy-retention-policy";
 import { finishStockReservations, releaseUnsentStock } from "@/lib/stock-reservations";
+import { queueTelegramCancellation } from "@/lib/telegram/status";
 
 export async function updateOrderStatusAction(formData: FormData) {
   const user = await requirePermission(PERMISSIONS.ordersWrite);
@@ -65,6 +66,7 @@ export async function updateOrderStatusAction(formData: FormData) {
     if (["CANCELED", "REFUNDED"].includes(parsed.data.status)) await releaseUnsentStock(tx, before.id);
     if (parsed.data.status === "DELIVERED") await finishStockReservations(tx, before.id, "CONSUMED");
     const updated = await tx.order.update({ where: { id: before.id }, data: { status: parsed.data.status, internalNote: parsed.data.note || null, privacyClosedAt: terminalOrderStatuses.some(status => status === parsed.data.status) ? before.status === parsed.data.status ? before.privacyClosedAt ?? new Date() : new Date() : null, ...(before.kind === "APPLICATION" ? { purchaseConfirmedAt: parsed.data.status === "DELIVERED" ? before.purchaseConfirmedAt ?? new Date() : null } : {}) } });
+    if (updated.status === "CANCELED" && before.status !== "CANCELED") await queueTelegramCancellation(tx, before.id);
     if (parsed.data.status === "CANCELED") await tx.cdekDeliveryJob.updateMany({ where: { shipment: { orderId: before.id }, status: { notIn: ["CANCELED", "FINISHED"] } }, data: { cancelRequestedAt: new Date(), nextAttemptAt: new Date() } });
     await tx.auditLog.create({ data: { actorId: user.id, action: "order.status.update", entityType: "Order", entityId: before.id, before: { status: before.status }, after: { status: updated.status, deliveryConfirmed: formData.get("deliveryConfirmed") === "on", purchaseConfirmed: Boolean(updated.purchaseConfirmedAt) } } });
     return updated;

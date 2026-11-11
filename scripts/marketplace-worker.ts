@@ -17,7 +17,7 @@ import { pruneMonitoring } from "../src/lib/monitoring";
 import { pruneOrphanReviewPhotos } from "../src/lib/review-image-maintenance";
 import { processCategoryAiJob } from "../src/lib/category-ai/worker";
 import { processReviewAiJob } from "../src/lib/review-ai/worker";
-import { processTelegramOrder } from "../src/lib/telegram/worker";
+import { processTelegramOrder, processTelegramStatus } from "../src/lib/telegram/worker";
 import { releaseExpiredStockHolds } from "../src/lib/stock-hold-expiration";
 
 let stopping = false;
@@ -79,7 +79,7 @@ const reviews = communicationLoop(async () => {
     if (response.ok) reviewCatalogDirty = false;
   }
 });
-const telegram = communicationLoop(processTelegramOrder);
+const telegram = communicationLoop(async () => { await processTelegramOrder(); await processTelegramStatus(); });
 // Retention/file failures must not prevent carrier cancellations or imports.
 async function privacyRetentionLoop() {
   let next = 0;

@@ -664,6 +664,7 @@ model Order {
   shipment        Shipment?
   notifications   OrderNotification[]
   telegramJob     TelegramOrderJob?
+  telegramStatusJobs TelegramOrderStatusJob[]
   fiscalReceipts   FiscalReceipt[]
   yookassaSettlement YooKassaSettlement?
 
@@ -700,6 +701,7 @@ model OrderItem {
   technologyId     String?
   qualityProfileId String?
   productName      String
+  groupLabel       String?
   sku              String?
   quantity         Int                @default(1)
   reservedStock    Int                @default(0)
@@ -1031,6 +1033,26 @@ model TelegramOrderJob {
   sentAt      DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  @@index([status, availableAt])
+}
+
+model TelegramOrderStatusJob {
+  id          String   @id @default(cuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  kind        String
+  revision    String
+  status      String   @default("PENDING")
+  attempts    Int      @default(0)
+  errorCode   String?
+  leaseToken  String?
+  leaseUntil  DateTime?
+  availableAt DateTime @default(now())
+  sentAt      DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([orderId, kind])
   @@index([status, availableAt])
 }
 

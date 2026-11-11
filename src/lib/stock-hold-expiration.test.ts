@@ -1,10 +1,11 @@
 import type { PrismaClient } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const m = vi.hoisted(() => ({ find: vi.fn(), orderUpdate: vi.fn(), paymentUpdate: vi.fn(), audit: vi.fn(), release: vi.fn(), lockProducts: vi.fn(), restoreCart: vi.fn(), ozon: vi.fn(), cdek: vi.fn() }));
+const m = vi.hoisted(() => ({ find: vi.fn(), orderUpdate: vi.fn(), paymentUpdate: vi.fn(), audit: vi.fn(), release: vi.fn(), lockProducts: vi.fn(), restoreCart: vi.fn(), telegram: vi.fn(), ozon: vi.fn(), cdek: vi.fn() }));
 vi.mock("@/lib/stock-reservations", () => ({ releaseUnsentStock: m.release }));
 vi.mock("@/lib/late-order-stock", () => ({ EXPIRATION_MARKER: "stock-reservation-expired" }));
 vi.mock("@/lib/order-cart-restore", () => ({ lockOrderProductsForCartReturn: m.lockProducts, returnOrderToCart: m.restoreCart }));
+vi.mock("@/lib/telegram/status", () => ({ queueTelegramCancellation: m.telegram }));
 import { expireUnpaidOrderHold } from "./stock-hold-expiration";
 
 const now = new Date("2030-01-01T12:00:00Z");
@@ -17,6 +18,7 @@ describe("expired order holds", () => {
     expect(await expireUnpaidOrderHold(db, "order", now)).toBe(true);
     expect(m.release).toHaveBeenCalledWith(expect.anything(), "order");
     expect(m.restoreCart).toHaveBeenCalledWith(expect.anything(), order, now);
+    expect(m.telegram).toHaveBeenCalledWith(expect.anything(), "order");
     expect(m.lockProducts.mock.invocationCallOrder[0]).toBeLessThan(m.release.mock.invocationCallOrder[0]);
     expect(m.orderUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "CANCELED", reservationExpiredAt: now, reservationExpiresAt: null }) }));
   });

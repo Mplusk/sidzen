@@ -83,6 +83,7 @@ async function applyPlan(tx: Prisma.TransactionClient, plan: ErasurePlan, actorI
   await tx.privacyConsent.deleteMany({ where: { orderId: { in: ids } } });
   await tx.orderNotification.deleteMany({ where: { orderId: { in: ids } } });
   await tx.telegramOrderJob.deleteMany({ where: { orderId: { in: ids } } });
+  await tx.telegramOrderStatusJob.deleteMany({ where: { orderId: { in: ids } } });
   await tx.shipment.deleteMany({ where: { orderId: { in: ids } } });
   await tx.orderItem.updateMany({ where: { orderId: { in: ids } }, data: { configuration: Prisma.DbNull } });
   await tx.orderItem.updateMany({ where: { orderId: { in: ids }, OR: [{ productId: null }, { modelFileId: { not: null } }] }, data: { productName: "Индивидуальное изделие", sku: null } });

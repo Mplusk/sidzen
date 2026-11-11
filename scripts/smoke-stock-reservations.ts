@@ -76,12 +76,14 @@ async function main() {
     return { order: value, expiresAt: reservation.expiresAt };
   });
   orderIds.push(placed.order.id);
+  await db.telegramOrderJob.create({ data: { orderId: placed.order.id, revision: "synthetic", status: "SENT", sentAt: new Date() } });
   assert.equal(placed.expiresAt.getTime(), moment.getTime() + 35 * 60_000, "Payment has at least ten additional minutes from the click");
   assert.equal(await db.cartStockHold.count({ where: { cartId: winner.id } }), 0, "Hold transfers into the order");
   assert.equal((await db.product.findUniqueOrThrow({ where: { id: contested } })).reservedStock, 1, "Transfer never doubles or releases the stock");
   assert.equal(await expireUnpaidOrderHold(db, placed.order.id, new Date(placed.expiresAt.getTime() - 1)), false);
   assert.equal(await expireUnpaidOrderHold(db, placed.order.id, new Date(placed.expiresAt.getTime() + 1)), true);
   assert.equal(await expireUnpaidOrderHold(db, placed.order.id, new Date(placed.expiresAt.getTime() + 2)), false, "Order expiration is idempotent");
+  assert.equal(await db.telegramOrderStatusJob.count({ where: { orderId: placed.order.id, kind: "CANCELED", status: "PENDING" } }), 1, "Expiring an unpaid order queues one cancellation notice");
   const returned = await db.cartItem.findMany({ where: { cartId: winner.id } });
   assert.equal(returned.length, 1, "An expired guest order returns its item once to its original cart");
   assert.equal(returned[0].productId, contested); assert.equal(returned[0].quantity, 1); assert.deepEqual(returned[0].config, { color: "qa" });
@@ -89,6 +91,8 @@ async function main() {
   const secondStart = new Date(placed.expiresAt.getTime() + 2);
   await holdCartForCheckout(db, loser, secondStart);
   await applyYooKassaPayment({ id: placed.order.payment!.externalId!, status: "succeeded", paid: true, test: false, amount: { value: "1.00", currency: "RUB" }, metadata: { orderId: placed.order.id, paymentId: placed.order.payment!.id }, recipient: { account_id: "123" } });
+  assert.equal(await db.telegramOrderStatusJob.count({ where: { orderId: placed.order.id, kind: "CANCELED", status: "CANCELED" } }), 1, "An unsent cancellation is superseded by the late payment");
+  assert.equal(await db.telegramOrderStatusJob.count({ where: { orderId: placed.order.id, kind: "LATE_PAYMENT", status: "PENDING" } }), 1, "Late payment queues a correction for the seller");
   assert.deepEqual(await db.order.findUniqueOrThrow({ where: { id: placed.order.id }, select: { status: true, stockReviewRequired: true } }), { status: "PAID", stockReviewRequired: true }, "A late paid order is flagged when another cart holds the last product");
   assert.equal((await db.product.findUniqueOrThrow({ where: { id: contested } })).reservedStock, 1, "Late payment cannot steal another buyer's hold");
   const otherHold = await db.cartStockHold.findUniqueOrThrow({ where: { cartId: loser.id } });

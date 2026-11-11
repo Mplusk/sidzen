@@ -47,10 +47,17 @@ offers confirmed manual retry and explains the possible duplicate. Telegram
 does not offer a sendMessage idempotency key, so exactly-once delivery cannot be
 guaranteed across ambiguous failures. `SENT` jobs cannot be manually requeued.
 Private-chat notifications include the order number, items, city when identifiable,
-order and delivery amounts, and an opaque authenticated admin link. Group and channel
+the chosen color or grouped-product label, order and delivery amounts, and an opaque authenticated admin link. Group and channel
 notifications contain only the link. Buyer names, contacts, full addresses and comments
 are not sent. Link previews are disabled. Secrets use existing
 AES-GCM purpose-bound storage. No public Telegram endpoint is added.
+Cancellation creates a separate durable notice when an order has an existing
+Telegram outbox entry. Unsent new-order notices are superseded; in-flight notices
+finish first. Expired unpaid orders, confirmed payment cancellations and manual
+administrator cancellations are covered. A verified payment after cancellation
+queues a corrective notice, including a stock-check warning when needed. Status
+notices follow the same revision, retry and uncertain-outcome rules as new orders;
+past cancellations are not replayed when enabling the integration.
 If sign-in is needed, the return path is preserved so successful login opens
 that order rather than the general dashboard; order-reading permission remains
 mandatory before any order lookup.

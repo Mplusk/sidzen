@@ -68,7 +68,8 @@ export async function retryTelegramNotifications(form: FormData) {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412041)`;
     const config = await getTelegramConfig(tx);
     if (!config.enabled || !config.checkedAt) result("telegram-invalid");
-    await tx.telegramOrderJob.updateMany({ where: { status: { in: ["FAILED", "UNCERTAIN"] }, order: { deletedAt: null } }, data: { status: "PENDING", revision: config.revision, attempts: 0, errorCode: null, availableAt: new Date(), leaseToken: null, leaseUntil: null } });
+    await tx.telegramOrderJob.updateMany({ where: { status: { in: ["FAILED", "UNCERTAIN"] }, order: { deletedAt: null, status: { not: "CANCELED" } } }, data: { status: "PENDING", revision: config.revision, attempts: 0, errorCode: null, availableAt: new Date(), leaseToken: null, leaseUntil: null } });
+    await tx.telegramOrderStatusJob.updateMany({ where: { status: { in: ["FAILED", "UNCERTAIN"] }, order: { deletedAt: null } }, data: { status: "PENDING", revision: config.revision, attempts: 0, errorCode: null, availableAt: new Date(), leaseToken: null, leaseUntil: null } });
     await tx.auditLog.create({ data: { actorId: actor.id, action: "integration.telegram.retry", entityType: "TelegramOrderJob", after: { confirmed: true } } });
   });
   revalidatePath("/account/integrations/"); result("telegram-retried");

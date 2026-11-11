@@ -50,9 +50,9 @@ describe("payment-free checkout application", () => {
     expect(m.claim.mock.calls[0][0].where.OR).toEqual([expect.objectContaining({ id: "item" })]);
   });
   it("stores the actual quoted variant so a canceled order can restore its selection", async () => {
-    m.cart.mockResolvedValue({ id: "cart", items: [{ id: "item", productId: "product", variantId: "stale-variant", available: true, canStartCheckout: true, quantity: 1, unitPrice: 240, updatedAt: new Date(), product: { name: "QA product", sku: "QA" }, quote: { variantId: "current-variant", config: { color: "qa" } } }] });
+    m.cart.mockResolvedValue({ id: "cart", items: [{ id: "item", productId: "product", variantId: "stale-variant", available: true, canStartCheckout: true, quantity: 1, unitPrice: 240, updatedAt: new Date(), product: { name: "QA product", sku: "QA", groupId: "group", groupLabel: "Чёрный" }, quote: { variantId: "current-variant", config: { color: "qa" } } }] });
     await expect(createOrderAction(form())).rejects.toThrow("/checkout/success/QA-1/");
-    expect(m.create.mock.calls[0][0].data.items.create[0]).toMatchObject({ variantId: "current-variant", configuration: { color: "qa" } });
+    expect(m.create.mock.calls[0][0].data.items.create[0]).toMatchObject({ variantId: "current-variant", groupLabel: "Чёрный", configuration: { color: "qa" } });
   });
   it.each([false, true])("keeps a legacy-blocked checkout in the form without provider requests or order/payment writes (online=%s)", async online => {
     m.paymentConfig.mockResolvedValue({ enabled: online });

@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { sendTelegram, verifyTelegram, telegramOrderText, telegramPrivateOrderText, telegramChatType, TelegramError } from "./client";
+import { sendTelegram, verifyTelegram, telegramOrderText, telegramPrivateOrderText, telegramOrderStatusText, telegramChatType, TelegramError } from "./client";
 const config = { enabled: true, token: "12345:fixture-secret", chatId: "-10012345", revision: "qa", checkedAt: "2030" };
 it("sends only an authenticated opaque admin link, no buyer data or preview", async () => {
   const text = telegramOrderText("opaque-ref", "https://sidzen.shop");
@@ -33,4 +33,33 @@ it("verifies chat identity before distinguishing a private recipient", async () 
   const transport = vi.fn().mockImplementation(async () => new Response('{"ok":true,"result":{"id":12345,"type":"private"}}'));
   expect(await telegramChatType(privateChat, transport)).toBe("private");
   await expect(telegramChatType({ ...privateChat, chatId: "12346" }, transport)).rejects.toEqual(new TelegramError("recipient"));
+});
+it.each([
+  ["Россия, Санкт-Петербург, Беговая улица, 3", "Санкт-Петербург"],
+  ["Россия, Москва, Ленинский проспект, 23", "Москва"],
+  ["Россия, Москва, 2-я Фрунзенская улица, 10", "Москва"],
+  ["Россия, Адыгея Республика, Тахтамукайский Район, Яблоновский, улица Андрухаева, 53", "Яблоновский"],
+])("shows the city but not the full Ozon address", (address, city) => {
+  const order = { id: "opaque", number: "ORDER-1", shippingAddress: address, subtotal: 240, deliveryPrice: 0, total: 240, shipment: { provider: "ozon-delivery", cost: 110 }, items: [{ productName: "Товар", quantity: 1, totalPrice: 240 }] };
+  const text = telegramPrivateOrderText(order, "https://sidzen.shop");
+  expect(text).toContain(`Город: ${city}`); expect(text).not.toContain(address);
+});
+it("uses the purchased group label and chosen color without duplicating them", () => {
+  const order = { id: "opaque", number: "ORDER-1", shippingAddress: null, subtotal: 600, deliveryPrice: 0, total: 600, shipment: null, items: [
+    { productName: "Крючки", quantity: 1, totalPrice: 300, groupLabel: "Чёрный", product: { groupId: "group", groupLabel: "Изменён позднее" }, configuration: { colorName: "Чёрный" } },
+    { productName: "Полотенце", quantity: 1, totalPrice: 300, groupLabel: null, product: { groupId: "group", groupLabel: "Большое" }, configuration: { colorName: "Бежевый" } },
+  ] };
+  const text = telegramPrivateOrderText(order, "https://sidzen.shop");
+  expect(text).toContain("Цвет: Чёрный"); expect(text).not.toContain("Изменён позднее");
+  expect(text).toContain("Вариант: Большое · Цвет: Бежевый");
+  expect(text.match(/Чёрный/g)).toHaveLength(1);
+});
+it("bounds long item lists and announces cancellation without leaking details to groups", () => {
+  const order = { id: "opaque", number: "ORDER-1", shippingAddress: null, subtotal: 100, deliveryPrice: 0, total: 100, shipment: null, items: Array.from({ length: 100 }, () => ({ productName: "А".repeat(200), groupLabel: "Б".repeat(180), quantity: 1, totalPrice: 1 })) };
+  const text = telegramPrivateOrderText(order, "https://sidzen.shop");
+  expect(text.length).toBeLessThan(4096); expect(text).toContain("и ещё");
+  const status = { id: "opaque", number: "ORDER-1", reservationExpiredAt: new Date(), stockReviewRequired: false };
+  expect(telegramOrderStatusText(status, "CANCELED", "https://sidzen.shop", true)).toContain("ORDER-1 отменён");
+  expect(telegramOrderStatusText(status, "CANCELED", "https://sidzen.shop", false)).not.toContain("ORDER-1");
+  expect(telegramOrderStatusText({ ...status, stockReviewRequired: true }, "LATE_PAYMENT", "https://sidzen.shop", true)).toContain("проверить наличие");
 });

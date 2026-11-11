@@ -11,7 +11,7 @@ export function checkoutProductSnapshot(product: Product) {
   const options = productOptions(product);
   const sorted = <T extends { id: string }>(items: T[]) => [...items].sort((a, b) => a.id.localeCompare(b.id));
   return JSON.stringify({
-    id: product.id, name: product.name, sku: product.sku, type: product.type, status: product.status,
+    id: product.id, name: product.name, sku: product.sku, type: product.type, status: product.status, groupId: product.groupId, groupLabel: product.groupLabel,
     basePrice: options.basePrice, weightGrams: options.weightGrams, madeToOrder: product.madeToOrder,
     leadDays: product.leadDays, shippingWeightG: product.shippingWeightG, shippingLengthMm: product.shippingLengthMm,
     shippingWidthMm: product.shippingWidthMm, shippingHeightMm: product.shippingHeightMm,

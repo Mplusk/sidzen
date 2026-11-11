@@ -1,5 +1,7 @@
 import type { TelegramConfig } from "./config";
 import { telegramFetch } from "./transport";
+import { destinationCity } from "@/lib/delivery/destination-city";
+import { configurationText } from "@/lib/product-options";
 export class TelegramError extends Error {
   constructor(readonly code: "credentials" | "recipient" | "rate" | "provider" | "uncertain" | "response", readonly retryable = false, readonly delay = 30000) { super(code); }
 }
@@ -40,26 +42,37 @@ type OrderNotification = {
   id: string; number: string; shippingAddress: string | null; subtotal: { toString(): string };
   deliveryPrice: { toString(): string }; total: { toString(): string };
   shipment: { provider: string; cost: { toString(): string } } | null;
-  items: Array<{ productName: string; quantity: number; totalPrice: { toString(): string } }>;
+  items: Array<{ productName: string; quantity: number; totalPrice: { toString(): string }; configuration?: unknown; groupLabel?: string | null; product?: { groupId: string | null; groupLabel: string | null } | null; color?: { name: string } | null }>;
 };
-function cityFromAddress(address: string | null, provider: string | undefined) {
-  if (!address || /^самовывоз/i.test(address.trim())) return null;
-  const parts = address.split(",").map(part => part.trim()).filter(Boolean);
-  const marked = parts.find(part => /^(?:г\.?|город|пос[её]лок|пгт\.?|село|деревня)\s+/i.test(part));
-  const candidates = marked ? [marked.replace(/^(?:г\.?|город|пос[её]лок|пгт\.?|село|деревня)\s+/i, "")] :
-    provider === "ozon-delivery" || provider === "cdek-delivery" ? (/^(?:ул\.?|улица|проспект|пр-т|переулок|пер\.?|шоссе|бульвар|набережная|площадь)\s/i.test(parts[1] ?? "") ? [parts[0]] : []) :
-    [parts[/^\d{6}$/.test(parts[0] ?? "") ? 1 : 0]];
-  const city = candidates[0] ?? "";
-  if (parts.length < 2 || city.length > 80 || !/^[\p{L}\s.\-]+$/u.test(city) || /(?:^|\s)(?:ул|улица|проспект|пр|дом|д|область|край|район|республика|переулок|пер|бульвар|б-р|площадь|пл|шоссе|наб|набережная)(?:\.|\s|$)/iu.test(city)) return null;
-  return city;
+const clean = (value: string, limit: number) => value.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, limit);
+function itemText(item: OrderNotification["items"][number], money: (value: { toString(): string }) => string) {
+  const config = item.configuration && typeof item.configuration === "object" && !Array.isArray(item.configuration) ? item.configuration as Record<string, unknown> : {};
+  const color = clean(configurationText({ colorName: config.colorName || item.color?.name, color: config.color }), 60);
+  const group = clean(item.groupLabel || (item.product?.groupId ? item.product.groupLabel : "") || "", 80);
+  const sameColor = color && color.toLocaleLowerCase("ru-RU") === group.toLocaleLowerCase("ru-RU");
+  const details = [group && !sameColor ? `Вариант: ${group}` : "", color ? `Цвет: ${color}` : ""].filter(Boolean);
+  return `• ${clean(item.productName, 100)}${details.length ? ` · ${details.join(" · ")}` : ""} × ${item.quantity} — ${money(item.totalPrice)}`;
 }
 export function telegramPrivateOrderText(order: OrderNotification, baseUrl: string) {
   const link = telegramOrderText(order.id, baseUrl).split("\n").at(-1)!;
   const money = (value: { toString(): string }) => new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB" }).format(Number(value.toString()));
-  const city = cityFromAddress(order.shippingAddress, order.shipment?.provider);
-  const items = order.items.slice(0, 25).map(item => `• ${item.productName.replace(/[\r\n\t]+/g, " ").slice(0, 100)} × ${item.quantity} — ${money(item.totalPrice)}`);
+  const city = destinationCity(order.shippingAddress, order.shipment?.provider);
+  const items: string[] = [];
+  for (const item of order.items.slice(0, 25)) {
+    const line = itemText(item, money);
+    if (items.join("\n").length + line.length > 2800) break;
+    items.push(line);
+  }
   if (order.items.length > items.length) items.push(`…и ещё ${order.items.length - items.length} позиций`);
-  return [`SIDZEN · заказ ${order.number.replace(/[\r\n\t]+/g, " ").slice(0, 80)}`, "", ...items, "", `Город: ${city ?? "не указан"}`, `Товары: ${money(order.subtotal)}`, `Доставка для покупателя: ${money(order.deliveryPrice)}`, ...(order.shipment ? [`Расход на доставку: ${money(order.shipment.cost)}`] : []), `Итого: ${money(order.total)}`, "", link].join("\n");
+  return [`SIDZEN · заказ ${clean(order.number, 80)}`, "", ...items, "", `Город: ${city ?? "не указан"}`, `Товары: ${money(order.subtotal)}`, `Доставка для покупателя: ${money(order.deliveryPrice)}`, ...(order.shipment ? [`Расход на доставку: ${money(order.shipment.cost)}`] : []), `Итого: ${money(order.total)}`, "", link].join("\n");
+}
+
+export function telegramOrderStatusText(order: { id: string; number: string; reservationExpiredAt: Date | null; stockReviewRequired: boolean }, kind: "CANCELED" | "LATE_PAYMENT", baseUrl: string, privateChat: boolean) {
+  const link = telegramOrderText(order.id, baseUrl).split("\n").at(-1)!;
+  if (!privateChat) return `SIDZEN · ${kind === "CANCELED" ? "заказ отменён" : "статус заказа изменился"}\n${link}`;
+  const number = clean(order.number, 80);
+  if (kind === "CANCELED") return [`SIDZEN · заказ ${number} отменён`, ...(order.reservationExpiredAt ? ["Причина: истекло время оплаты."] : []), "", link].join("\n");
+  return [`SIDZEN · оплата заказа ${number} подтверждена после отмены`, ...(order.stockReviewRequired ? ["Требуется проверить наличие товара."] : []), "", link].join("\n");
 }
 export async function sendTelegram(config: TelegramConfig, text: string, transport: typeof fetch = telegramFetch) {
   await telegramApi(config, "sendMessage", { chat_id: config.chatId, text, link_preview_options: { is_disabled: true }, protect_content: true }, transport);

@@ -3,6 +3,7 @@ import { expireCartHold } from "@/lib/cart-stock-holds";
 import { releaseUnsentStock } from "@/lib/stock-reservations";
 import { EXPIRATION_MARKER } from "@/lib/late-order-stock";
 import { lockOrderProductsForCartReturn, returnOrderToCart } from "@/lib/order-cart-restore";
+import { queueTelegramCancellation } from "@/lib/telegram/status";
 
 /** Never free stock when payment has succeeded or carrier processing began. */
 export async function expireUnpaidOrderHold(db: PrismaClient, orderId: string, now = new Date()) {
@@ -18,6 +19,7 @@ export async function expireUnpaidOrderHold(db: PrismaClient, orderId: string, n
     if (order.shipment?.cdekJob?.status === "PENDING") await tx.cdekDeliveryJob.updateMany({ where: { id: order.shipment.cdekJob.id, status: "CANCELED", attempts: 0 }, data: { error: EXPIRATION_MARKER } });
     const cartRestored = await returnOrderToCart(tx, order, now);
     await tx.order.update({ where: { id: order.id }, data: { status: "CANCELED", statusChangedAt: now, reservationExpiredAt: now, reservationExpiresAt: null, checkoutCartId: null } });
+    await queueTelegramCancellation(tx, order.id);
     // A payment creation request can have reached the provider even when its
     // response was lost. Keep this visible for reconciliation; do not recreate it.
     if (!order.payment.externalId && order.payment.payload && typeof order.payment.payload === "object" && !Array.isArray(order.payment.payload)) {

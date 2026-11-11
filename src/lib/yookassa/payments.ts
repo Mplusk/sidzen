@@ -9,6 +9,7 @@ import { restoreExpiredOrderStock } from "@/lib/late-order-stock";
 import { startOrderPaymentHold } from "@/lib/cart-stock-holds";
 import { lockOrderProductsForCartReturn, removeUnchangedReturnedItems, returnOrderToCart } from "@/lib/order-cart-restore";
 import { rateLimit } from "@/lib/rate-limit";
+import { queueTelegramCancellation, queueTelegramLatePayment } from "@/lib/telegram/status";
 
 const bindingSchema = z.object({ version: z.literal(1), shopId: z.string(), firstAttemptAt: z.iso.datetime(), request: z.string(), receiptStatus: z.string().optional(), reconciliationRequired: z.boolean().optional() });
 const remoteSchema = z.object({ id: z.string().uuid(), status: z.enum(["pending", "waiting_for_capture", "succeeded", "canceled"]), paid: z.boolean(), test: z.boolean(), amount: z.object({ value: z.string(), currency: z.literal("RUB") }), metadata: z.object({ orderId: z.string(), paymentId: z.string() }), recipient: z.object({ account_id: z.string() }), confirmation: z.object({ confirmation_url: z.url().optional() }).optional(), receipt_registration: z.enum(["pending", "succeeded", "canceled"]).optional(), refunded_amount: z.object({ value: z.string(), currency: z.literal("RUB") }).optional() });
@@ -54,6 +55,7 @@ export async function applyYooKassaPayment(remote: RemotePayment) {
     await tx.payment.update({ where: { id: payment.id }, data: { externalId: remote.id, payload, status: nextStatus, ...(nextStatus === "PAID" && status === "PAID" && !payment.paidAt ? { paidAt: new Date() } : {}), ...(partial ? { refundReviewRequired: true } : {}) } });
     if (paidAfterExpiry) {
       await tx.order.update({ where: { id: payment.orderId }, data: { status: "PAID", statusChangedAt: new Date(), stockReviewRequired: !recoveredStock } });
+      await queueTelegramLatePayment(tx, payment.orderId);
       await tx.auditLog.create({ data: { action: "order.stock.late-payment", entityType: "Order", entityId: payment.orderId, after: { stockRecovered: recoveredStock } } });
     } else if (nextStatus === "PAID" && status === "PAID" && !payment.order.deletedAt) await tx.order.updateMany({ where: { id: payment.orderId, status: { in: ["NEW", "APPROVED", "AWAITING_PAYMENT"] } }, data: { status: "PAID", reservationExpiresAt: null, checkoutCartId: null } });
     if (nextStatus === "CANCELED") {
@@ -61,7 +63,8 @@ export async function applyYooKassaPayment(remote: RemotePayment) {
       if (returnCart) await lockOrderProductsForCartReturn(tx, payment.orderId);
       const released = await releaseUnsentStock(tx, payment.orderId);
       if (returnCart && released) await returnOrderToCart(tx, payment.order);
-      await tx.order.updateMany({ where: { id: payment.orderId, status: { in: ["NEW", "APPROVED", "AWAITING_PAYMENT"] } }, data: { status: "CANCELED", statusChangedAt: new Date(), reservationExpiresAt: null, checkoutCartId: null } });
+      const canceledOrder = await tx.order.updateMany({ where: { id: payment.orderId, status: { in: ["NEW", "APPROVED", "AWAITING_PAYMENT"] } }, data: { status: "CANCELED", statusChangedAt: new Date(), reservationExpiresAt: null, checkoutCartId: null } });
+      if (canceledOrder.count) await queueTelegramCancellation(tx, payment.orderId);
       await tx.ozonDeliveryJob.updateMany({ where: { shipment: { orderId: payment.orderId }, status: { notIn: ["CANCELED", "FINISHED"] } }, data: { cancelRequestedAt: new Date(), nextAttemptAt: new Date() } });
       await tx.cdekDeliveryJob.updateMany({ where: { shipment: { orderId: payment.orderId }, status: { notIn: ["CANCELED", "FINISHED"] } }, data: { cancelRequestedAt: new Date(), nextAttemptAt: new Date() } });
     }

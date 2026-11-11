@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ permission: vi.fn(), find: vi.fn(), update: vi.fn(), audit: vi.fn(), queue: vi.fn(), yooQueue: vi.fn(), transaction: vi.fn(), cancelCdek: vi.fn(), ended: vi.fn() }));
+const m = vi.hoisted(() => ({ permission: vi.fn(), find: vi.fn(), update: vi.fn(), audit: vi.fn(), queue: vi.fn(), yooQueue: vi.fn(), transaction: vi.fn(), cancelCdek: vi.fn(), ended: vi.fn(), cancelNotice: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ requirePermission: m.permission }));
 vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: m.transaction } }));
 vi.mock("@/lib/audit", () => ({ writeAudit: vi.fn() }));
@@ -7,6 +7,7 @@ vi.mock("@/lib/marketplaces/sync", () => ({ guardProductWrite: vi.fn() }));
 vi.mock("@/lib/cloudkassir/lifecycle", () => ({ queueDerivedReceipt: m.queue }));
 vi.mock("@/lib/yookassa/settlements", () => ({ queueYooKassaSettlement: m.yooQueue }));
 vi.mock("@/lib/stock-reservations", () => ({ finishStockReservations: vi.fn(), releaseUnsentStock: vi.fn() }));
+vi.mock("@/lib/telegram/status", () => ({ queueTelegramCancellation: m.cancelNotice }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), updateTag: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: (path: string) => { throw new Error(`redirect:${path}`); } }));
 import { updateOrderStatusAction } from "./admin";
@@ -53,6 +54,6 @@ describe("manual application lifecycle", () => {
   it("moves to in progress without payment or receipt and audits the change", async () => { await expect(updateOrderStatusAction(request("IN_PROGRESS"))).rejects.toThrow("saved=1"); expect(m.update).toHaveBeenCalledWith({ where: { id: "order" }, data: { status: "IN_PROGRESS", internalNote: null, purchaseConfirmedAt: null, privacyClosedAt: null } }); expect(m.queue).not.toHaveBeenCalled(); expect(m.audit).toHaveBeenCalledWith({ data: expect.objectContaining({ action: "order.status.update", after: expect.objectContaining({ purchaseConfirmed: false }) }) }); });
   it.each(["PAID", "AWAITING_PAYMENT", "REFUNDED"])("rejects payment-driven status %s for an application", async status => { await expect(updateOrderStatusAction(request(status))).rejects.toThrow("application-status"); expect(m.update).not.toHaveBeenCalled(); });
   it("requires explicit attestation of purchase and handover before completion", async () => { await expect(updateOrderStatusAction(request("DELIVERED"))).rejects.toThrow("application-status"); expect(m.update).not.toHaveBeenCalled(); await expect(updateOrderStatusAction(request("DELIVERED", true))).rejects.toThrow("saved=1"); expect(m.update).toHaveBeenCalledWith({ where: { id: "order" }, data: { status: "DELIVERED", internalNote: null, purchaseConfirmedAt: expect.any(Date), privacyClosedAt: expect.any(Date) } }); expect(m.queue).not.toHaveBeenCalled(); });
-  it("withdraws the purchase attestation when reopened or canceled", async () => { m.find.mockResolvedValue({ id: "order", number: "QA-1", kind: "APPLICATION", status: "DELIVERED", purchaseConfirmedAt: new Date(), fiscalReceipts: [] }); await expect(updateOrderStatusAction(request("CANCELED"))).rejects.toThrow("saved=1"); expect(m.update).toHaveBeenCalledWith({ where: { id: "order" }, data: { status: "CANCELED", internalNote: null, purchaseConfirmedAt: null, privacyClosedAt: expect.any(Date) } }); });
+  it("withdraws the purchase attestation when reopened or canceled", async () => { m.find.mockResolvedValue({ id: "order", number: "QA-1", kind: "APPLICATION", status: "DELIVERED", purchaseConfirmedAt: new Date(), fiscalReceipts: [] }); await expect(updateOrderStatusAction(request("CANCELED"))).rejects.toThrow("saved=1"); expect(m.update).toHaveBeenCalledWith({ where: { id: "order" }, data: { status: "CANCELED", internalNote: null, purchaseConfirmedAt: null, privacyClosedAt: expect.any(Date) } }); expect(m.cancelNotice).toHaveBeenCalledWith(expect.anything(), "order"); });
   it("does not edit an archived application", async () => { m.find.mockResolvedValue({ id: "order", deletedAt: new Date() }); await expect(updateOrderStatusAction(request("IN_PROGRESS"))).rejects.toThrow("missing"); expect(m.update).not.toHaveBeenCalled(); });
 });
