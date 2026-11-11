@@ -12,7 +12,7 @@ import { createGuestGrant } from "@/lib/guest-order-grant";
 import { reserveOrderFromCart } from "@/lib/cart-stock-holds";
 import { assertCheckoutProductsUnchanged } from "@/lib/checkout-product-snapshot";
 import { deliveryConfigFingerprint, getOzonDeliveryConfig, OZON_DELIVERY_CODE, requireOzonDelivery } from "@/lib/delivery/ozon-config";
-import { verifyOzonQuote, OzonQuoteError, type OzonQuote } from "@/lib/delivery/ozon-quote";
+import { cartDeliveryFingerprint, verifyOzonQuote, OzonQuoteError, type OzonQuote } from "@/lib/delivery/ozon-quote";
 import { OzonDeliveryError } from "@/lib/delivery/ozon-client";
 import { retryOzonQuote } from "@/lib/delivery/ozon-retry";
 import { verifyDeliveryConsent, operatorReady } from "@/lib/privacy";
@@ -49,6 +49,9 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
   }
   if (cart.items.some((item) => !item.canStartCheckout || !item.quote)) redirect("/cart/?error=unavailable");
   if (cart.items.some((item) => item.stockReviewRequired)) return fail("stock-review");
+  // Do not silently add an item that became available after the form rendered,
+  // or omit an item whose stock changed while the buyer was completing it.
+  if (formData.get("cartFingerprint") !== cartDeliveryFingerprint(cart)) return fail("changed");
   const user = await getCurrentUser();
   const isOzon = parsed.data.delivery === OZON_DELIVERY_CODE;
   const isCdek = parsed.data.delivery === CDEK_DELIVERY_CODE;

@@ -13,13 +13,14 @@ vi.mock("@/lib/order-notifications", () => ({ sendOrderConfirmation: vi.fn().moc
 vi.mock("@/lib/telegram/config", () => ({ queueTelegramOrder: vi.fn() }));
 vi.mock("@/lib/delivery/cdek-config", () => ({ CDEK_DELIVERY_CODE: "cdek-delivery", getCdekConfig: m.config, requireCdek: vi.fn() }));
 vi.mock("@/lib/delivery/cdek-quote", () => ({ verifyCdekQuote: m.verify, cdekConfigFingerprint: () => "config", cdekPackages: () => [{ weight: 100, length: 20, width: 10, height: 5 }] }));
+vi.mock("@/lib/delivery/ozon-quote", async original => ({ ...await original<typeof import("@/lib/delivery/ozon-quote")>(), cartDeliveryFingerprint: () => "fixture" }));
 vi.mock("@/lib/delivery/cdek-client", () => ({ CdekDeliveryClient: class { tariff = m.tariff; } }));
 vi.mock("@/lib/delivery/cdek-points", () => ({ checkedCdekPoint: m.point }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), updateTag: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: (path: string) => { throw new Error(`redirect:${path}`); } }));
 import { createOrderAction } from "./checkout";
 
-function form(total = "504") { const f = new FormData(); for (const [key, value] of Object.entries({ name: "Synthetic buyer", email: "qa@example.test", phone: "+79991234567", delivery: "cdek-delivery", legal: "on", expectedTotal: total, cdekQuote: "signed" })) f.set(key, value); return f; }
+function form(total = "504") { const f = new FormData(); for (const [key, value] of Object.entries({ name: "Synthetic buyer", email: "qa@example.test", phone: "+79991234567", delivery: "cdek-delivery", legal: "on", expectedTotal: total, cdekQuote: "signed", cartFingerprint: "fixture" })) f.set(key, value); return f; }
 beforeEach(() => {
   vi.resetAllMocks();
   m.cart.mockResolvedValue({ id: "cart", items: [{ id: "item", productId: "p", available: true, canStartCheckout: true, quantity: 1, unitPrice: 240, updatedAt: new Date(), product: { name: "QA product", sku: "QA" }, quote: { config: {} } }] });

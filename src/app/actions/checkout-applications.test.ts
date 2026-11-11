@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ cart: vi.fn(), user: vi.fn(), method: vi.fn(), create: vi.fn(), audit: vi.fn(), claim: vi.fn(), transaction: vi.fn(), verify: vi.fn(), consent: vi.fn(), checkout: vi.fn(), grant: vi.fn(), bank: vi.fn(), notify: vi.fn(), paymentConfig: vi.fn(), createYoo: vi.fn(), reserve: vi.fn(), snapshot: vi.fn() }));
+const m = vi.hoisted(() => ({ cart: vi.fn(), user: vi.fn(), method: vi.fn(), create: vi.fn(), audit: vi.fn(), claim: vi.fn(), transaction: vi.fn(), verify: vi.fn(), fingerprint: vi.fn(), consent: vi.fn(), checkout: vi.fn(), grant: vi.fn(), bank: vi.fn(), notify: vi.fn(), paymentConfig: vi.fn(), createYoo: vi.fn(), reserve: vi.fn(), snapshot: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: { deliveryMethod: { findFirst: m.method }, $transaction: m.transaction } }));
 vi.mock("@/lib/auth", () => ({ getCurrentUser: m.user }));
 vi.mock("@/app/actions/cart", () => ({ getCart: m.cart }));
@@ -16,15 +16,16 @@ vi.mock("@/lib/diagnostics", () => ({ writeDiagnostic: vi.fn() }));
 vi.mock("@/lib/order-notifications", () => ({ sendOrderConfirmation: m.notify }));
 vi.mock("@/lib/telegram/config", () => ({ queueTelegramOrder: vi.fn() }));
 vi.mock("@/lib/delivery/ozon-config", () => ({ OZON_DELIVERY_CODE: "ozon-delivery", getOzonDeliveryConfig: async () => ({ clientId: "qa" }), requireOzonDelivery: vi.fn(), deliveryConfigFingerprint: () => "qa-config" }));
-vi.mock("@/lib/delivery/ozon-quote", async original => ({ ...await original<typeof import("@/lib/delivery/ozon-quote")>(), verifyOzonQuote: m.verify }));
+vi.mock("@/lib/delivery/ozon-quote", async original => ({ ...await original<typeof import("@/lib/delivery/ozon-quote")>(), verifyOzonQuote: m.verify, cartDeliveryFingerprint: m.fingerprint }));
 vi.mock("@/lib/delivery/ozon-retry", () => ({ retryOzonQuote: m.checkout }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), updateTag: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: (path: string) => { throw new Error(`redirect:${path}`); } }));
 import { createOrderAction, createOrderWithState } from "./checkout";
-function form(delivery = "pickup") { const value = new FormData(); for (const [key, field] of Object.entries({ name: "Synthetic buyer", phone: "+79991234567", email: "qa@example.test", delivery, legal: "on", expectedTotal: "240", ozonQuote: "qa-signed" })) value.set(key, field); return value; }
+function form(delivery = "pickup") { const value = new FormData(); for (const [key, field] of Object.entries({ name: "Synthetic buyer", phone: "+79991234567", email: "qa@example.test", delivery, legal: "on", expectedTotal: "240", ozonQuote: "qa-signed", cartFingerprint: "fixture" })) value.set(key, field); return value; }
 beforeEach(() => {
   vi.resetAllMocks(); m.user.mockResolvedValue({ id: "buyer" }); m.method.mockResolvedValue({ active: true, code: "pickup", name: "Pickup", basePrice: 0 });
   m.reserve.mockResolvedValue(new Map([["product", 1]])); m.snapshot.mockResolvedValue(undefined);
+  m.fingerprint.mockReturnValue("fixture");
   m.paymentConfig.mockResolvedValue({ enabled: false }); m.createYoo.mockResolvedValue(null);
   m.cart.mockResolvedValue({ id: "cart", items: [{ id: "item", productId: "product", available: true, canStartCheckout: true, quantity: 1, unitPrice: 240, updatedAt: new Date(), product: { name: "QA product", sku: "QA" }, quote: { config: {} } }] });
   m.create.mockResolvedValue({ id: "application", number: "QA-1" }); m.claim.mockResolvedValue({ count: 1 }); m.notify.mockResolvedValue(undefined);
@@ -33,6 +34,11 @@ beforeEach(() => {
   m.transaction.mockImplementation(callback => callback({ $executeRaw: vi.fn(), $queryRaw: vi.fn(), deliveryMethod: { findFirst: m.method }, cartItem: { deleteMany: m.claim }, order: { create: m.create }, auditLog: { create: m.audit }, privacyConsent: { update: vi.fn() } }));
 });
 describe("payment-free checkout application", () => {
+  it("stops when the available cart has changed since the buyer reviewed it", async () => {
+    m.fingerprint.mockReturnValue("different");
+    await expect(createOrderWithState({}, form())).resolves.toMatchObject({ error: "changed" });
+    expect(m.reserve).not.toHaveBeenCalled(); expect(m.create).not.toHaveBeenCalled();
+  });
   it("creates and reserves only available rows, leaving sold-out rows in the cart", async () => {
     const available = { id: "item", productId: "product", available: true, canStartCheckout: true, quantity: 1, unitPrice: 240, updatedAt: new Date(), product: { name: "QA product", sku: "QA" }, quote: { config: {} } };
     const unavailable = { ...available, id: "sold-out", productId: "sold-out-product", available: false, canStartCheckout: false, unitPrice: 900 };

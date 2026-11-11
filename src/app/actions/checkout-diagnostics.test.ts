@@ -10,13 +10,13 @@ vi.mock("@/lib/diagnostics", () => ({ writeDiagnostic: m.log }));
 vi.mock("@/lib/privacy", () => ({ operatorReady: async () => true, verifyDeliveryConsent: m.consent }));
 vi.mock("next/navigation", () => ({ redirect: (path: string) => { throw new Error(`redirect:${path}`); } }));
 vi.mock("@/lib/delivery/ozon-config", async o => ({ ...await o<typeof import("@/lib/delivery/ozon-config")>(), getOzonDeliveryConfig: m.config }));
-vi.mock("@/lib/delivery/ozon-quote", async o => ({ ...await o<typeof import("@/lib/delivery/ozon-quote")>(), verifyOzonQuote: m.verify }));
+vi.mock("@/lib/delivery/ozon-quote", async o => ({ ...await o<typeof import("@/lib/delivery/ozon-quote")>(), verifyOzonQuote: m.verify, cartDeliveryFingerprint: () => "fixture" }));
 vi.mock("@/lib/delivery/ozon-client", async o => ({ ...await o<typeof import("@/lib/delivery/ozon-client")>(), OzonDeliveryClient: class { checkout = m.checkout; } }));
 import { OzonQuoteError } from "@/lib/delivery/ozon-quote";
 import { OzonDeliveryError } from "@/lib/delivery/ozon-client";
 import { createOrderAction } from "./checkout";
 const form = () => {
-  const f = new FormData(); for (const [k, v] of Object.entries({ name: "Synthetic buyer", email: "qa@example.test", phone: "+79991234567", delivery: "ozon-delivery", legal: "on", payment: "manual", expectedTotal: "240", ozonQuote: "signed-fixture" })) f.set(k, v); return f;
+  const f = new FormData(); for (const [k, v] of Object.entries({ name: "Synthetic buyer", email: "qa@example.test", phone: "+79991234567", delivery: "ozon-delivery", legal: "on", payment: "manual", expectedTotal: "240", ozonQuote: "signed-fixture", cartFingerprint: "fixture" })) f.set(k, v); return f;
 };
 beforeEach(() => {
   vi.resetAllMocks(); m.log.mockResolvedValue("00000000-0000-4000-8000-000000000001");
