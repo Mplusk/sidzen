@@ -17,7 +17,7 @@ export default async function OrdersPage() {
   const user = await requireUser();
   const orders = await prisma.order.findMany({ where: { userId: user.id, deletedAt: null }, include: { items: true, payment: true, shipment: { include: { ozonJob: { select: { status: true, request: true, response: true, cancelRequestedAt: true } }, cdekJob: { select: { status: true, deliveryStatus: true, deliveryStatusChangedAt: true, cancelRequestedAt: true } } } } }, orderBy: { createdAt: "desc" } });
   const hasPaymentActions = orders.some(order => canContinuePayment(order));
-  return <><span className="eyebrow">История</span><h1>Мои заказы</h1>{orders.length ? <div className="data-table-wrap"><table className={`data-table ${styles.table}`} role="table">
+  return <><span className="eyebrow">История</span><h1>Мои заказы</h1>{orders.length ? <div className={`data-table-wrap ${styles.wrapper}`}><table className={`data-table ${styles.table}`} role="table">
     <thead><tr><th scope="col">Номер</th><th scope="col">Дата</th><th scope="col">Позиций</th><th scope="col">Статус</th><th scope="col">Доставка</th><th scope="col">Трек</th><th scope="col">Сумма</th>{hasPaymentActions && <th scope="col">Оплата</th>}</tr></thead>
     <tbody>{orders.map(order => <tr key={order.id} role="row">
       <td data-label="Номер"><Link href={`/account/orders/${order.number}/`}><strong>{order.number}</strong></Link></td><td data-label="Дата">{formatDate(order.createdAt)}</td><td data-label="Позиций">{order.items.length}</td>
