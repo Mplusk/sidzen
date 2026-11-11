@@ -163,8 +163,7 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
         <input type="hidden" name="cartFingerprint" value={cartFingerprint} />
         <label className="checkout-consent"><input type="checkbox" name="legal" checked={contact.legal} onChange={event => setContact(previous => ({ ...previous, legal: event.target.checked }))} required /><span>Принимаю <Link href="/legal/offer/" target="_blank">условия оформления {onlinePayment ? "заказа" : "заявки"}</Link>. Это не согласие на рекламу или рассылки.</span></label>
         <Submit onlinePayment={onlinePayment} pending={pending} cartPending={cartPending} noItems={!items.length} needsQuote={(isOzon && !ozonQuote) || (isCdek && !cdekQuote)} noDelivery={!methods.length && !ozonDelivery && !cdekDelivery} />
-        <p className={styles.summaryNote}>{onlinePayment ? "Оплата и электронный чек — через ЮKassa." : "Оплата на сайте не требуется. Продавец свяжется с вами для подтверждения."}</p>
-        <p className={styles.summaryNote}>Контакты и адрес нужны для обработки заказа и связи. {isOzon ? "При подтверждении ПВЗ Ozon получает телефон и параметры посылки для проверки доставки." : "Данные получателя и параметры отправления передаются выбранному перевозчику."} <Link className="text-link" href="/legal/privacy/" target="_blank">Обработка данных</Link></p>
+        {!onlinePayment && <p className={styles.summaryNote}>Оплата на сайте не требуется. Продавец свяжется с вами для подтверждения.</p>}
       </div>
     </aside>
   </form>;

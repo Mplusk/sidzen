@@ -242,6 +242,20 @@ describe("delivery verification interaction", () => {
     await act(async () => container.querySelector<HTMLFormElement>(".checkout-form")!.requestSubmit());
     expect(m.order).not.toHaveBeenCalled(); expect(m.cart).not.toHaveBeenCalled();
   });
+  it("keeps order terms and the payment action without the removed checkout notes", async () => {
+    const items = [{ id: "fixture", name: "Товар", configuration: "", quantity: 1, members: [], total: 240 }];
+    const user = { name: "Покупатель", email: "buyer@example.test", phone: "+79991234567" };
+    await act(async () => root.render(createElement(CheckoutForm, { items, methods: [], user, ozonDelivery: true, onlinePayment: true })));
+    expect(container.querySelector<HTMLInputElement>('input[name="legal"]')?.required).toBe(true);
+    expect(container.textContent).toContain("Сначала подтвердите пункт выдачи");
+    expect(container.textContent).not.toContain("Оплата и электронный чек — через ЮKassa.");
+    expect(container.textContent).not.toContain("Контакты и адрес нужны для обработки заказа");
+    expect(container.textContent).not.toContain("При подтверждении ПВЗ Ozon получает");
+    await choosePoint(); await waitCheck();
+    expect(container.textContent).toContain("Перейти к оплате");
+    await act(async () => root.render(createElement(CheckoutForm, { items, methods: [], user, ozonDelivery: true, onlinePayment: false })));
+    expect(container.textContent).toContain("Оплата на сайте не требуется.");
+  });
   it("ignores a delayed Ozon response for the previous cart after a new quote succeeds", async () => {
     m.cart.mockResolvedValue({});
     let finishOld!: (value: unknown) => void;
