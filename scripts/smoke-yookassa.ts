@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
 import { encryptSecret } from "../src/lib/integration-secrets";
 import { YOOKASSA_ONLINE_SETTING } from "../src/lib/yookassa/config";
-import { createYooKassaPayment, reconcileYooKassaPayment, refreshYooKassaPayment } from "../src/lib/yookassa/payments";
+import { createYooKassaPayment, recoverUnboundYooKassaPayment, reconcileYooKassaPayment, refreshYooKassaPayment } from "../src/lib/yookassa/payments";
 import { processYooKassaSettlement, queueYooKassaSettlement } from "../src/lib/yookassa/settlements";
 
 if (!process.env.DATABASE_URL?.includes("shop_qa")) throw new Error("Synthetic QA database required");
@@ -77,7 +77,9 @@ try {
   await assert.rejects(createYooKassaPayment(uncertain.id), /payment-reconciliation-required/);
   assert.equal(creates, 1, "Never resend beyond the idempotency window");
   assert.equal(((await prisma.payment.findUniqueOrThrow({ where: { id: pending.id } })).payload as { reconciliationRequired: boolean }).reconciliationRequired, true);
-  paid = true; await reconcileYooKassaPayment(uncertain.id, externalId);
+  paid = true; await recoverUnboundYooKassaPayment(externalId);
+  assert.equal((await prisma.payment.findUniqueOrThrow({ where: { id: pending.id } })).externalId, externalId, "A verified notification recovers a lost creation response");
+  await reconcileYooKassaPayment(uncertain.id, externalId);
   assert.equal((await prisma.order.findUniqueOrThrow({ where: { id: uncertain.id } })).status, "PAID");
   console.log("YooKassa payment, idempotent retry, manual reconciliation and settlement: OK");
 } finally {

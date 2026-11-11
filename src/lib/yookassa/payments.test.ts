@@ -1,17 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ transaction: vi.fn(), find: vi.fn(), update: vi.fn(), orderUpdate: vi.fn(), orderUpdateOne: vi.fn(), audit: vi.fn(), settleUpdate: vi.fn(), cancelOzon: vi.fn(), cancelCdek: vi.fn(), release: vi.fn(), restore: vi.fn() }));
-vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: m.transaction } }));
+const m = vi.hoisted(() => ({ transaction: vi.fn(), find: vi.fn(), pending: vi.fn(), limit: vi.fn(), update: vi.fn(), orderUpdate: vi.fn(), orderUpdateOne: vi.fn(), audit: vi.fn(), settleUpdate: vi.fn(), cancelOzon: vi.fn(), cancelCdek: vi.fn(), release: vi.fn(), restore: vi.fn() }));
+vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: m.transaction, payment: { findFirst: m.pending } } }));
 vi.mock("@/lib/privacy", () => ({ operatorReady: async () => true }));
+vi.mock("@/lib/rate-limit", () => ({ rateLimit: m.limit }));
 vi.mock("@/lib/stock-reservations", () => ({ releaseUnsentStock: m.release }));
 vi.mock("@/lib/late-order-stock", () => ({ restoreExpiredOrderStock: m.restore }));
-import { applyYooKassaPayment } from "./payments";
+import { applyYooKassaPayment, recoverUnboundYooKassaPayment } from "./payments";
 
 const payment = { id: "payment", provider: "yookassa-online", orderId: "order", externalId: null, amount: 240, status: "PENDING", paidAt: null, payload: { version: 1, shopId: "123", firstAttemptAt: "2026-11-03T12:00:00.000Z", request: "encrypted" }, order: { id: "order", total: 240, currency: "RUB", deletedAt: null } };
 const remote = { id: "28646d50-000f-5000-a000-1fe4f81e5e88", status: "succeeded" as const, paid: true, test: false, amount: { value: "240.00", currency: "RUB" as const }, metadata: { orderId: "order", paymentId: "payment" }, recipient: { account_id: "123" }, receipt_registration: "succeeded" as const };
 describe("verified YooKassa payment", () => {
   beforeEach(() => {
-    vi.resetAllMocks(); m.find.mockResolvedValue(payment);
+    vi.resetAllMocks(); m.find.mockResolvedValue(payment); m.limit.mockReturnValue({ allowed: true });
     m.transaction.mockImplementation(callback => callback({ $executeRaw: vi.fn(), payment: { findUnique: m.find, update: m.update }, order: { updateMany: m.orderUpdate, update: m.orderUpdateOne }, auditLog: { create: m.audit }, yooKassaSettlement: { updateMany: m.settleUpdate }, ozonDeliveryJob: { updateMany: m.cancelOzon }, cdekDeliveryJob: { updateMany: m.cancelCdek } }));
+  });
+  it("does not contact the provider for unknown webhooks without an unbound payment or beyond the recovery limit", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch");
+    try {
+      m.pending.mockResolvedValueOnce(null);
+      await expect(recoverUnboundYooKassaPayment(remote.id)).rejects.toThrow("payment-state");
+      m.pending.mockResolvedValueOnce({ id: "payment" }); m.limit.mockReturnValueOnce({ allowed: false });
+      await expect(recoverUnboundYooKassaPayment(remote.id)).rejects.toThrow("payment-state");
+      expect(fetch).not.toHaveBeenCalled();
+    } finally { fetch.mockRestore(); }
   });
   it("only marks an order paid from the verified provider response", async () => {
     await applyYooKassaPayment(remote);

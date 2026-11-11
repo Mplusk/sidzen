@@ -7,6 +7,7 @@ import { receiptForOrder } from "./receipt";
 import { releaseUnsentStock } from "@/lib/stock-reservations";
 import { restoreExpiredOrderStock } from "@/lib/late-order-stock";
 import { extendOrderPaymentHold } from "@/lib/cart-stock-holds";
+import { rateLimit } from "@/lib/rate-limit";
 
 const bindingSchema = z.object({ version: z.literal(1), shopId: z.string(), firstAttemptAt: z.iso.datetime(), request: z.string(), receiptStatus: z.string().optional(), reconciliationRequired: z.boolean().optional() });
 const remoteSchema = z.object({ id: z.string().uuid(), status: z.enum(["pending", "waiting_for_capture", "succeeded", "canceled"]), paid: z.boolean(), test: z.boolean(), amount: z.object({ value: z.string(), currency: z.literal("RUB") }), metadata: z.object({ orderId: z.string(), paymentId: z.string() }), recipient: z.object({ account_id: z.string() }), confirmation: z.object({ confirmation_url: z.url().optional() }).optional(), receipt_registration: z.enum(["pending", "succeeded", "canceled"]).optional(), refunded_amount: z.object({ value: z.string(), currency: z.literal("RUB") }).optional() });
@@ -91,6 +92,10 @@ export async function refreshYooKassaPayment(externalId: string) {
 /** Recover a payment whose creation response was lost before its ID was stored. */
 export async function recoverUnboundYooKassaPayment(externalId: string) {
   if (!z.string().uuid().safeParse(externalId).success) throw new Error("payment-id");
+  // Unknown public webhook IDs must not trigger unbounded provider requests.
+  // A real lost response always leaves the signed creation binding in storage.
+  const pending = await prisma.payment.findFirst({ where: { provider: "yookassa-online", externalId: null, status: { in: ["PENDING", "AUTHORIZED"] }, payload: { path: ["version"], equals: 1 } }, select: { id: true } });
+  if (!pending || !rateLimit("yookassa-unbound-recovery", 30, 60_000).allowed) throw new Error("payment-state");
   const config = await getYooKassaConfig();
   const remote = remoteSchema.parse(await yookassaRequest(config, `payments/${externalId}`));
   if (remote.id !== externalId) throw new Error("payment-mismatch");
