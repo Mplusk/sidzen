@@ -22,6 +22,7 @@ describe("checkout product snapshot", () => {
       { ...product, materials: [{ ...product.materials[0], pricePerGram: 2 }] },
       { ...product, colors: [{ ...product.colors[0], name: "Blue" }] },
       { ...product, groupId: "group", groupLabel: "Чёрный" },
+      { ...product, specifications: { "Цвет товара": "Чёрный" } },
       { ...product, variants: [{ ...product.variants[0], price: 250 }] },
       { ...product, shippingWeightG: 300 },
     ]) expect(checkoutProductSnapshot(changed as unknown as SnapshotProduct)).not.toBe(original);

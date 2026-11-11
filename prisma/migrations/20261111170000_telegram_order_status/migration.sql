@@ -1,4 +1,5 @@
 ALTER TABLE "OrderItem" ADD COLUMN "groupLabel" TEXT;
+ALTER TABLE "OrderItem" ADD COLUMN "productColor" TEXT;
 
 CREATE TABLE "TelegramOrderStatusJob" (
   "id" TEXT NOT NULL,

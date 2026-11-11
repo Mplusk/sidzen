@@ -702,6 +702,7 @@ model OrderItem {
   qualityProfileId String?
   productName      String
   groupLabel       String?
+  productColor     String?
   sku              String?
   quantity         Int                @default(1)
   reservedStock    Int                @default(0)

@@ -2,6 +2,7 @@ import type { TelegramConfig } from "./config";
 import { telegramFetch } from "./transport";
 import { destinationCity } from "@/lib/delivery/destination-city";
 import { configurationText } from "@/lib/product-options";
+import { productColorFromSpecifications } from "@/lib/product-color";
 export class TelegramError extends Error {
   constructor(readonly code: "credentials" | "recipient" | "rate" | "provider" | "uncertain" | "response", readonly retryable = false, readonly delay = 30000) { super(code); }
 }
@@ -42,12 +43,13 @@ type OrderNotification = {
   id: string; number: string; shippingAddress: string | null; subtotal: { toString(): string };
   deliveryPrice: { toString(): string }; total: { toString(): string };
   shipment: { provider: string; cost: { toString(): string } } | null;
-  items: Array<{ productName: string; quantity: number; totalPrice: { toString(): string }; configuration?: unknown; groupLabel?: string | null; product?: { groupId: string | null; groupLabel: string | null } | null; color?: { name: string } | null }>;
+  items: Array<{ productName: string; quantity: number; totalPrice: { toString(): string }; configuration?: unknown; groupLabel?: string | null; productColor?: string | null; product?: { groupId: string | null; groupLabel: string | null; specifications?: unknown } | null; color?: { name: string } | null }>;
 };
 const clean = (value: string, limit: number) => value.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, limit);
 function itemText(item: OrderNotification["items"][number], money: (value: { toString(): string }) => string) {
   const config = item.configuration && typeof item.configuration === "object" && !Array.isArray(item.configuration) ? item.configuration as Record<string, unknown> : {};
-  const color = clean(configurationText({ colorName: config.colorName || item.color?.name, color: config.color }), 60);
+  const chosenColor = configurationText({ colorName: config.colorName || item.color?.name, color: config.color });
+  const color = clean(chosenColor || item.productColor || (!item.groupLabel ? productColorFromSpecifications(item.product?.specifications) : "") || "", 60);
   const group = clean(item.groupLabel || (item.product?.groupId ? item.product.groupLabel : "") || "", 80);
   const sameColor = color && color.toLocaleLowerCase("ru-RU") === group.toLocaleLowerCase("ru-RU");
   const details = [group && !sameColor ? `Вариант: ${group}` : "", color ? `Цвет: ${color}` : ""].filter(Boolean);

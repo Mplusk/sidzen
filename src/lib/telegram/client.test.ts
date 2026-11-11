@@ -48,11 +48,23 @@ it("uses the purchased group label and chosen color without duplicating them", (
   const order = { id: "opaque", number: "ORDER-1", shippingAddress: null, subtotal: 600, deliveryPrice: 0, total: 600, shipment: null, items: [
     { productName: "Крючки", quantity: 1, totalPrice: 300, groupLabel: "Чёрный", product: { groupId: "group", groupLabel: "Изменён позднее" }, configuration: { colorName: "Чёрный" } },
     { productName: "Полотенце", quantity: 1, totalPrice: 300, groupLabel: null, product: { groupId: "group", groupLabel: "Большое" }, configuration: { colorName: "Бежевый" } },
+    { productName: "Крючки", quantity: 1, totalPrice: 300, groupLabel: "300301", productColor: "Белый", configuration: {}, product: { groupId: "group", groupLabel: "300301", specifications: { "Цвет товара": "Розовый" } } },
+    { productName: "Старый заказ", quantity: 1, totalPrice: 300, groupLabel: null, configuration: {}, product: { groupId: "group", groupLabel: "300302", specifications: { "Цвет товара": "Синий" } } },
   ] };
   const text = telegramPrivateOrderText(order, "https://sidzen.shop");
   expect(text).toContain("Цвет: Чёрный"); expect(text).not.toContain("Изменён позднее");
   expect(text).toContain("Вариант: Большое · Цвет: Бежевый");
+  expect(text).toContain("Вариант: 300301 · Цвет: Белый");
+  expect(text).toContain("Вариант: 300302 · Цвет: Синий");
+  expect(text).not.toContain("Розовый");
   expect(text.match(/Чёрный/g)).toHaveLength(1);
+});
+it("prefers the color chosen for the order over the product's default color", () => {
+  const order = { id: "opaque", number: "ORDER-1", shippingAddress: null, subtotal: 100, deliveryPrice: 0, total: 100, shipment: null, items: [
+    { productName: "Товар", quantity: 1, totalPrice: 100, groupLabel: "Размер M", productColor: "Белый", configuration: { color: "cobalt" } },
+  ] };
+  const text = telegramPrivateOrderText(order, "https://sidzen.shop");
+  expect(text).toContain("Вариант: Размер M · Цвет: Кобальт"); expect(text).not.toContain("Белый");
 });
 it("bounds long item lists and announces cancellation without leaking details to groups", () => {
   const order = { id: "opaque", number: "ORDER-1", shippingAddress: null, subtotal: 100, deliveryPrice: 0, total: 100, shipment: null, items: Array.from({ length: 100 }, () => ({ productName: "А".repeat(200), groupLabel: "Б".repeat(180), quantity: 1, totalPrice: 1 })) };

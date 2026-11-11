@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { getCart } from "@/app/actions/cart";
 import { productOptionInclude, productOptions } from "@/lib/product-options-server";
+import { productColorFromSpecifications } from "@/lib/product-color";
 
 type Cart = NonNullable<Awaited<ReturnType<typeof getCart>>>;
 type Product = NonNullable<Cart["items"][number]["product"]>;
@@ -11,7 +12,7 @@ export function checkoutProductSnapshot(product: Product) {
   const options = productOptions(product);
   const sorted = <T extends { id: string }>(items: T[]) => [...items].sort((a, b) => a.id.localeCompare(b.id));
   return JSON.stringify({
-    id: product.id, name: product.name, sku: product.sku, type: product.type, status: product.status, groupId: product.groupId, groupLabel: product.groupLabel,
+    id: product.id, name: product.name, sku: product.sku, type: product.type, status: product.status, groupId: product.groupId, groupLabel: product.groupLabel, productColor: productColorFromSpecifications(product.specifications),
     basePrice: options.basePrice, weightGrams: options.weightGrams, madeToOrder: product.madeToOrder,
     leadDays: product.leadDays, shippingWeightG: product.shippingWeightG, shippingLengthMm: product.shippingLengthMm,
     shippingWidthMm: product.shippingWidthMm, shippingHeightMm: product.shippingHeightMm,

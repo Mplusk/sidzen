@@ -23,6 +23,7 @@ import { writeDiagnostic } from "@/lib/diagnostics";
 import { ozonDiagnosticCode, type DiagnosticCode } from "@/lib/diagnostic-events";
 import { ozonCreateBody } from "@/lib/delivery/ozon-worker";
 import { queueTelegramOrder } from "@/lib/telegram/config";
+import { productColorFromSpecifications } from "@/lib/product-color";
 import type { CheckoutActionState } from "@/lib/checkout-action-state";
 import { CDEK_DELIVERY_CODE, getCdekConfig, requireCdek } from "@/lib/delivery/cdek-config";
 import { cdekConfigFingerprint, cdekPackages, verifyCdekQuote, type CdekQuote } from "@/lib/delivery/cdek-quote";
@@ -162,7 +163,7 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
         const remaining = item.productId ? reservedProducts.get(item.productId) ?? 0 : 0;
         const held = Math.min(item.quantity, remaining);
         if (item.productId) reservedProducts.set(item.productId, remaining - held);
-        return { productId: item.productId, variantId: item.quote!.variantId ?? item.variantId, productName: item.product!.name, groupLabel: item.product!.groupId ? item.product!.groupLabel || item.product!.sku : null, sku: item.product!.sku, quantity: item.quantity, reservedStock: held, stockReservationState: held ? "ACTIVE" : "NONE", unitPrice: item.unitPrice, totalPrice: item.unitPrice * item.quantity, configuration: item.quote!.config, materialId: item.quote!.materialId, colorId: item.quote!.colorId };
+        return { productId: item.productId, variantId: item.quote!.variantId ?? item.variantId, productName: item.product!.name, groupLabel: item.product!.groupId ? item.product!.groupLabel || item.product!.sku : null, productColor: productColorFromSpecifications(item.product!.specifications), sku: item.product!.sku, quantity: item.quantity, reservedStock: held, stockReservationState: held ? "ACTIVE" : "NONE", unitPrice: item.unitPrice, totalPrice: item.unitPrice * item.quantity, configuration: item.quote!.config, materialId: item.quote!.materialId, colorId: item.quote!.colorId };
       });
       // Claim the cart rows atomically so a double click cannot create two orders.
       const claimed = await tx.cartItem.deleteMany({ where: { cartId: cart.id, OR: cart.items.map((item) => ({ id: item.id, quantity: item.quantity, updatedAt: item.updatedAt })) } });
