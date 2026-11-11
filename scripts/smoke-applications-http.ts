@@ -124,10 +124,16 @@ try {
   const pendingOwner = await prisma.order.create({ data: { number: pendingOwnerNumber, userId: owner.id, kind: "ORDER", status: "AWAITING_PAYMENT", reservationExpiresAt: new Date(Date.now() + 600_000), customerName: "QA", customerEmail: "qa@example.test", customerPhone: "+79990000000", subtotal: 250, total: 250, payment: { create: { provider: "yookassa-online", amount: 250, status: "PENDING" } } } }); orderIds.push(pendingOwner.id);
   const ownerPage = await (await request("/account/", undefined, buyer)).text();
   assert(ownerPage.includes(`aria-label="Оплатить заказ ${pendingOwnerNumber}"`));
+  assert(ownerPage.includes('data-order-status="AWAITING_PAYMENT"'));
   const ownerOrders = await (await request("/account/orders/", undefined, buyer)).text();
   assert(ownerOrders.includes(`aria-label="Оплатить заказ ${pendingOwnerNumber}"`));
+  assert(ownerOrders.includes('data-order-status="AWAITING_PAYMENT"'));
   assert((await (await request(`/account/orders/${pendingOwnerNumber}/`, undefined, buyer)).text()).includes("Перейти к оплате"));
   assert.equal((await request(`/account/orders/${pendingOwnerNumber}/`, undefined, other)).status, 404);
+  await prisma.order.update({ where: { id: pendingOwner.id }, data: { status: "CANCELED" } });
+  const canceledOwnerPage = await (await request("/account/", undefined, buyer)).text();
+  assert(canceledOwnerPage.includes('data-order-status="CANCELED"'));
+  assert(!canceledOwnerPage.includes(`aria-label="Оплатить заказ ${pendingOwnerNumber}"`));
   console.log("PASS applications HTTP: buyer/guest contact requests without payments/receipts, custom delivery without carrier calls, forged/stale payment ignored, validation / price / CSRF / duplicate protection, manual statuses / purchase attestation, scoped access, confirmed archival with durable Ozon cancellation intent / retained history, active and deleted lists. No external APIs.");
 } finally {
   await prisma.auditLog.deleteMany({ where: { entityId: { in: orderIds } } });

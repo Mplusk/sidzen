@@ -21,7 +21,7 @@ export default async function OrdersPage() {
     <thead><tr><th scope="col">Номер</th><th scope="col">Дата</th><th scope="col">Позиций</th><th scope="col">Статус</th><th scope="col">Доставка</th><th scope="col">Трек</th><th scope="col">Сумма</th>{hasPaymentActions && <th scope="col">Оплата</th>}</tr></thead>
     <tbody>{orders.map(order => <tr key={order.id} role="row">
       <td data-label="Номер"><Link href={`/account/orders/${order.number}/`}><strong>{order.number}</strong></Link></td><td data-label="Дата">{formatDate(order.createdAt)}</td><td data-label="Позиций">{order.items.length}</td>
-      <td data-label="Статус"><span className="status">{orderStatus(order.status)}</span></td>
+      <td data-label="Статус"><span className="status" data-order-status={order.status}>{orderStatus(order.status)}</span></td>
       <td data-label="Доставка">{dashboardDelivery(order.shipment).label}<DeliveryEstimate estimate={estimatedDelivery(order.shipment, order.status)} /></td><td data-label="Трек">{order.shipment?.tracking ?? "—"}</td><td data-label="Сумма">{formatPrice(order.total)}</td>
       {hasPaymentActions && <td className={styles.payment}><ContinuePayment order={order} compact /></td>}
     </tr>)}</tbody>

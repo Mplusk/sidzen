@@ -466,6 +466,10 @@ input[type="range"] { accent-color: var(--blue); }
 .data-table th, .data-table td { padding: 14px 16px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
 .data-table th { color: var(--muted); background: #f3f4f3; font-size: .72rem; letter-spacing: .04em; text-transform: uppercase; }
 .status { display: inline-flex; padding: 5px 9px; border-radius: 100px; color: #28563f; background: #e5f4eb; font-size: .72rem; font-weight: 500; }
+.status[data-order-status] { color: #555b4d; background: #eff1e9; font-size: .75rem; }
+.status[data-order-status="AWAITING_PAYMENT"] { color: #795116; background: #fff1d9; }
+.status[data-order-status="CANCELED"], .status[data-order-status="REFUNDED"] { color: #625c55; background: #efede9; }
+.status[data-order-status="PAID"], .status[data-order-status="DELIVERED"] { color: #28563f; background: #e5f4eb; }
 
 .admin-shell { min-height: 100vh; display: grid; grid-template-columns: 16.25rem minmax(0, 1fr); background: #f8f5ef; }
 .admin-sidebar { position: sticky; top: 0; height: 100dvh; overflow-y: auto; display: flex; flex-direction: column; padding: 24px 18px; color: #e5dcd0; background: #2e2e29; }

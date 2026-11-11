@@ -21,14 +21,14 @@ export default async function AccountPage() {
   const hasPaymentActions = orders.some(order => canContinuePayment(order));
   return <>
     <span className="eyebrow">Личный кабинет</span><h1>Здравствуйте, {user.name?.split(" ")[0] ?? "клиент"}</h1>
-    <div className="stats-grid"><div className="stat-card"><span>Всего заказов</span><strong>{orderCount}</strong></div><div className="stat-card"><span>Активные</span><strong>{activeCount}</strong></div><div className="stat-card"><span>Получено</span><strong>{deliveredCount}</strong></div></div>
-    <div className="section-heading" style={{ marginTop: 50 }}><h2 style={{ fontSize: "2rem" }}>Последние заказы</h2><Link className="text-link" href="/account/orders/">Все заказы</Link></div>
-    {orders.length ? <div className="data-table-wrap"><table className={`data-table ${styles.table}`}>
+    <div className={`stats-grid ${styles.stats}`}><div className="stat-card"><span>Всего заказов</span><strong>{orderCount}</strong></div><div className="stat-card"><span>Активные</span><strong>{activeCount}</strong></div><div className="stat-card"><span>Получено</span><strong>{deliveredCount}</strong></div></div>
+    <div className={styles.sectionHeading}><h2>Последние заказы</h2><Link className="text-link" href="/account/orders/">Все заказы</Link></div>
+    {orders.length ? <div className={`data-table-wrap ${styles.wrapper}`}><table className={`data-table ${styles.table}`} role="table">
       <thead><tr><th scope="col">Заказ</th><th scope="col">Дата</th><th scope="col">Статус</th><th scope="col">Сумма</th>{hasPaymentActions && <th scope="col">Оплата</th>}</tr></thead>
-      <tbody>{orders.map(order => <tr key={order.id}>
+      <tbody>{orders.map(order => <tr key={order.id} role="row">
         <td data-label="Заказ"><Link href={`/account/orders/${order.number}/`}><strong>{order.number}</strong></Link></td>
         <td data-label="Дата">{formatDate(order.createdAt)}</td>
-        <td data-label="Статус"><span className="status">{orderStatus(order.status)}</span></td>
+        <td data-label="Статус"><span className="status" data-order-status={order.status}>{orderStatus(order.status)}</span></td>
         <td data-label="Сумма">{formatPrice(order.total)}</td>
         {hasPaymentActions && <td className={styles.payment}><ContinuePayment order={order} compact /></td>}
       </tr>)}</tbody>
