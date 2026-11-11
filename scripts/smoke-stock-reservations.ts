@@ -5,6 +5,8 @@ import { reserveStock, finishStockReservations, releaseUnsentStock } from "../sr
 import { adjustLockedCartHold, expireCartHold, holdCartForCheckout, lockCartHold, reserveOrderFromCart } from "../src/lib/cart-stock-holds";
 import { expireUnpaidOrderHold } from "../src/lib/stock-hold-expiration";
 import { restoreExpiredOrderStock } from "../src/lib/late-order-stock";
+import { applyYooKassaPayment } from "../src/lib/yookassa/payments";
+import { prisma } from "../src/lib/prisma";
 
 // This test writes and deletes fixtures. Never allow it to connect to production.
 const connection = new URL(process.env.DATABASE_URL ?? "");
@@ -54,7 +56,7 @@ async function main() {
 
   const placed = await db.$transaction(async tx => {
     const reservation = await reserveOrderFromCart(tx, winner.id, [{ productId: contested, quantity: 1 }], new Date(moment.getTime() + 25 * 60_000));
-    const value = await tx.order.create({ data: { number: `${tag}-timed`, kind: "ORDER", status: "AWAITING_PAYMENT", inventoryTracked: true, reservationExpiresAt: reservation.expiresAt, customerName: "QA", customerEmail: "qa@example.test", customerPhone: "+79990000000", subtotal: 1, total: 1, items: { create: { productId: contested, productName: "Stock QA", quantity: 1, unitPrice: 1, totalPrice: 1, reservedStock: reservation.reserved.get(contested) ?? 0, stockReservationState: "ACTIVE" } }, payment: { create: { provider: "yookassa-online", amount: 1, status: "PENDING", externalId: randomUUID() } } } });
+    const value = await tx.order.create({ data: { number: `${tag}-timed`, kind: "ORDER", status: "AWAITING_PAYMENT", inventoryTracked: true, reservationExpiresAt: reservation.expiresAt, customerName: "QA", customerEmail: "qa@example.test", customerPhone: "+79990000000", subtotal: 1, total: 1, items: { create: { productId: contested, productName: "Stock QA", quantity: 1, unitPrice: 1, totalPrice: 1, reservedStock: reservation.reserved.get(contested) ?? 0, stockReservationState: "ACTIVE" } }, payment: { create: { provider: "yookassa-online", amount: 1, status: "PENDING", externalId: randomUUID(), payload: { version: 1, shopId: "123", firstAttemptAt: moment.toISOString(), request: "synthetic-encrypted-request" } } } }, include: { payment: true } });
     return { order: value, expiresAt: reservation.expiresAt };
   });
   orderIds.push(placed.order.id);
@@ -67,11 +69,13 @@ async function main() {
   assert.equal((await db.product.findUniqueOrThrow({ where: { id: contested } })).reservedStock, 0);
   const secondStart = new Date(placed.expiresAt.getTime() + 2);
   await holdCartForCheckout(db, loser, secondStart);
-  assert.equal(await db.$transaction(tx => restoreExpiredOrderStock(tx, placed.order.id)), false, "A late payment cannot steal another buyer's hold");
+  await applyYooKassaPayment({ id: placed.order.payment!.externalId!, status: "succeeded", paid: true, test: false, amount: { value: "1.00", currency: "RUB" }, metadata: { orderId: placed.order.id, paymentId: placed.order.payment!.id }, recipient: { account_id: "123" } });
+  assert.deepEqual(await db.order.findUniqueOrThrow({ where: { id: placed.order.id }, select: { status: true, stockReviewRequired: true } }), { status: "PAID", stockReviewRequired: true }, "A late paid order is flagged when another cart holds the last product");
+  assert.equal((await db.product.findUniqueOrThrow({ where: { id: contested } })).reservedStock, 1, "Late payment cannot steal another buyer's hold");
   const otherHold = await db.cartStockHold.findUniqueOrThrow({ where: { cartId: loser.id } });
   assert.equal(await expireCartHold(db, otherHold.id, new Date(secondStart.getTime() + 30 * 60_000)), true);
   assert.equal(await expireCartHold(db, otherHold.id, new Date(secondStart.getTime() + 30 * 60_000)), false);
-  assert.equal(await db.$transaction(tx => restoreExpiredOrderStock(tx, placed.order.id)), true, "A late payment can recover stock when it is still available");
+  assert.equal(await db.$transaction(async tx => { const ok = await restoreExpiredOrderStock(tx, placed.order.id); if (ok) await tx.order.update({ where: { id: placed.order.id }, data: { stockReviewRequired: false } }); return ok; }), true, "A late payment can recover stock when it is still available");
   assert.equal((await db.product.findUniqueOrThrow({ where: { id: contested } })).reservedStock, 1);
 
   const adjustable = await product(3), editable = await cartFor(adjustable, 2);
@@ -132,10 +136,12 @@ async function main() {
   console.log("Stock reservation smoke passed");
 }
 main().finally(async () => {
-  await db.auditLog.deleteMany({ where: { entityId: { in: orderIds } } });
+  const paymentIds = (await db.payment.findMany({ where: { orderId: { in: orderIds } }, select: { id: true } })).map(payment => payment.id);
+  await db.auditLog.deleteMany({ where: { entityId: { in: [...orderIds, ...paymentIds] } } });
   await db.order.deleteMany({ where: { number: { startsWith: tag } } });
   await db.cartStockHold.deleteMany({ where: { cartId: { in: cartIds } } });
   await db.cart.deleteMany({ where: { id: { in: cartIds } } });
   await db.product.deleteMany({ where: { id: { in: productIds } } });
   await db.$disconnect();
+  await prisma.$disconnect();
 }).catch(error => { console.error(error); process.exitCode = 1; });
