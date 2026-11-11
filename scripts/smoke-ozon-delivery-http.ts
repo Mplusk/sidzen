@@ -248,6 +248,10 @@ try {
   assert(await prisma.auditLog.findFirst({ where: { action: "integration.delivery.delete", entityId: carrier.id } }));
   assert(!(await (await request(path)).text()).includes(carrier.id));
   assert(!(await (await request("/delivery/")).text()).includes(carrier.name));
+  // The QA cart row was recreated above. Keep the old delivery selection, but
+  // use the current cart fingerprint to isolate the removed-method check.
+  const currentCartForm = actionForm(await (await request("/checkout/")).text(), 'name="expectedTotal"');
+  manualOrder.set("cartFingerprint", String(currentCartForm.get("cartFingerprint")));
   await assertInlineCheckoutError(await request("/checkout/", manualOrder), "delivery");
   for (const [key, value] of Object.entries({ name: carrier.name, description: carrier.description || "", basePrice: String(carrier.basePrice), sortOrder: String(carrier.sortOrder), active: "on" })) staleEdit.set(key, value);
   assert.equal((await request(path, staleEdit)).headers.get("location"), path + "?result=delivery-missing");
