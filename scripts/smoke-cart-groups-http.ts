@@ -3,6 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { prisma } from "../src/lib/prisma";
 import { reserveStock } from "../src/lib/stock-reservations";
+import { expireCartHold } from "../src/lib/cart-stock-holds";
 
 const base = new URL(process.env.SMOKE_BASE_URL || "http://localhost:3101"), db = new URL(process.env.DATABASE_URL || "");
 assert(["localhost", "127.0.0.1"].includes(base.hostname) && ["localhost", "127.0.0.1"].includes(db.hostname) && db.pathname === "/shop_qa");
@@ -11,7 +12,7 @@ const actionId = Object.entries(manifest.node).find(([, v]) => (v as { exportedN
 assert(actionId, "Missing group action");
 const prefix = `qa-cart-${randomUUID().slice(0, 8)}`, sessionKey = randomBytes(24).toString("base64url");
 const jar = new Map([["3dp_cart", sessionKey]]), colorIds: string[] = [];
-let cartId = "", productId = "", categoryId = "";
+let cartId = "", productId = "", extraProductId = "", categoryId = "";
 const decode = (s: string) => s.replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
 async function request(path: string, init: RequestInit = {}) {
   const response = await fetch(new URL(path, base), { ...init, redirect: "manual", headers: { Cookie: [...jar].map(([k, v]) => `${k}=${v}`).join("; "), ...init.headers }, signal: AbortSignal.timeout(15000) });
@@ -61,6 +62,18 @@ try {
   assert.equal(red.members.reduce((sum, row) => sum + row.quantity, 0), 2);
   assert.equal(blue.members.reduce((sum, row) => sum + row.quantity, 0), 1);
   assert.equal(await prisma.cartItem.count({ where: { cartId } }), 3, "Rendering must not mutate cart");
+  const checkoutMarkup = [...snapshot.html.matchAll(/<form\b[\s\S]*?<\/form>/g)].map(match => match[0]).find(value => value.includes("ОФОРМИТЬ ЗАКАЗ"));
+  assert(checkoutMarkup, "Checkout must be an explicit reservation action");
+  const startCheckout = new FormData();
+  for (const input of checkoutMarkup.matchAll(/<input\b[^>]*>/g)) {
+    const name = input[0].match(/name="([^"]*)"/)?.[1], value = input[0].match(/value="([^"]*)"/)?.[1] || "";
+    if (name && (name.startsWith("$ACTION") || input[0].includes('type="hidden"'))) startCheckout.set(decode(name), decode(value));
+  }
+  assert.equal((await request("/cart/", { method: "POST", headers: { Origin: base.origin }, body: startCheckout })).headers.get("location"), "/checkout/");
+  const hold = await prisma.cartStockHold.findUniqueOrThrow({ where: { cartId }, include: { items: true } });
+  assert.equal(hold.items[0].quantity, 3);
+  assert.equal((await prisma.product.findUniqueOrThrow({ where: { id: productId } })).reservedStock, 3);
+  assert.equal((await cartGroups()).groups.length, 2, "A buyer must still see their own reserved stock");
   assert(!(await update(red.members, 3)).includes("Корзина изменилась"));
   assert.equal((await prisma.cartItem.findMany({ where: { cartId, variantId: variants[0].id } })).reduce((sum, row) => sum + row.quantity, 0), 3);
   assert((await update(red.members, 2)).includes("Корзина изменилась"), "Old snapshot cannot overwrite updated cart");
@@ -78,6 +91,7 @@ try {
   const after = await prisma.cartItem.findMany({ where: { cartId, productId } });
   const total = after.reduce((sum, row) => sum + row.quantity, 0);
   assert(total <= 5, "Concurrent requests cannot exceed available stock");
+  assert.equal((await prisma.product.findUniqueOrThrow({ where: { id: productId } })).reservedStock, total, "Changing a held cart must adjust its reserve");
   if ((added.headers.get("location") ?? "").includes("error=stock")) assert.equal(total, redTotal + 1);
   else assert.equal(total, redTotal + 2, "Successful concurrent add must not be lost");
   if (updateBody.includes("Корзина изменилась")) assert.equal(total, redTotal + 2);
@@ -91,10 +105,33 @@ try {
   assert.equal((await request("/cart/", { method: "POST", headers: { Origin: base.origin }, body: removal })).headers.get("location"), "/cart/");
   assert.equal(await prisma.cartItem.count({ where: { cartId, variantId: variants[1].id } }), 0);
   assert((await prisma.cartItem.count({ where: { cartId, variantId: variants[0].id } })) > 0, "Removing one variant must preserve the other");
+  const lastHold = await prisma.cartStockHold.findUniqueOrThrow({ where: { cartId } });
+  await expireCartHold(prisma, lastHold.id, new Date(Date.now() + 31 * 60_000));
+  await prisma.product.update({ where: { id: productId }, data: { stock: 0 } });
+  const soldOutHtml = await (await request("/cart/")).text();
+  const soldOut = soldOutHtml.match(/<article class="cart-item cart-item--unavailable">[\s\S]*?<\/article>/)?.[0];
+  assert(soldOut?.includes("не войдёт в заказ") && !soldOut.includes("Количество товара:"), "Sold-out rows only offer removal");
+  assert.match(soldOutHtml, /<button\b[^>]*disabled[^>]*>ОФОРМИТЬ ЗАКАЗ<\/button>/);
+  const extra = await prisma.product.create({ data: { sku: `${prefix}-available`, name: `${prefix}-available`, slug: `${prefix}-available`, basePrice: 123, status: "PUBLISHED", stock: 2, madeToOrder: false, categories: { create: { categoryId, isPrimary: true } } } }); extraProductId = extra.id;
+  await prisma.cartItem.create({ data: { cartId, productId: extra.id, quantity: 1, unitPrice: 123, config: {} } });
+  const mixedHtml = await (await request("/cart/")).text();
+  assert(mixedHtml.includes("ОФОРМИТЬ ЗАКАЗ") && mixedHtml.includes("123 ₽"), "An available row remains orderable and contributes to the total");
+  const mixedMarkup = [...mixedHtml.matchAll(/<form\b[\s\S]*?<\/form>/g)].map(match => match[0]).find(value => value.includes("ОФОРМИТЬ ЗАКАЗ")); assert(mixedMarkup);
+  const mixedStart = new FormData();
+  for (const input of mixedMarkup.matchAll(/<input\b[^>]*>/g)) {
+    const name = input[0].match(/name="([^"]*)"/)?.[1], value = input[0].match(/value="([^"]*)"/)?.[1] || "";
+    if (name && (name.startsWith("$ACTION") || input[0].includes('type="hidden"'))) mixedStart.set(decode(name), decode(value));
+  }
+  assert.equal((await request("/cart/", { method: "POST", headers: { Origin: base.origin }, body: mixedStart })).headers.get("location"), "/checkout/");
+  const mixedHold = await prisma.cartStockHold.findUniqueOrThrow({ where: { cartId }, include: { items: true } });
+  assert.deepEqual(mixedHold.items.map(item => item.productId), [extra.id], "Sold-out rows must not be held");
   console.log("PASS: virtual cart grouping, variants, quantity, stale/concurrent mutations, addition and checkout stock protection.");
 } finally {
+  const hold = cartId ? await prisma.cartStockHold.findUnique({ where: { cartId } }) : null;
+  if (hold) await expireCartHold(prisma, hold.id, new Date(Date.now() + 31 * 60_000));
   if (cartId) await prisma.cart.deleteMany({ where: { id: cartId } });
   if (productId) await prisma.product.deleteMany({ where: { id: productId } });
+  if (extraProductId) await prisma.product.deleteMany({ where: { id: extraProductId } });
   if (categoryId) await prisma.category.deleteMany({ where: { id: categoryId } });
   await prisma.color.deleteMany({ where: { id: { in: colorIds } } });
   await prisma.$disconnect();

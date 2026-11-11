@@ -37,16 +37,18 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
     prisma.order.count({ where: fiscalAttentionWhere() }),
   ]);
   const where: Prisma.OrderWhereInput = { deletedAt: null, ...(archived ? archivedOrdersWhere : { NOT: archivedOrdersWhere }) };
-  const [orders, total, needsConfirmation] = canReadOrders ? await Promise.all([
+  const [orders, total, needsConfirmation, lateStock] = canReadOrders ? await Promise.all([
     prisma.order.findMany({ where, include: { shipment: { include: { ozonJob: true, cdekJob: true } } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: (page - 1) * pageSize, take: pageSize }),
     prisma.order.count({ where }),
     prisma.order.count({ where: { deletedAt: null, status: { notIn: ["DELIVERED", "CANCELED", "REFUNDED"] }, shipment: { is: { deliveredAt: { not: null } } }, AND: [receivedOrdersWhere] } }),
-  ]) : [[], 0, 0];
+    prisma.order.findFirst({ where: { deletedAt: null, stockReviewRequired: true, status: "PAID" }, select: { number: true }, orderBy: { updatedAt: "asc" } }),
+  ]) : [[], 0, 0, null];
   const base = archived ? "/admin/?view=received" : "/admin/?view=active";
   return <>
     <div className="admin-header"><div><span className="eyebrow">Управление</span><h1>Дашборд</h1></div><Link className="button" href="/admin/orders/">Заявки покупателей</Link></div>
     <p className="notice">Новых заявок: <strong>{estimating}</strong>. <Link className="text-link" href="/admin/orders/?status=NEW">Открыть и связаться с покупателями →</Link></p>
     {fiscalAttention > 0 && <p className="notice notice--danger" role="alert">Прежних заказов, требующих проверки чеков: {fiscalAttention}. <Link className="text-link" href="/admin/orders/?fiscal=attention">Открыть сверку CloudKassir →</Link></p>}
+    {lateStock && <p className="notice notice--danger" role="alert">Оплата поступила после окончания резерва, а товар недоступен. <Link className="text-link" href={`/admin/orders/${encodeURIComponent(lateStock.number)}/`}>Проверить заказ {lateStock.number} →</Link></p>}
     <div className="admin-grid">
       <div className="admin-card admin-card--metric"><span>Заявки и заказы сегодня</span><strong>{ordersToday}</strong></div>
       <div className="admin-card admin-card--metric"><span>Прежние онлайн-продажи сегодня</span><strong>{formatPrice(Number(revenue._sum.total) || 0)}</strong></div>

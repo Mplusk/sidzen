@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { reserveStock, finishStockReservations, releaseUnsentStock } from "../src/lib/stock-reservations";
+import { adjustLockedCartHold, expireCartHold, holdCartForCheckout, lockCartHold, reserveOrderFromCart } from "../src/lib/cart-stock-holds";
+import { expireUnpaidOrderHold } from "../src/lib/stock-hold-expiration";
+import { restoreExpiredOrderStock } from "../src/lib/late-order-stock";
 
 // This test writes and deletes fixtures. Never allow it to connect to production.
 const connection = new URL(process.env.DATABASE_URL ?? "");
@@ -12,6 +15,7 @@ const db = new PrismaClient();
 const tag = `stock-smoke-${randomUUID()}`;
 const productIds: string[] = [];
 const orderIds: string[] = [];
+const cartIds: string[] = [];
 async function product(stock: number) {
   const id = `${tag}-${productIds.length}`;
   await db.product.create({ data: { id, sku: id, slug: id, name: "Stock QA", basePrice: 1, status: "PUBLISHED", stock, madeToOrder: false } });
@@ -31,6 +35,57 @@ async function order(id: string, lines: Array<{ productId: string; quantity: num
   });
 }
 async function main() {
+  const moment = new Date();
+  const contested = await product(1);
+  async function cartFor(productId: string, quantity: number) {
+    const value = await db.cart.create({ data: { sessionKey: `${tag}-cart-${cartIds.length}`, items: { create: { productId, quantity, unitPrice: 1 } } }, include: { items: true } });
+    cartIds.push(value.id);
+    return { ...value, items: value.items.map(item => ({ ...item, available: true })) };
+  }
+  const first = await cartFor(contested, 1), second = await cartFor(contested, 1);
+  const attempts = await Promise.allSettled([holdCartForCheckout(db, first, moment), holdCartForCheckout(db, second, moment)]);
+  const winnerIndex = attempts.findIndex(result => result.status === "fulfilled");
+  assert.equal(attempts.filter(result => result.status === "fulfilled").length, 1, "Exactly one cart holds the last product");
+  const winner = winnerIndex === 0 ? first : second, loser = winnerIndex === 0 ? second : first;
+  const firstExpiry = (attempts[winnerIndex] as PromiseFulfilledResult<Date>).value;
+  assert.equal(firstExpiry.getTime(), moment.getTime() + 30 * 60_000);
+  assert.equal((await holdCartForCheckout(db, winner, new Date(moment.getTime() + 5 * 60_000))).getTime(), firstExpiry.getTime(), "Repeated click must not extend a hold");
+  assert.equal((await db.product.findUniqueOrThrow({ where: { id: contested } })).reservedStock, 1);
+
+  const placed = await db.$transaction(async tx => {
+    const reservation = await reserveOrderFromCart(tx, winner.id, [{ productId: contested, quantity: 1 }], new Date(moment.getTime() + 25 * 60_000));
+    const value = await tx.order.create({ data: { number: `${tag}-timed`, kind: "ORDER", status: "AWAITING_PAYMENT", inventoryTracked: true, reservationExpiresAt: reservation.expiresAt, customerName: "QA", customerEmail: "qa@example.test", customerPhone: "+79990000000", subtotal: 1, total: 1, items: { create: { productId: contested, productName: "Stock QA", quantity: 1, unitPrice: 1, totalPrice: 1, reservedStock: reservation.reserved.get(contested) ?? 0, stockReservationState: "ACTIVE" } }, payment: { create: { provider: "yookassa-online", amount: 1, status: "PENDING", externalId: randomUUID() } } } });
+    return { order: value, expiresAt: reservation.expiresAt };
+  });
+  orderIds.push(placed.order.id);
+  assert.equal(placed.expiresAt.getTime(), moment.getTime() + 35 * 60_000, "Payment has at least ten additional minutes from the click");
+  assert.equal(await db.cartStockHold.count({ where: { cartId: winner.id } }), 0, "Hold transfers into the order");
+  assert.equal((await db.product.findUniqueOrThrow({ where: { id: contested } })).reservedStock, 1, "Transfer never doubles or releases the stock");
+  assert.equal(await expireUnpaidOrderHold(db, placed.order.id, new Date(placed.expiresAt.getTime() - 1)), false);
+  assert.equal(await expireUnpaidOrderHold(db, placed.order.id, new Date(placed.expiresAt.getTime() + 1)), true);
+  assert.equal(await expireUnpaidOrderHold(db, placed.order.id, new Date(placed.expiresAt.getTime() + 2)), false, "Order expiration is idempotent");
+  assert.equal((await db.product.findUniqueOrThrow({ where: { id: contested } })).reservedStock, 0);
+  const secondStart = new Date(placed.expiresAt.getTime() + 2);
+  await holdCartForCheckout(db, loser, secondStart);
+  assert.equal(await db.$transaction(tx => restoreExpiredOrderStock(tx, placed.order.id)), false, "A late payment cannot steal another buyer's hold");
+  const otherHold = await db.cartStockHold.findUniqueOrThrow({ where: { cartId: loser.id } });
+  assert.equal(await expireCartHold(db, otherHold.id, new Date(secondStart.getTime() + 30 * 60_000)), true);
+  assert.equal(await expireCartHold(db, otherHold.id, new Date(secondStart.getTime() + 30 * 60_000)), false);
+  assert.equal(await db.$transaction(tx => restoreExpiredOrderStock(tx, placed.order.id)), true, "A late payment can recover stock when it is still available");
+  assert.equal((await db.product.findUniqueOrThrow({ where: { id: contested } })).reservedStock, 1);
+
+  const adjustable = await product(3), editable = await cartFor(adjustable, 2);
+  await holdCartForCheckout(db, editable, moment);
+  await db.$transaction(async tx => {
+    const { hold, products } = await lockCartHold(tx, editable.id, [adjustable]);
+    await adjustLockedCartHold(tx, hold, products.find(product => product.id === adjustable), adjustable, 1);
+    await tx.cartItem.update({ where: { id: editable.items[0].id }, data: { quantity: 1 } });
+  });
+  assert.equal((await db.product.findUniqueOrThrow({ where: { id: adjustable } })).reservedStock, 1, "Reducing quantity frees the difference immediately");
+  const editableHold = await db.cartStockHold.findUniqueOrThrow({ where: { cartId: editable.id } });
+  await expireCartHold(db, editableHold.id, new Date(moment.getTime() + 30 * 60_000));
+  assert.equal((await db.product.findUniqueOrThrow({ where: { id: adjustable } })).reservedStock, 0);
+
   const last = await product(1);
   const races = await Promise.allSettled([order(`${tag}-race-a`, [{ productId: last, quantity: 1 }]), order(`${tag}-race-b`, [{ productId: last, quantity: 1 }])]);
   const winners = races.filter((r): r is PromiseFulfilledResult<string> => r.status === "fulfilled");
@@ -77,7 +132,10 @@ async function main() {
   console.log("Stock reservation smoke passed");
 }
 main().finally(async () => {
+  await db.auditLog.deleteMany({ where: { entityId: { in: orderIds } } });
   await db.order.deleteMany({ where: { number: { startsWith: tag } } });
+  await db.cartStockHold.deleteMany({ where: { cartId: { in: cartIds } } });
+  await db.cart.deleteMany({ where: { id: { in: cartIds } } });
   await db.product.deleteMany({ where: { id: { in: productIds } } });
   await db.$disconnect();
 }).catch(error => { console.error(error); process.exitCode = 1; });

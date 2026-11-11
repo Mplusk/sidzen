@@ -3,12 +3,13 @@
 import { randomBytes } from "node:crypto";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { getCart } from "@/app/actions/cart";
+import { checkoutCart } from "@/lib/checkout-cart";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkoutSchema } from "@/lib/checkout-validation";
 import { setGuestGrantCookie } from "@/lib/order-access";
 import { createGuestGrant } from "@/lib/guest-order-grant";
-import { reserveStock } from "@/lib/stock-reservations";
+import { reserveOrderFromCart } from "@/lib/cart-stock-holds";
 import { assertCheckoutProductsUnchanged } from "@/lib/checkout-product-snapshot";
 import { deliveryConfigFingerprint, getOzonDeliveryConfig, OZON_DELIVERY_CODE, requireOzonDelivery } from "@/lib/delivery/ozon-config";
 import { verifyOzonQuote, OzonQuoteError, type OzonQuote } from "@/lib/delivery/ozon-quote";
@@ -39,8 +40,13 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
   if (!await operatorReady()) return fail("operator");
   const parsed = checkoutSchema.safeParse(Object.fromEntries(["name", "email", "phone", "city", "address", "postalCode", "delivery", "comment", "legal", "expectedTotal", "ozonQuote", "cdekQuote"].map((key) => [key, formData.get(key) ?? ""])));
   if (!parsed.success) { await writeDiagnostic("checkout.invalid"); return fail("invalid", undefined, parsed.error.flatten().fieldErrors); }
-  const cart = await getCart();
-  if (!cart?.items.length) redirect("/cart/?error=empty");
+  const rawCart = await getCart();
+  if (!rawCart?.items.length) redirect("/cart/?error=empty");
+  const cart = checkoutCart(rawCart)!;
+  if (!cart.items.length) {
+    if (rawCart.items.some(item => item.canStartCheckout && item.stockReviewRequired && item.quote)) return fail("stock-review");
+    redirect("/cart/?error=unavailable");
+  }
   if (cart.items.some((item) => !item.canStartCheckout || !item.quote)) redirect("/cart/?error=unavailable");
   if (cart.items.some((item) => item.stockReviewRequired)) return fail("stock-review");
   const user = await getCurrentUser();
@@ -146,7 +152,8 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
         if (!item.productId) throw new Error("stock-changed");
         return { productId: item.productId, quantity: item.quantity };
       });
-      const reservedProducts = await reserveStock(tx, lines);
+      const reservation = await reserveOrderFromCart(tx, cart.id, lines);
+      const reservedProducts = reservation.reserved;
       await assertCheckoutProductsUnchanged(tx, cart);
       const orderItems = cart.items.map(item => {
         const remaining = item.productId ? reservedProducts.get(item.productId) ?? 0 : 0;
@@ -158,7 +165,7 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
       const claimed = await tx.cartItem.deleteMany({ where: { cartId: cart.id, OR: cart.items.map((item) => ({ id: item.id, quantity: item.quantity, updatedAt: item.updatedAt })) } });
       if (claimed.count !== cart.items.length) throw new Error("cart-changed");
       const created = await tx.order.create({ data: {
-        number, userId: user?.id, inventoryTracked: true, kind: onlinePayment ? "ORDER" : "APPLICATION", status: onlinePayment ? "AWAITING_PAYMENT" : "NEW", customerName: parsed.data.name, customerEmail: parsed.data.email, customerPhone: parsed.data.phone,
+        number, userId: user?.id, inventoryTracked: true, reservationExpiresAt: onlinePayment ? reservation.expiresAt : null, kind: onlinePayment ? "ORDER" : "APPLICATION", status: onlinePayment ? "AWAITING_PAYMENT" : "NEW", customerName: parsed.data.name, customerEmail: parsed.data.email, customerPhone: parsed.data.phone,
         shippingAddress: ozonQuote ? ozonQuote.address : cdekQuote ? cdekQuote.address : parsed.data.delivery === "pickup" ? "Самовывоз по согласованию" : `${parsed.data.postalCode ? `${parsed.data.postalCode}, ` : ""}${parsed.data.city}, ${parsed.data.address}`,
         customerComment: parsed.data.comment || undefined, subtotal, deliveryPrice, total,
         items: { create: orderItems },

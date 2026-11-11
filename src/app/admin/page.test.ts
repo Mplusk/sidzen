@@ -2,9 +2,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => ({
-  findMany: vi.fn(), count: vi.fn(), aggregate: vi.fn(), productCount: vi.fn(), redirectCount: vi.fn(),
+  findMany: vi.fn(), findFirst: vi.fn(), count: vi.fn(), aggregate: vi.fn(), productCount: vi.fn(), redirectCount: vi.fn(),
 }));
-vi.mock("@/lib/prisma", () => ({ prisma: { order: { findMany: m.findMany, count: m.count, aggregate: m.aggregate }, product: { count: m.productCount }, redirect: { count: m.redirectCount } } }));
+vi.mock("@/lib/prisma", () => ({ prisma: { order: { findMany: m.findMany, findFirst: m.findFirst, count: m.count, aggregate: m.aggregate }, product: { count: m.productCount }, redirect: { count: m.redirectCount } } }));
 vi.mock("@/lib/auth", () => ({ requirePermission: vi.fn().mockResolvedValue({ roles: ["superadmin"], permissions: new Set() }) }));
 vi.mock("@/lib/cloudkassir/attention", () => ({ fiscalAttentionWhere: () => ({}) }));
 import AdminDashboard from "./page";
@@ -21,9 +21,16 @@ beforeEach(() => {
   vi.clearAllMocks();
   m.count.mockResolvedValue(0); m.aggregate.mockResolvedValue({ _sum: { total: 0 }, _avg: { total: 0 } });
   m.productCount.mockResolvedValue(0); m.redirectCount.mockResolvedValue(0);
+  m.findFirst.mockResolvedValue(null);
 });
 
 describe("dashboard archive", () => {
+  it("surfaces a paid order needing stock review even if it is not on the current page", async () => {
+    m.findMany.mockResolvedValue([]); m.findFirst.mockResolvedValue({ number: "QA-LATE" });
+    const html = renderToStaticMarkup(await AdminDashboard({ searchParams: Promise.resolve({}) }));
+    expect(html).toContain("Оплата поступила после окончания резерва");
+    expect(html).toContain('/admin/orders/QA-LATE');
+  });
   it("labels a canceled order as canceled and warns if carrier cancellation is unconfirmed", async () => {
     m.findMany.mockResolvedValue([order]);
     const html = renderToStaticMarkup(await AdminDashboard({ searchParams: Promise.resolve({ view: "received" }) }));

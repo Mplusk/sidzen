@@ -18,6 +18,7 @@ import { pruneOrphanReviewPhotos } from "../src/lib/review-image-maintenance";
 import { processCategoryAiJob } from "../src/lib/category-ai/worker";
 import { processReviewAiJob } from "../src/lib/review-ai/worker";
 import { processTelegramOrder } from "../src/lib/telegram/worker";
+import { releaseExpiredStockHolds } from "../src/lib/stock-hold-expiration";
 
 let stopping = false;
 let nextPrivacyCleanup = 0;
@@ -107,6 +108,22 @@ async function pickupDirectoryLoop() {
   }
 }
 const pickupDirectory = pickupDirectoryLoop();
+// Reservations expire independently of slow carrier and marketplace work.
+async function stockHoldLoop() {
+  let dirty = false;
+  while (!stopping) {
+    try {
+      dirty = await releaseExpiredStockHolds(prisma) || dirty;
+      if (dirty) {
+        const base = process.env.MARKETPLACE_APP_URL || "http://app:3000";
+        const response = await fetch(`${base}/api/internal/catalog-invalidate/`, { method: "POST", headers: { Authorization: `Bearer ${catalogInvalidationToken()}` }, redirect: "error", signal: AbortSignal.timeout(5000) });
+        if (response.ok) dirty = false;
+      }
+    } catch { await writeDiagnostic("worker.failed"); }
+    if (!stopping) await new Promise(resolve => setTimeout(resolve, 10_000));
+  }
+}
+const stockHolds = stockHoldLoop();
 console.log("Marketplace, delivery and independent financial queues ready.");
 try {
   while (!stopping) {
@@ -143,4 +160,4 @@ try {
       await new Promise((resolve) => setTimeout(resolve, 5000));
     }
   }
-} finally { stopping = true; clearInterval(pulse); await Promise.all([finances, categories, reviews, telegram, retention, pickupDirectory]); await prisma.$disconnect(); }
+} finally { stopping = true; clearInterval(pulse); await Promise.all([finances, categories, reviews, telegram, retention, pickupDirectory, stockHolds]); await prisma.$disconnect(); }

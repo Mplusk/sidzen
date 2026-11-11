@@ -5,6 +5,10 @@ vi.mock("@/app/actions/cart", () => ({ getCart: m.getCart }));
 vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: (fn: (tx: unknown) => unknown) => fn({ $queryRaw: vi.fn(), cartItem: { findMany: m.findMany, updateMany: m.update, deleteMany: m.remove }, product: { findUnique: m.product } }) } }));
 vi.mock("@/lib/product-options", () => ({ priceProduct: m.quote }));
 vi.mock("@/lib/legacy-stock-availability", () => ({ legacyStockReviewProductIds: m.legacy }));
+vi.mock("@/lib/cart-stock-holds", () => ({
+  lockCartHold: async () => ({ hold: null, products: [{ id: "product", ...await m.product() }] }),
+  adjustLockedCartHold: vi.fn(),
+}));
 vi.mock("next/cache", () => ({ revalidatePath: m.revalidate }));
 import { updateCheckoutCartGroup } from "./checkout-cart";
 const updatedAt = new Date("2030-01-01T00:00:00Z");

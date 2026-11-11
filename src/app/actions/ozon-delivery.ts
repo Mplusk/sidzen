@@ -9,6 +9,7 @@ import { requirePermission } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
 import { encryptSecret } from "@/lib/integration-secrets";
 import { getCart } from "@/app/actions/cart";
+import { checkoutCart } from "@/lib/checkout-cart";
 import { isRussianMobilePhone, normalizePhone } from "@/lib/checkout-validation";
 import { OzonDeliveryClient, OzonDeliveryError, positiveId } from "@/lib/delivery/ozon-client";
 import { deliveryConfigFingerprint, getOzonDeliveryConfig, OZON_DELIVERY_SETTING, ozonDeliveryConfigSchema, requireOzonDelivery } from "@/lib/delivery/ozon-config";
@@ -76,7 +77,8 @@ export async function quoteOzonDelivery(phoneInput: string, pointInput: string) 
   let selectedPointId: number | undefined;
   try {
     const phone = normalizePhone(phoneInput); const id = positiveId.parse(Number(pointInput));
-    const [cart, config] = await Promise.all([getCart(), getOzonDeliveryConfig()]);
+    const [rawCart, config] = await Promise.all([getCart(), getOzonDeliveryConfig()]);
+    const cart = checkoutCart(rawCart);
     requireOzonDelivery(config);
     if (!cart?.items.length || cart.items.some(item => !item.available)) throw new OzonDeliveryError("cart");
     const request = { recipient: { phone_number: phone }, delivery: { delivery_point: { delivery_point_id: id } }, postings: buildOzonPostings(cart.items, config) };

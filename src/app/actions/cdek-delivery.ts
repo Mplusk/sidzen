@@ -12,6 +12,7 @@ import { normalizePhone } from "@/lib/checkout-validation";
 import { z } from "zod";
 import { headers } from "next/headers";
 import { getCart } from "@/app/actions/cart";
+import { checkoutCart } from "@/lib/checkout-cart";
 import { operatorReady } from "@/lib/privacy";
 import { requireCdek } from "@/lib/delivery/cdek-config";
 import { cartDeliveryFingerprint } from "@/lib/delivery/ozon-quote";
@@ -103,7 +104,7 @@ export async function cdekCalculate(cityCode: number, pointCode: string) {
   if (!z.number().int().positive().safeParse(cityCode).success || !/^[A-Za-z0-9_-]{1,80}$/.test(pointCode)) return { error: "Выберите пункт выдачи." };
   try {
     const { api, config } = await publicClient();
-    const cart = await getCart();
+    const cart = checkoutCart(await getCart());
     if (!cart?.items.length || cart.items.some(item => !item.available)) throw new Error("cart");
     const packages = cdekPackages(cart);
     const point = await checkedCdekPoint(api, pointCode, cityCode, packages);

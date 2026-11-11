@@ -5,6 +5,7 @@ import { operatorReady } from "@/lib/privacy";
 import { getYooKassaConfig, yookassaReady, type YooKassaConfig } from "./config";
 import { receiptForOrder } from "./receipt";
 import { releaseUnsentStock } from "@/lib/stock-reservations";
+import { restoreExpiredOrderStock } from "@/lib/late-order-stock";
 
 const bindingSchema = z.object({ version: z.literal(1), shopId: z.string(), firstAttemptAt: z.iso.datetime(), request: z.string(), receiptStatus: z.string().optional(), reconciliationRequired: z.boolean().optional() });
 const remoteSchema = z.object({ id: z.string().uuid(), status: z.enum(["pending", "waiting_for_capture", "succeeded", "canceled"]), paid: z.boolean(), test: z.boolean(), amount: z.object({ value: z.string(), currency: z.literal("RUB") }), metadata: z.object({ orderId: z.string(), paymentId: z.string() }), recipient: z.object({ account_id: z.string() }), confirmation: z.object({ confirmation_url: z.url().optional() }).optional(), receipt_registration: z.enum(["pending", "succeeded", "canceled"]).optional(), refunded_amount: z.object({ value: z.string(), currency: z.literal("RUB") }).optional() });
@@ -44,11 +45,16 @@ export async function applyYooKassaPayment(remote: RemotePayment) {
     // A verified cancellation is terminal: an out-of-order older webhook must
     // never revive an order whose inventory may already have been released.
     const nextStatus = payment.status === "CANCELED" || payment.status === "REFUNDED" || (payment.status === "PAID" && status !== "REFUNDED") ? payment.status : status;
+    const paidAfterExpiry = nextStatus === "PAID" && status === "PAID" && payment.status !== "PAID" && !!payment.order.reservationExpiredAt && payment.order.status === "CANCELED" && !payment.order.deletedAt;
+    const recoveredStock = paidAfterExpiry ? await restoreExpiredOrderStock(tx, payment.orderId) : false;
     await tx.payment.update({ where: { id: payment.id }, data: { externalId: remote.id, payload, status: nextStatus, ...(nextStatus === "PAID" && status === "PAID" && !payment.paidAt ? { paidAt: new Date() } : {}), ...(partial ? { refundReviewRequired: true } : {}) } });
-    if (nextStatus === "PAID" && status === "PAID" && !payment.order.deletedAt) await tx.order.updateMany({ where: { id: payment.orderId, status: { in: ["NEW", "APPROVED", "AWAITING_PAYMENT"] } }, data: { status: "PAID" } });
+    if (paidAfterExpiry) {
+      await tx.order.update({ where: { id: payment.orderId }, data: { status: "PAID", statusChangedAt: new Date(), stockReviewRequired: !recoveredStock } });
+      await tx.auditLog.create({ data: { action: "order.stock.late-payment", entityType: "Order", entityId: payment.orderId, after: { stockRecovered: recoveredStock } } });
+    } else if (nextStatus === "PAID" && status === "PAID" && !payment.order.deletedAt) await tx.order.updateMany({ where: { id: payment.orderId, status: { in: ["NEW", "APPROVED", "AWAITING_PAYMENT"] } }, data: { status: "PAID", reservationExpiresAt: null } });
     if (nextStatus === "CANCELED") {
       await releaseUnsentStock(tx, payment.orderId);
-      await tx.order.updateMany({ where: { id: payment.orderId, status: { in: ["NEW", "APPROVED", "AWAITING_PAYMENT"] } }, data: { status: "CANCELED" } });
+      await tx.order.updateMany({ where: { id: payment.orderId, status: { in: ["NEW", "APPROVED", "AWAITING_PAYMENT"] } }, data: { status: "CANCELED", reservationExpiresAt: null } });
       await tx.ozonDeliveryJob.updateMany({ where: { shipment: { orderId: payment.orderId }, status: { notIn: ["CANCELED", "FINISHED"] } }, data: { cancelRequestedAt: new Date(), nextAttemptAt: new Date() } });
       await tx.cdekDeliveryJob.updateMany({ where: { shipment: { orderId: payment.orderId }, status: { notIn: ["CANCELED", "FINISHED"] } }, data: { cancelRequestedAt: new Date(), nextAttemptAt: new Date() } });
     }
@@ -56,7 +62,7 @@ export async function applyYooKassaPayment(remote: RemotePayment) {
       // Returning money does not prove the physical goods came back. Only an
       // order that definitely never entered carrier processing is releasable.
       await releaseUnsentStock(tx, payment.orderId);
-      await tx.order.updateMany({ where: { id: payment.orderId, status: { not: "REFUNDED" } }, data: { status: "REFUNDED" } });
+      await tx.order.updateMany({ where: { id: payment.orderId, status: { not: "REFUNDED" } }, data: { status: "REFUNDED", stockReviewRequired: false, reservationExpiresAt: null } });
       await tx.yooKassaSettlement.updateMany({ where: { orderId: payment.orderId, status: "PENDING", firstAttemptAt: null }, data: { status: "CANCELED" } });
       await tx.yooKassaSettlement.updateMany({ where: { orderId: payment.orderId, status: { in: ["SENDING", "QUEUED"] } }, data: { status: "MANUAL_REVIEW", errorCode: "refund-in-flight", leaseUntil: null } });
       await tx.ozonDeliveryJob.updateMany({ where: { shipment: { orderId: payment.orderId }, status: { notIn: ["CANCELED", "FINISHED"] } }, data: { cancelRequestedAt: new Date(), nextAttemptAt: new Date() } });
@@ -81,6 +87,18 @@ export async function refreshYooKassaPayment(externalId: string) {
   return remote;
 }
 
+/** Recover a payment whose creation response was lost before its ID was stored. */
+export async function recoverUnboundYooKassaPayment(externalId: string) {
+  if (!z.string().uuid().safeParse(externalId).success) throw new Error("payment-id");
+  const config = await getYooKassaConfig();
+  const remote = remoteSchema.parse(await yookassaRequest(config, `payments/${externalId}`));
+  if (remote.id !== externalId) throw new Error("payment-mismatch");
+  // applyYooKassaPayment validates the stored encrypted binding, shop, order,
+  // exact amount and any pre-existing external ID before changing anything.
+  await applyYooKassaPayment(remote);
+  return remote;
+}
+
 export async function reconcileYooKassaPayment(orderId: string, externalId: string) {
   if (!z.string().uuid().safeParse(externalId).success) throw new Error("payment-id");
   const payment = await prisma.payment.findUnique({ where: { orderId } });
@@ -100,7 +118,7 @@ export async function createYooKassaPayment(orderId: string) {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412034)`;
     const order = await tx.order.findUniqueOrThrow({ where: { id: orderId }, include: { payment: true, items: true } });
     const payment = order.payment;
-    if (order.deletedAt || order.personalDataErasedAt || !payment || payment.provider !== "yookassa-online" || !["PENDING", "AUTHORIZED"].includes(payment.status) || !["NEW", "AWAITING_PAYMENT", "APPROVED"].includes(order.status)) throw new Error("payment-state");
+    if (order.deletedAt || order.personalDataErasedAt || order.reservationExpiredAt || (order.reservationExpiresAt && order.reservationExpiresAt <= new Date()) || !payment || payment.provider !== "yookassa-online" || !["PENDING", "AUTHORIZED"].includes(payment.status) || !["NEW", "AWAITING_PAYMENT", "APPROVED"].includes(order.status)) throw new Error("payment-state");
     const config = await getYooKassaConfig(tx);
     if (payment.externalId) return { config, payment, binding: bindingSchema.parse(payment.payload) };
     if (!yookassaReady(config)) throw new Error("payment-not-configured");

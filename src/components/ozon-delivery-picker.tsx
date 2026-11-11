@@ -15,7 +15,7 @@ type CheckResult =
   | { key: string; status: "success"; value: DeliveryQuoteView }
   | { key: string; status: "error"; message: string; recipient: boolean };
 
-export function OzonDeliveryPicker({ phone, onEditPhone, onQuote, packingReady = true, verificationRevision = 0, cartPending = false }: { phone: string; onEditPhone: () => void; onQuote: (value: DeliveryQuoteView | null) => void; packingReady?: boolean; verificationRevision?: number; cartPending?: boolean }) {
+export function OzonDeliveryPicker({ phone, onEditPhone, onQuote, packingReady = true, verificationRevision = 0, cartPending = false }: { phone: string; onEditPhone: () => void; onQuote: (value: DeliveryQuoteView | null) => void; packingReady?: boolean; verificationRevision?: number | string; cartPending?: boolean }) {
   const [city, setCity] = useState<PickupMapCity | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<PickupPoint | null>(null);
   const point = selectedPoint?.id ?? "";

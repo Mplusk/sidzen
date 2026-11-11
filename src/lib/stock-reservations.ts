@@ -20,16 +20,18 @@ export async function reserveStock(tx: Tx, lines: Line[]) {
   // today's physical stock already accounts for them: require reconciliation.
   const legacy = await tx.orderItem.findFirst({ where: { productId: { in: ids }, order: { inventoryTracked: false } }, select: { id: true } });
   if (legacy) throw new Error("stock-legacy-review");
-  const reserved = new Map<string, number>();
-  for (const product of products) {
+  const plan = products.map(product => {
     const amount = totals.get(product.id)!;
     if (!Number.isSafeInteger(amount) || product.status !== "PUBLISHED") throw new Error("stock-changed");
     const available = Math.max(0, product.stock - product.reservedStock);
     if (!product.madeToOrder && available < amount) throw new Error("stock-changed");
-    const held = Math.min(amount, available);
+    return { id: product.id, held: Math.min(amount, available) };
+  });
+  const reserved = new Map<string, number>();
+  for (const { id, held } of plan) {
     if (!held) continue;
-    await tx.product.update({ where: { id: product.id }, data: { reservedStock: { increment: held } } });
-    reserved.set(product.id, held);
+    await tx.product.update({ where: { id }, data: { reservedStock: { increment: held } } });
+    reserved.set(id, held);
   }
   return reserved;
 }

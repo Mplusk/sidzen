@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ transaction: vi.fn(), find: vi.fn(), update: vi.fn(), orderUpdate: vi.fn(), audit: vi.fn(), settleUpdate: vi.fn(), cancelOzon: vi.fn(), cancelCdek: vi.fn(), release: vi.fn() }));
+const m = vi.hoisted(() => ({ transaction: vi.fn(), find: vi.fn(), update: vi.fn(), orderUpdate: vi.fn(), orderUpdateOne: vi.fn(), audit: vi.fn(), settleUpdate: vi.fn(), cancelOzon: vi.fn(), cancelCdek: vi.fn(), release: vi.fn(), restore: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: m.transaction } }));
 vi.mock("@/lib/privacy", () => ({ operatorReady: async () => true }));
 vi.mock("@/lib/stock-reservations", () => ({ releaseUnsentStock: m.release }));
+vi.mock("@/lib/late-order-stock", () => ({ restoreExpiredOrderStock: m.restore }));
 import { applyYooKassaPayment } from "./payments";
 
 const payment = { id: "payment", provider: "yookassa-online", orderId: "order", externalId: null, amount: 240, status: "PENDING", paidAt: null, payload: { version: 1, shopId: "123", firstAttemptAt: "2026-11-03T12:00:00.000Z", request: "encrypted" }, order: { id: "order", total: 240, currency: "RUB", deletedAt: null } };
@@ -10,12 +11,20 @@ const remote = { id: "28646d50-000f-5000-a000-1fe4f81e5e88", status: "succeeded"
 describe("verified YooKassa payment", () => {
   beforeEach(() => {
     vi.resetAllMocks(); m.find.mockResolvedValue(payment);
-    m.transaction.mockImplementation(callback => callback({ $executeRaw: vi.fn(), payment: { findUnique: m.find, update: m.update }, order: { updateMany: m.orderUpdate }, auditLog: { create: m.audit }, yooKassaSettlement: { updateMany: m.settleUpdate }, ozonDeliveryJob: { updateMany: m.cancelOzon }, cdekDeliveryJob: { updateMany: m.cancelCdek } }));
+    m.transaction.mockImplementation(callback => callback({ $executeRaw: vi.fn(), payment: { findUnique: m.find, update: m.update }, order: { updateMany: m.orderUpdate, update: m.orderUpdateOne }, auditLog: { create: m.audit }, yooKassaSettlement: { updateMany: m.settleUpdate }, ozonDeliveryJob: { updateMany: m.cancelOzon }, cdekDeliveryJob: { updateMany: m.cancelCdek } }));
   });
   it("only marks an order paid from the verified provider response", async () => {
     await applyYooKassaPayment(remote);
     expect(m.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "PAID", externalId: remote.id, payload: expect.objectContaining({ receiptStatus: "succeeded" }) }) }));
-    expect(m.orderUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: { status: "PAID" } }));
+    expect(m.orderUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: { status: "PAID", reservationExpiresAt: null } }));
+  });
+  it.each([true, false])("records a verified late payment and requires stock review only if recovery fails (%s)", async recovered => {
+    m.find.mockResolvedValue({ ...payment, order: { ...payment.order, status: "CANCELED", reservationExpiredAt: new Date() } });
+    m.restore.mockResolvedValue(recovered);
+    await applyYooKassaPayment(remote);
+    expect(m.restore).toHaveBeenCalledWith(expect.anything(), "order");
+    expect(m.orderUpdateOne).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "PAID", stockReviewRequired: !recovered }) }));
+    expect(m.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "PAID" }) }));
   });
   it.each([{ recipient: { account_id: "other" } }, { amount: { value: "241.00", currency: "RUB" as const } }, { metadata: { orderId: "other", paymentId: "payment" } }])("rejects mismatched payment information", async change => {
     await expect(applyYooKassaPayment({ ...remote, ...change })).rejects.toThrow("payment-mismatch");

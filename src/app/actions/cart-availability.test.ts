@@ -46,6 +46,15 @@ describe("cart checkout eligibility", () => {
     m.find.mockResolvedValue({ id: "cart", items: [{ ...row, quantity: 3, product: { ...product, reservedStock: 1 } }] });
     expect((await getCart())!.items[0]).toMatchObject({ canStartCheckout: false, available: false, stockReviewRequired: true });
   });
+  it("counts the buyer's own active hold while keeping it unavailable to another cart", async () => {
+    m.legacy.mockResolvedValue(new Set());
+    const heldProduct = { ...product, stock: 2, reservedStock: 2 };
+    const held = { ...row, product: heldProduct, quantity: 2 };
+    m.find.mockResolvedValueOnce({ id: "owner-cart", items: [held], stockHold: { id: "hold", expiresAt: new Date(Date.now() + 300_000), items: [{ productId: product.id, quantity: 2 }] } });
+    expect((await getCart())!.items[0]).toMatchObject({ available: true, canStartCheckout: true });
+    m.find.mockResolvedValueOnce({ id: "other-cart", items: [held], stockHold: null });
+    expect((await getCart())!.items[0]).toMatchObject({ available: false, canStartCheckout: false });
+  });
   it("allows made-to-order configuration to open but preserves its legacy block", async () => {
     m.find.mockResolvedValue({ id: "cart", items: [{ ...row, product: { ...product, stock: 0, madeToOrder: true } }] });
     expect((await getCart())!.items[0]).toMatchObject({ canStartCheckout: true, available: false, stockReviewRequired: true });

@@ -7,6 +7,7 @@ import { priceProduct } from "@/lib/product-options";
 import { groupCartItems, type CartGroupMember } from "@/lib/cart-groups";
 import { createHash } from "node:crypto";
 import { legacyStockReviewProductIds } from "@/lib/legacy-stock-availability";
+import { adjustLockedCartHold, lockCartHold } from "@/lib/cart-stock-holds";
 
 /** Update all displayed copies as one atomic operation; never trust client-supplied rows. */
 export async function updateCheckoutCartGroup(members: CartGroupMember[], quantity: number): Promise<{ error?: string }> {
@@ -24,15 +25,17 @@ export async function updateCheckoutCartGroup(members: CartGroupMember[], quanti
   }
   try {
     await prisma.$transaction(async tx => {
-      await tx.$queryRaw`SELECT "id" FROM "Cart" WHERE "id" = ${cart.id} FOR UPDATE`;
+      const { hold, products } = await lockCartHold(tx, cart.id, group.productId ? [group.productId] : []);
       await tx.$queryRaw`SELECT "id" FROM "CartItem" WHERE "cartId" = ${cart.id} FOR UPDATE`;
       const current = await tx.cartItem.findMany({ where: { cartId: cart.id, product: { type: { in: ["READY", "PARAMETRIC"] } } }, select: { id: true, productId: true, variantId: true, modelFileId: true, config: true, quantity: true, updatedAt: true } });
       const state = (item: typeof current[number]) => createHash("sha256").update(JSON.stringify([item.productId, item.variantId, item.modelFileId, item.config])).digest("hex");
       if (current.length !== cart.items.length || cart.items.some(item => !current.some(row => row.id === item.id && row.quantity === item.quantity && row.updatedAt.getTime() === item.updatedAt.getTime() && state(row) === item.groupState))) throw new Error("cart-changed");
-      if (quantity && group.productId) {
-        const product = await tx.product.findUnique({ where: { id: group.productId }, select: { stock: true, reservedStock: true, madeToOrder: true, status: true } });
+      if (group.productId) {
+        const product = products.find(value => value.id === group.productId);
         const other = current.filter(row => row.productId === group.productId && !members.some(m => m.id === row.id)).reduce((sum, row) => sum + row.quantity, 0);
-        if (!product || product.status !== "PUBLISHED" || (!product.madeToOrder && quantity + other > product.stock - product.reservedStock) || (await legacyStockReviewProductIds([group.productId], tx)).has(group.productId)) throw new Error("cart-changed");
+        const owned = hold?.items.find(item => item.productId === group.productId)?.quantity ?? 0;
+        if (quantity && (!product || product.status !== "PUBLISHED" || (!product.madeToOrder && quantity + other > product.stock - product.reservedStock + owned) || (await legacyStockReviewProductIds([group.productId], tx)).has(group.productId))) throw new Error("cart-changed");
+        await adjustLockedCartHold(tx, hold, product, group.productId, quantity + other, quantity > 0);
       }
       for (let i = 0; i < members.length; i++) {
         const member = members[i];

@@ -50,16 +50,16 @@ try {
     const order = await prisma.order.create({ data: { number: `${prefix}-order-${i}`, inventoryTracked: false, customerName: "QA", customerPhone: "+70000000000", customerEmail: "qa@example.test", subtotal: 100, total: 100, items: { create: { productId, productName: `${prefix} item ${i}`, sku: i === 1 ? `${prefix}-variant` : `${prefix}-sku-${i === 2 ? 1 : 0}`, quantity: 1, unitPrice: 100, totalPrice: 100 } } } });
     orders.push({ id: order.id, number: order.number });
   }
-  // An otherwise valid guest cart can open checkout even while the final
-  // order remains protected by legacy inventory reconciliation.
+  // A review-blocked row remains visible in the cart and cannot be ordered.
   const cartKey = randomBytes(24).toString("base64url");
   const cart = await prisma.cart.create({ data: { sessionKey: cartKey, items: { create: { productId: ids[0], quantity: 1, unitPrice: 100, config: { material: "", materialName: "", color: "", colorName: "" } } } } });
   cartId = cart.id; jar.set("3dp_cart", cartKey);
   const cartResponse = await request("/cart/"); assert.equal(cartResponse.status, 200);
   const cartHtml = await cartResponse.text();
-  assert.match(cartHtml, /href="\/checkout\/"[^>]*>ОФОРМИТЬ ЗАКАЗ<\/a>/);
+  assert.match(cartHtml, /<button\b[^>]*disabled[^>]*>ОФОРМИТЬ ЗАКАЗ<\/button>/);
+  assert(cartHtml.includes("не войдёт в заказ"));
   assert(!cartHtml.includes("Способ доставки и окончательную сумму выберете на следующем шаге."));
-  const checkout = await request("/checkout/"); assert.equal(checkout.status, 200, "A valid legacy-blocked item can open checkout");
+  const checkout = await request("/checkout/"); assert.equal(checkout.status, 200, "A stale direct checkout can still show that the item is unavailable");
   const checkoutHtml = await checkout.text();
   assert(checkoutHtml.includes('name="name"') && checkoutHtml.includes("<form"), "Checkout must render the recipient form");
   const submission = await form("/checkout/", 'name="expectedTotal"');
@@ -72,9 +72,9 @@ try {
   assert.deepEqual(await prisma.product.findUniqueOrThrow({ where: { id: ids[0] }, select: { stock: true, reservedStock: true } }), productBefore);
   await prisma.product.update({ where: { id: ids[0] }, data: { status: "DRAFT" } });
   assert((await (await request("/cart/")).text()).includes("ОФОРМИТЬ ЗАКАЗ"), "Cart action stays visible for a nonempty cart");
-  assert.match((await request("/checkout/")).headers.get("location") ?? "", /^\/cart\/?\?error=unavailable/);
+  assert((await (await request("/checkout/")).text()).includes("не войдут в заказ"));
   await prisma.product.update({ where: { id: ids[0] }, data: { status: "PUBLISHED", stock: 0 } });
-  assert.match((await request("/checkout/")).headers.get("location") ?? "", /^\/cart\/?\?error=unavailable/);
+  assert((await (await request("/checkout/")).text()).includes("не войдут в заказ"));
   await prisma.product.update({ where: { id: ids[0] }, data: { stock: 5 } });
   jar.delete("3dp_cart");
   const actor = await prisma.user.findUniqueOrThrow({ where: { email: "qa@example.test" } });

@@ -329,6 +329,7 @@ model Product {
   reviews          Review[]
   favorites        ProductFavorite[]
   cartItems        CartItem[]
+  cartStockHolds   CartStockHoldItem[]
   orderItems       OrderItem[]
   marketplaceMode  String              @default("AUTO")
   marketplaceListings MarketplaceListing[]
@@ -576,6 +577,30 @@ model Cart {
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
   items      CartItem[]
+  stockHold  CartStockHold?
+}
+
+// A hold survives cart deletion until the worker releases its stock.
+model CartStockHold {
+  id        String              @id @default(cuid())
+  cartId    String?             @unique
+  expiresAt DateTime
+  cart      Cart?               @relation(fields: [cartId], references: [id], onDelete: SetNull)
+  items     CartStockHoldItem[]
+
+  @@index([expiresAt])
+}
+
+model CartStockHoldItem {
+  id        String        @id @default(cuid())
+  holdId    String
+  productId String
+  quantity  Int
+  hold      CartStockHold @relation(fields: [holdId], references: [id], onDelete: Cascade)
+  product   Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([holdId, productId])
+  @@index([productId])
 }
 
 model CartItem {
@@ -603,6 +628,9 @@ model Order {
   statusChangedAt DateTime?
   kind            String              @default("ORDER")
   inventoryTracked Boolean            @default(false)
+  reservationExpiresAt DateTime?
+  reservationExpiredAt DateTime?
+  stockReviewRequired Boolean         @default(false)
   deletedAt       DateTime?
   personalDataErasedAt DateTime?
   privacyClosedAt DateTime?
@@ -636,6 +664,7 @@ model Order {
   @@index([userId, createdAt])
   @@index([deletedAt, status, createdAt])
   @@index([privacyClosedAt])
+  @@index([reservationExpiresAt])
 }
 
 // Restricted technical evidence, not a substitute for the operator's signed act.

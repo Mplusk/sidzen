@@ -6,6 +6,7 @@ vi.mock("@/app/actions/cart", () => ({ getCart: m.cart }));
 vi.mock("@/lib/order-access", () => ({ setGuestGrantCookie: m.grant }));
 vi.mock("@/lib/guest-order-grant", () => ({ createGuestGrant: async () => "v2.fixture" }));
 vi.mock("@/lib/stock-reservations", () => ({ reserveStock: m.reserve }));
+vi.mock("@/lib/cart-stock-holds", () => ({ reserveOrderFromCart: async (tx: unknown, _cartId: string, lines: unknown) => ({ reserved: await m.reserve(tx, lines), expiresAt: new Date("2030-01-01T00:10:00Z") }) }));
 vi.mock("@/lib/checkout-product-snapshot", () => ({ assertCheckoutProductsUnchanged: m.snapshot }));
 vi.mock("@/lib/payments", () => ({ createOnlinePayment: m.bank }));
 vi.mock("@/lib/yookassa/config", () => ({ getYooKassaConfig: m.paymentConfig, yookassaReady: (config: { enabled: boolean }) => config.enabled }));
@@ -32,6 +33,16 @@ beforeEach(() => {
   m.transaction.mockImplementation(callback => callback({ $executeRaw: vi.fn(), $queryRaw: vi.fn(), deliveryMethod: { findFirst: m.method }, cartItem: { deleteMany: m.claim }, order: { create: m.create }, auditLog: { create: m.audit }, privacyConsent: { update: vi.fn() } }));
 });
 describe("payment-free checkout application", () => {
+  it("creates and reserves only available rows, leaving sold-out rows in the cart", async () => {
+    const available = { id: "item", productId: "product", available: true, canStartCheckout: true, quantity: 1, unitPrice: 240, updatedAt: new Date(), product: { name: "QA product", sku: "QA" }, quote: { config: {} } };
+    const unavailable = { ...available, id: "sold-out", productId: "sold-out-product", available: false, canStartCheckout: false, unitPrice: 900 };
+    m.cart.mockResolvedValue({ id: "cart", items: [available, unavailable] });
+    await expect(createOrderAction(form())).rejects.toThrow("/checkout/success/QA-1/");
+    expect(m.reserve).toHaveBeenCalledWith(expect.anything(), [{ productId: "product", quantity: 1 }]);
+    expect(m.create.mock.calls[0][0].data.items.create).toHaveLength(1);
+    expect(m.create.mock.calls[0][0].data).toMatchObject({ subtotal: 240, total: 240 });
+    expect(m.claim.mock.calls[0][0].where.OR).toEqual([expect.objectContaining({ id: "item" })]);
+  });
   it.each([false, true])("keeps a legacy-blocked checkout in the form without provider requests or order/payment writes (online=%s)", async online => {
     m.paymentConfig.mockResolvedValue({ enabled: online });
     m.cart.mockResolvedValue({ id: "cart", items: [{ id: "item", productId: "product", available: false, canStartCheckout: true, stockReviewRequired: true, quantity: 1, unitPrice: 240, product: { name: "QA product", sku: "QA" }, quote: { config: {} } }] });

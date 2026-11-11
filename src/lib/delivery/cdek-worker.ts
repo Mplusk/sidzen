@@ -26,6 +26,7 @@ export async function processCdekJob() {
       await save({ status: "CANCELED", error: null }); return true;
     }
     if (job.status === "PENDING" && !await operatorReady()) { await save({ nextAttemptAt: later() }); return true; }
+    if (job.status === "PENDING" && job.shipment.order.stockReviewRequired) { await save({ nextAttemptAt: later() }); return true; }
     if (job.status === "PENDING" && job.shipment.order.kind !== "APPLICATION" && job.shipment.order.payment?.status !== "PAID") { await save({ nextAttemptAt: later() }); return true; }
     const config = await getCdekConfig();
     if (config.clientId !== job.clientId || config.environment !== job.environment || !config.clientSecret) throw new Error("config");
@@ -33,7 +34,7 @@ export async function processCdekJob() {
     if (job.status === "PENDING") {
       // Mark before transmission. If the process stops at any point, require
       // manual reconciliation rather than creating a duplicate order.
-      const sending = await prisma.cdekDeliveryJob.updateMany({ where: { id: job.id, lockToken, cancelRequestedAt: null, shipment: { order: { deletedAt: null, status: { notIn: ["CANCELED", "REFUNDED"] } } } }, data: { status: "SENDING", attempts: { increment: 1 } } });
+      const sending = await prisma.cdekDeliveryJob.updateMany({ where: { id: job.id, lockToken, cancelRequestedAt: null, shipment: { order: { deletedAt: null, stockReviewRequired: false, status: { notIn: ["CANCELED", "REFUNDED"] } } } }, data: { status: "SENDING", attempts: { increment: 1 } } });
       if (!sending.count) { await save({ nextAttemptAt: later() }); return true; }
       const result = acceptedSchema.parse(await api.createOrder(job.request));
       await save({ status: "ACCEPTED", remoteId: result.entity.uuid, nextAttemptAt: new Date(Date.now() + 5000), error: null });

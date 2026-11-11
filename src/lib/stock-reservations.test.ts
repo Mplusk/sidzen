@@ -23,4 +23,10 @@ describe("stock reservation", () => {
     await expect(reserveStock(tx, [{ productId: "p", quantity: 1 }])).rejects.toThrow("stock-legacy-review");
     expect(update).not.toHaveBeenCalled();
   });
+  it("checks every product before reserving any stock when one is unavailable", async () => {
+    const { tx, update } = fixture({ stock: 5, reservedStock: 0, madeToOrder: false });
+    vi.mocked(tx.$queryRaw).mockResolvedValueOnce([{ id: "a", status: "PUBLISHED", stock: 5, reservedStock: 0, madeToOrder: false }, { id: "b", status: "PUBLISHED", stock: 0, reservedStock: 0, madeToOrder: false }]);
+    await expect(reserveStock(tx, [{ productId: "a", quantity: 1 }, { productId: "b", quantity: 1 }])).rejects.toThrow("stock-changed");
+    expect(update).not.toHaveBeenCalled();
+  });
 });

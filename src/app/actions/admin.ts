@@ -49,6 +49,7 @@ export async function updateOrderStatusAction(formData: FormData) {
       if (status === "DELIVERED" && (formData.get("deliveryConfirmed") !== "on" || before.payment?.status !== "PAID" || before.payment.refundReviewRequired)) return null;
     }
     if (before.payment?.provider === "yookassa-online") {
+      if (before.stockReviewRequired && ["IN_PROGRESS", "QUEUED", "PRINTING", "PACKED", "SHIPPED", "DELIVERED"].includes(parsed.data.status)) { statusError = "stock-status"; return null; }
       if (["IN_PROGRESS", "QUEUED", "PRINTING", "PACKED", "SHIPPED", "DELIVERED"].includes(parsed.data.status) && before.payment.status !== "PAID") return null;
       if ((parsed.data.status === "PAID" && before.payment.status !== "PAID") || (parsed.data.status === "REFUNDED" && before.payment.status !== "REFUNDED") || (parsed.data.status === "CANCELED" && before.payment.status !== "CANCELED") || (before.yookassaSettlement && !["DELIVERED", "REFUNDED"].includes(parsed.data.status))) return null;
       if (parsed.data.status === "DELIVERED") {

@@ -44,6 +44,12 @@ describe("Ozon delivery quote boundary", () => {
     expect(quote.expires - Date.now()).toBeGreaterThan(14 * 60000);
     expect(quote.expires - Date.now()).toBeLessThanOrEqual(15 * 60000);
   });
+  it("does not send sold-out cart rows in the delivery calculation", async () => {
+    const available = { id: "item", available: true, quantity: 1, unitPrice: 240, config: {}, product: { madeToOrder: false, leadDays: 1 } };
+    m.cart.mockResolvedValue({ id: "cart", items: [available, { ...available, id: "sold-out", available: false, quantity: 10 }] });
+    expect(await quoteOzonDelivery("+79991234567", "8")).toMatchObject({ cost: 0 });
+    expect(m.postings.mock.calls[0][0]).toEqual([available]);
+  });
   it("returns the estimated date using the planned handover and Ozon's travel days", async () => {
     m.postings.mockReturnValue([{ request_id: 1, shipment_method_id: 7, cutoff_at: "2030-01-04T23:30:00Z", declared_value: { amount: "240.00", currency_code: "RUB" }, dimensions: { weight_g: 100, length_mm: 200, width_mm: 100, height_mm: 50 } }]);
     m.checkout.mockResolvedValue({ cost: 99, days: 3 });

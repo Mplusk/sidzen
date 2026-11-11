@@ -5,6 +5,7 @@ vi.mock("@/lib/yookassa/config", () => ({ getYooKassaConfig: async () => ({ enab
 vi.mock("@/lib/auth", () => ({ getCurrentUser: async () => ({ id: "buyer" }) }));
 vi.mock("@/app/actions/cart", () => ({ getCart: m.cart }));
 vi.mock("@/lib/stock-reservations", () => ({ reserveStock: async () => new Map([["p", 1]]) }));
+vi.mock("@/lib/cart-stock-holds", () => ({ reserveOrderFromCart: async () => ({ reserved: new Map([["p", 1]]), expiresAt: new Date("2030-01-01T00:10:00Z") }) }));
 vi.mock("@/lib/checkout-product-snapshot", () => ({ assertCheckoutProductsUnchanged: vi.fn() }));
 vi.mock("@/lib/privacy", () => ({ operatorReady: async () => true, verifyDeliveryConsent: vi.fn() }));
 vi.mock("@/lib/diagnostics", () => ({ writeDiagnostic: vi.fn() }));
