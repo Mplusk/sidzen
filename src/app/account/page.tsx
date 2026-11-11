@@ -30,7 +30,7 @@ export default async function AccountPage() {
         <td data-label="Дата">{formatDate(order.createdAt)}</td>
         <td data-label="Статус"><span className="status">{orderStatus(order.status)}</span></td>
         <td data-label="Сумма">{formatPrice(order.total)}</td>
-        {hasPaymentActions && <td className={styles.payment}><ContinuePayment order={order} /></td>}
+        {hasPaymentActions && <td className={styles.payment}><ContinuePayment order={order} compact /></td>}
       </tr>)}</tbody>
     </table></div> : <div className="empty-state"><h3>Первого заказа ещё нет</h3><p>Выберите изделие в каталоге и добавьте его в корзину.</p><Link className="button" href="/">Перейти в каталог</Link></div>}
   </>;

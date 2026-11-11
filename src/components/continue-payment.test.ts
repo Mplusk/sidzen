@@ -29,13 +29,15 @@ describe("returning to payment", () => {
     const root = createRoot(container);
     const pending = { ...order, reservationExpiresAt: new Date(Date.now() + 60_000) };
     try {
-      await act(async () => root.render(createElement(ContinuePayment, { order: pending })));
+      await act(async () => root.render(createElement(ContinuePayment, { order: pending, compact: true })));
       const form = container.querySelector("form")!;
       expect(form.querySelector<HTMLInputElement>('input[name="number"]')?.value).toBe(order.number);
       expect(form.querySelector("button")?.getAttribute("aria-label")).toContain(order.number);
       await act(async () => form.requestSubmit());
       expect(payment).toHaveBeenCalledOnce();
       expect(payment.mock.calls[0][0].get("number")).toBe(order.number);
+      await act(async () => root.render(createElement(ContinuePayment, { order: pending })));
+      expect(container.querySelector("button")?.textContent).toContain("Перейти к оплате");
     } finally {
       await act(async () => root.unmount());
       container.remove();

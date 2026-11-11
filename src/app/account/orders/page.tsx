@@ -23,7 +23,7 @@ export default async function OrdersPage() {
       <td data-label="Номер"><Link href={`/account/orders/${order.number}/`}><strong>{order.number}</strong></Link></td><td data-label="Дата">{formatDate(order.createdAt)}</td><td data-label="Позиций">{order.items.length}</td>
       <td data-label="Статус"><span className="status">{orderStatus(order.status)}</span></td>
       <td data-label="Доставка">{dashboardDelivery(order.shipment).label}<DeliveryEstimate estimate={estimatedDelivery(order.shipment, order.status)} /></td><td data-label="Трек">{order.shipment?.tracking ?? "—"}</td><td data-label="Сумма">{formatPrice(order.total)}</td>
-      {hasPaymentActions && <td className={styles.payment}><ContinuePayment order={order} /></td>}
+      {hasPaymentActions && <td className={styles.payment}><ContinuePayment order={order} compact /></td>}
     </tr>)}</tbody>
   </table></div> : <div className="empty-state">Заказов пока нет.</div>}</>;
 }

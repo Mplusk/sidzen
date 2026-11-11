@@ -1,4 +1,5 @@
 .form { margin: 0; }
+.standardForm { margin-top: .5rem; }
 .action {
   display: inline-flex;
   min-height: 2.25rem;
