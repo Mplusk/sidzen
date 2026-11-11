@@ -202,7 +202,7 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
   if (onlinePayment) {
     try {
       const { createYooKassaPayment } = await import("@/lib/yookassa/payments");
-      const url = await createYooKassaPayment(order.id);
+      const url = await createYooKassaPayment(order.id, { customerAttempt: true });
       if (url) redirect(url);
     } catch (error) { unstable_rethrow(error); }
   }

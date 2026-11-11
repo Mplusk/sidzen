@@ -6,6 +6,7 @@ import { getYooKassaConfig, yookassaReady, type YooKassaConfig } from "./config"
 import { receiptForOrder } from "./receipt";
 import { releaseUnsentStock } from "@/lib/stock-reservations";
 import { restoreExpiredOrderStock } from "@/lib/late-order-stock";
+import { extendOrderPaymentHold } from "@/lib/cart-stock-holds";
 
 const bindingSchema = z.object({ version: z.literal(1), shopId: z.string(), firstAttemptAt: z.iso.datetime(), request: z.string(), receiptStatus: z.string().optional(), reconciliationRequired: z.boolean().optional() });
 const remoteSchema = z.object({ id: z.string().uuid(), status: z.enum(["pending", "waiting_for_capture", "succeeded", "canceled"]), paid: z.boolean(), test: z.boolean(), amount: z.object({ value: z.string(), currency: z.literal("RUB") }), metadata: z.object({ orderId: z.string(), paymentId: z.string() }), recipient: z.object({ account_id: z.string() }), confirmation: z.object({ confirmation_url: z.url().optional() }).optional(), receipt_registration: z.enum(["pending", "succeeded", "canceled"]).optional(), refunded_amount: z.object({ value: z.string(), currency: z.literal("RUB") }).optional() });
@@ -111,7 +112,7 @@ export async function reconcileYooKassaPayment(orderId: string, externalId: stri
   await applyYooKassaPayment(remote);
 }
 
-export async function createYooKassaPayment(orderId: string) {
+export async function createYooKassaPayment(orderId: string, options: { customerAttempt?: boolean } = {}) {
   if (!await operatorReady()) throw new Error("personal-data-not-ready");
   const claim = await prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412026)`;
@@ -119,6 +120,7 @@ export async function createYooKassaPayment(orderId: string) {
     const order = await tx.order.findUniqueOrThrow({ where: { id: orderId }, include: { payment: true, items: true } });
     const payment = order.payment;
     if (order.deletedAt || order.personalDataErasedAt || order.reservationExpiredAt || (order.reservationExpiresAt && order.reservationExpiresAt <= new Date()) || !payment || payment.provider !== "yookassa-online" || !["PENDING", "AUTHORIZED"].includes(payment.status) || !["NEW", "AWAITING_PAYMENT", "APPROVED"].includes(order.status)) throw new Error("payment-state");
+    if (options.customerAttempt) await extendOrderPaymentHold(tx, order);
     const config = await getYooKassaConfig(tx);
     if (payment.externalId) return { config, payment, binding: bindingSchema.parse(payment.payload) };
     if (!yookassaReady(config)) throw new Error("payment-not-configured");

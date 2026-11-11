@@ -81,6 +81,16 @@ export async function reserveOrderFromCart(tx: Tx, cartId: string, lines: Line[]
   return { reserved, expiresAt };
 }
 
+/** Called under the payment locks only for an explicit customer payment attempt. */
+export async function extendOrderPaymentHold(tx: Tx, order: { id: string; reservationExpiresAt: Date | null; reservationExpiredAt: Date | null }, now = new Date()) {
+  if (order.reservationExpiredAt || (order.reservationExpiresAt && order.reservationExpiresAt <= now)) throw new Error("payment-state");
+  // Older orders have no timed reservation; do not change their existing policy.
+  if (!order.reservationExpiresAt) return null;
+  const expiresAt = new Date(Math.max(order.reservationExpiresAt.getTime(), now.getTime() + PAYMENT_HOLD_MS));
+  if (expiresAt > order.reservationExpiresAt) await tx.order.update({ where: { id: order.id }, data: { reservationExpiresAt: expiresAt } });
+  return expiresAt;
+}
+
 type CartSnapshot = { id: string; items: Array<{ id: string; productId: string | null; quantity: number; updatedAt: Date; available: boolean }> };
 
 /** A repeated click never prolongs an already-running 30-minute hold. */

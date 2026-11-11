@@ -16,7 +16,7 @@ export async function continueYooKassaPayment(form: FormData) {
   if (!order || order.deletedAt || order.payment?.provider !== "yookassa-online" || !await canAccessOrder(order)) redirect("/cart/");
   if (!rateLimit(`yookassa-continue:${order.id}`, 10, 60000).allowed) redirect(`/checkout/success/${number}/?payment=retry`);
   try {
-    const url = await createYooKassaPayment(order.id);
+    const url = await createYooKassaPayment(order.id, { customerAttempt: true });
     if (url) redirect(url);
   } catch (error) { unstable_rethrow(error); }
   redirect(`/checkout/success/${number}/?payment=retry`);

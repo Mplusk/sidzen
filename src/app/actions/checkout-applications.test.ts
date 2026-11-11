@@ -133,7 +133,7 @@ describe("payment-free checkout application", () => {
     const value = form(); value.set("paymentMode", "online");
     await expect(createOrderAction(value)).rejects.toThrow("/checkout/success/QA-1/");
     expect(m.create.mock.calls[0][0].data).toMatchObject({ kind: "ORDER", status: "AWAITING_PAYMENT", total: 240, payment: { create: { provider: "yookassa-online", amount: 240, status: "PENDING" } } });
-    expect(m.createYoo).toHaveBeenCalledWith("application");
+    expect(m.createYoo).toHaveBeenCalledWith("application", { customerAttempt: true });
   });
   it("does not unexpectedly charge a buyer who opened an application form before payment was enabled", async () => {
     m.paymentConfig.mockResolvedValue({ enabled: true });
