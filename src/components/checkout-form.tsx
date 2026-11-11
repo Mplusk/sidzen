@@ -25,12 +25,12 @@ const deliveryErrors: Record<string, string> = {
   "changed": "Корзина или условия заказа изменились. Проверьте корзину перед повторной отправкой.",
   "stock-review": "Товар временно недоступен для заказа.",
   "ozon": "Не удалось подтвердить доставку. Проверьте ПВЗ и повторите расчёт.",
-  "ozon-expired": "Истекли 15 минут действия расчёта. Проверьте доставку в ПВЗ заново.",
-  "ozon-cart": "Изменились товары, цена или упаковка. Проверьте корзину и рассчитайте доставку заново.",
-  "ozon-config": "Магазин обновил настройки доставки. Проверьте ПВЗ заново.",
-  "ozon-phone": "Изменился телефон получателя. Проверьте доставку с текущим номером заново.",
-  "ozon-signature": "Расчёт доставки отсутствует или повреждён. Проверьте ПВЗ заново.",
-  "ozon-consent": "Данные предыдущей проверки устарели. Проверьте доставку повторно.",
+  "ozon-expired": "Истекли 15 минут действия расчёта. Проверяем доставку заново.",
+  "ozon-cart": "Изменились товары, цена или упаковка. Пересчитываем доставку.",
+  "ozon-config": "Магазин обновил настройки доставки. Проверяем ПВЗ заново.",
+  "ozon-phone": "Изменился телефон получателя. Проверяем доставку заново.",
+  "ozon-signature": "Расчёт доставки отсутствует или повреждён. Проверяем ПВЗ заново.",
+  "ozon-consent": "Данные предыдущей проверки устарели. Проверяем доставку заново.",
   "ozon-transport": "Ozon не ответил на повторную проверку. Повторите расчёт чуть позже.",
   "ozon-provider": "Ozon вернул ошибку при повторной проверке доставки. Повторите расчёт или обратитесь в магазин.",
   "ozon-recipient": "Ozon не подтвердил доставку для этого номера. Проверьте его или укажите другой номер, зарегистрированный в Ozon.",
@@ -64,7 +64,10 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
   const [quoteRevision, setQuoteRevision] = useState(0);
   const [ozonQuoteEntry, setOzonQuoteEntry] = useState<{ revision: number; value: DeliveryQuoteView | null }>({ revision: 0, value: null });
   const ozonQuote = ozonQuoteEntry.revision === quoteRevision ? ozonQuoteEntry.value : null;
-  const setOzonQuote = (value: DeliveryQuoteView | null) => setOzonQuoteEntry(previous => previous.revision > quoteRevision ? previous : { revision: quoteRevision, value });
+  const setOzonQuote = (value: DeliveryQuoteView | null) => {
+    setOzonQuoteEntry(previous => previous.revision > quoteRevision ? previous : { revision: quoteRevision, value });
+    if (value && state.error && /^ozon-(expired|cart|config|phone|signature|consent|unavailable|price|recipient)$/.test(state.error)) setDismissedRecipientError(state);
+  };
   const [cdekQuote, setCdekQuote] = useState<CdekQuoteView | null>(null);
   const [cdekRevision, setCdekRevision] = useState(0);
   const [state, formAction, pending] = useActionState(createOrderWithState, {} as CheckoutActionState);
@@ -131,11 +134,11 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
       <section className={styles.panel} aria-labelledby="checkout-delivery">
         <div className={styles.panelHeading}><div><h2 id="checkout-delivery">Доставка</h2></div></div>
         {ozonDelivery && !cdekDelivery && methods.length === 0 ? <input type="hidden" name="delivery" value="ozon-delivery" /> : <fieldset className={styles.methods}><legend className="visually-hidden">Способ доставки</legend>
-          {ozonDelivery && <label className={styles.method}><input type="radio" name="delivery" value="ozon-delivery" checked={isOzon} onChange={() => changeDelivery("ozon-delivery")} required /><span className={styles.carrierLogo}><Image src="/brand/ozon-delivery.svg" alt="" width={83} height={20} /></span><span className={styles.methodText}><strong>Ozon Доставка</strong><small>{ozonQuote ? `Примерно ${ozonQuote.days} дн. после отгрузки` : "Пункт выдачи или постамат"}</small></span><strong className={styles.methodPrice}>Бесплатно</strong></label>}
+          {ozonDelivery && <label className={styles.method}><input type="radio" name="delivery" value="ozon-delivery" checked={isOzon} onChange={() => changeDelivery("ozon-delivery")} required /><span className={styles.carrierLogo}><Image src="/brand/ozon-delivery.svg" alt="" width={83} height={20} /></span><span className={styles.methodText}><strong>Ozon Доставка</strong><small>{ozonQuote?.estimatedDateText ? `Ориентировочно: ${ozonQuote.estimatedDateText}` : ozonQuote ? "Дата доставки уточняется" : "Пункт выдачи или постамат"}</small></span><strong className={styles.methodPrice}>Бесплатно</strong></label>}
           {cdekDelivery && <label className={styles.method}><input type="radio" name="delivery" value="cdek-delivery" checked={isCdek} onChange={() => changeDelivery("cdek-delivery")} required /><span className={styles.carrierLogo}><Image src="/brand/cdek.svg" alt="" width={83} height={24} /></span><span className={styles.methodText}><strong>СДЭК</strong><small>{cdekQuote ? `${cdekQuote.daysMin}–${cdekQuote.daysMax} дн. после отгрузки` : "Доставка в пункт выдачи"}</small></span><strong className={styles.methodPrice}>{cdekQuote ? formatPrice(cdekQuote.cost) : "По тарифу"}</strong></label>}
           {methods.map(method => <label className={styles.method} key={method.code}><input type="radio" name="delivery" value={method.code} checked={delivery === method.code} onChange={() => changeDelivery(method.code)} required /><span className={styles.methodIcon} aria-hidden="true">{method.code === "pickup" ? <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10c0 2 3 2 4 0 1 2 3 2 5 0 1 2 4 2 5 0 1 2 4 2 4 0M9 20v-6h6v6" /></svg> : <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 5h11v11H3zM14 9h4l3 3v4h-7M7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm11 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" /></svg>}</span><span className={styles.methodText}><strong>{method.name}</strong>{method.description && <small>{method.description}</small>}</span><strong className={styles.methodPrice}>Бесплатно</strong></label>)}
         </fieldset>}
-        {isOzon && <><OzonDeliveryPicker phone={phone} onEditPhone={editPhone} onQuote={setOzonQuote} packingReady={packingReady} verificationRevision={quoteRevision} /><input type="hidden" name="ozonQuote" value={ozonQuote?.token ?? ""} /></>}
+        {isOzon && <><OzonDeliveryPicker phone={phone} onEditPhone={editPhone} onQuote={setOzonQuote} packingReady={packingReady} verificationRevision={quoteRevision} cartPending={cartPending} /><input type="hidden" name="ozonQuote" value={ozonQuote?.token ?? ""} /></>}
         {isCdek && <><CdekDeliveryPicker key={cdekRevision} onQuote={setCdekQuote} /><input type="hidden" name="cdekQuote" value={cdekQuote?.token ?? ""} /></>}
         {delivery && delivery !== "pickup" && !isOzon && !isCdek && <div className="form-grid"><label className="field"><span>Город *</span><input name="city" autoComplete="address-level2" value={contact.city} onChange={event => update("city", event.target.value)} required minLength={2} maxLength={120} /></label><label className="field"><span>Индекс{delivery === "russian-post" ? " *" : ""}</span><input name="postalCode" autoComplete="postal-code" value={contact.postalCode} onChange={event => update("postalCode", event.target.value)} inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required={delivery === "russian-post"} placeholder="6 цифр" /></label><label className="field field--full"><span>Улица, дом, квартира или пункт выдачи *</span><input name="address" autoComplete="street-address" value={contact.address} onChange={event => update("address", event.target.value)} required minLength={4} maxLength={300} /></label></div>}
         {delivery === "pickup" && <p className={styles.hint}>Место и время самовывоза согласуем при подтверждении заказа.</p>}
@@ -150,7 +153,7 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
         <label className="checkout-consent"><input type="checkbox" name="legal" checked={contact.legal} onChange={event => setContact(previous => ({ ...previous, legal: event.target.checked }))} required /><span>Принимаю <Link href="/legal/offer/" target="_blank">условия оформления {onlinePayment ? "заказа" : "заявки"}</Link>. Это не согласие на рекламу или рассылки.</span></label>
         <Submit onlinePayment={onlinePayment} pending={pending} cartPending={cartPending} needsQuote={(isOzon && !ozonQuote) || (isCdek && !cdekQuote)} noDelivery={!methods.length && !ozonDelivery && !cdekDelivery} />
         <p className={styles.summaryNote}>{onlinePayment ? "Оплата и электронный чек — через ЮKassa." : "Оплата на сайте не требуется. Продавец свяжется с вами для подтверждения."}</p>
-        <p className={styles.summaryNote}>Контакты и адрес нужны для обработки заказа и связи. Данные получателя и параметры отправления передаются выбранному перевозчику. <Link className="text-link" href="/legal/privacy/" target="_blank">Обработка данных</Link></p>
+        <p className={styles.summaryNote}>Контакты и адрес нужны для обработки заказа и связи. {isOzon ? "При подтверждении ПВЗ Ozon получает телефон и параметры посылки для проверки доставки." : "Данные получателя и параметры отправления передаются выбранному перевозчику."} <Link className="text-link" href="/legal/privacy/" target="_blank">Обработка данных</Link></p>
       </div>
     </aside>
   </form>;

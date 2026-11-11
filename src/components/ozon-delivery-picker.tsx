@@ -10,31 +10,64 @@ import { OzonPointSearch } from "@/components/ozon-point-search";
 import { PickupPointDialog } from "@/components/pickup-point-dialog";
 import styles from "./ozon-delivery-picker.module.css";
 
-export type DeliveryQuoteView = { token: string; cost: number; days: number; address: string };
+export type DeliveryQuoteView = { token: string; cost: number; days: number; address: string; estimatedDate: string | null; estimatedDateText: string | null };
+type CheckResult =
+  | { key: string; status: "success"; value: DeliveryQuoteView }
+  | { key: string; status: "error"; message: string; recipient: boolean };
 
-export function OzonDeliveryPicker({ phone, onEditPhone, onQuote, packingReady = true, verificationRevision = 0 }: { phone: string; onEditPhone: () => void; onQuote: (value: DeliveryQuoteView | null) => void; packingReady?: boolean; verificationRevision?: number }) {
+export function OzonDeliveryPicker({ phone, onEditPhone, onQuote, packingReady = true, verificationRevision = 0, cartPending = false }: { phone: string; onEditPhone: () => void; onQuote: (value: DeliveryQuoteView | null) => void; packingReady?: boolean; verificationRevision?: number; cartPending?: boolean }) {
   const [city, setCity] = useState<PickupMapCity | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<PickupPoint | null>(null);
   const point = selectedPoint?.id ?? "";
-  const [pending, setPending] = useState<"quote" | null>(null);
   const [mapOpen, setMapOpen] = useState(false);
-  const [message, setMessage] = useState("");
-  const [recipientError, setRecipientError] = useState(false);
-  const [quote, setQuote] = useState<(DeliveryQuoteView & { phone: string; verificationRevision: number }) | null>(null);
-  const [lastVerificationRevision, setLastVerificationRevision] = useState(verificationRevision);
-  if (lastVerificationRevision !== verificationRevision) { setLastVerificationRevision(verificationRevision); setQuote(null); setPending(null); }
-  const [lastPhone, setLastPhone] = useState(phone);
-  if (lastPhone !== phone) { setLastPhone(phone); setQuote(null); setMessage(""); setRecipientError(false); }
-  const phoneRef = useRef(phone);
-  useEffect(() => { phoneRef.current = phone; }, [phone]);
+  const [check, setCheck] = useState<CheckResult | null>(null);
+  const [selectionVersion, setSelectionVersion] = useState(0);
+  const [retryVersion, setRetryVersion] = useState(0);
+  const quoteCallback = useRef(onQuote);
+  useEffect(() => { quoteCallback.current = onQuote; }, [onQuote]);
   const revision = useRef(0);
   const nextStep = useRef<HTMLDivElement>(null);
   const scrollFrame = useRef<number | null>(null);
-  useEffect(() => () => { revision.current++; }, [verificationRevision]);
   useEffect(() => () => { revision.current++; if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current); }, []);
-  function clearQuote() { revision.current++; setQuote(null); onQuote(null); setMessage(""); setRecipientError(false); setPending(null); if (scrollFrame.current !== null) { cancelAnimationFrame(scrollFrame.current); scrollFrame.current = null; } }
+  const checkIssue = point ? deliveryCheckIssue(phone, point, packingReady) : "";
+  const checkKey = JSON.stringify([point, selectionVersion, phone, verificationRevision, packingReady, cartPending, retryVersion]);
+  const current = check?.key === checkKey ? check : null;
+  const confirmedQuote = current?.status === "success" && !checkIssue && !cartPending ? current.value : null;
+  const checking = !!point && !cartPending && !checkIssue && !current;
+  const message = checkIssue || (current?.status === "error" ? current.message : "");
+  const recipientError = (!!checkIssue && packingReady) || (current?.status === "error" && current.recipient);
+
+  useEffect(() => {
+    const version = ++revision.current;
+    if (!point) return;
+    const notify = quoteCallback.current;
+    notify(null);
+    if (cartPending || checkIssue) return;
+    let active = true;
+    // A short delay coalesces phone edits and repeated point selections.
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const result = await withDeliveryDeadline(quoteOzonDelivery(phone, point));
+          if (!active || revision.current !== version) return;
+          if ("token" in result) {
+            const value = result as DeliveryQuoteView;
+            setCheck({ key: checkKey, status: "success", value }); notify(value);
+          } else setCheck({ key: checkKey, status: "error", message: result.error, recipient: "reason" in result && result.reason === "recipient" });
+        } catch {
+          if (active && revision.current === version) setCheck({ key: checkKey, status: "error", message: "Ozon не ответил на проверку доставки. Повторите попытку или выберите другой способ доставки.", recipient: false });
+        }
+      })();
+    }, 200);
+    return () => { active = false; clearTimeout(timer); };
+  }, [checkKey, point, phone, cartPending, checkIssue]);
+
+  function clearSelection() {
+    revision.current++; onQuote(null); setCheck(null); setMapOpen(false); setSelectedPoint(null); setCity(null);
+    if (scrollFrame.current !== null) { cancelAnimationFrame(scrollFrame.current); scrollFrame.current = null; }
+  }
   function selectPoint(id: string, value: PickupPoint) {
-    setMapOpen(false); setSelectedPoint(value); clearQuote();
+    revision.current++; onQuote(null); setMapOpen(false); setSelectedPoint(value); setSelectionVersion(version => version + 1);
     if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current);
     if (!id) return;
     scrollFrame.current = requestAnimationFrame(() => {
@@ -44,37 +77,23 @@ export function OzonDeliveryPicker({ phone, onEditPhone, onQuote, packingReady =
       nextStep.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
     });
   }
-  async function calculate() {
-    const issue = deliveryCheckIssue(phone, point, packingReady);
-    if (issue) { setMessage(issue); setRecipientError(issue === deliveryCheckIssue(phone, "selected", true)); return; }
-    clearQuote(); setPending("quote"); const version = revision.current; const requestedPhone = phone;
-    try {
-      const result = await withDeliveryDeadline(quoteOzonDelivery(phone, point));
-      if (version !== revision.current || phoneRef.current !== requestedPhone) return;
-      if ("token" in result) { const value = result as DeliveryQuoteView; setQuote({ ...value, phone: requestedPhone, verificationRevision }); onQuote(value); }
-      else { setMessage(result.error); setRecipientError("reason" in result && result.reason === "recipient"); }
-    } catch { if (version === revision.current && phoneRef.current === requestedPhone) setMessage("Ozon не ответил на проверку доставки. Повторите попытку или выберите другой способ доставки."); }
-    finally { if (version === revision.current) setPending(null); }
-  }
-  const checkIssue = deliveryCheckIssue(phone, point, packingReady);
   return <div className={`ozon-delivery-picker ${styles.picker}`}>
-    {!packingReady && <p className="notice notice--danger">Для одного из товаров магазин ещё не указал вес и размеры упакованной посылки. Проверка Ozon недоступна — выберите другую доставку или обратитесь в магазин.</p>}
-    <OzonPointSearch onReset={() => { setMapOpen(false); setSelectedPoint(null); setCity(null); clearQuote(); }} onCity={value => { setCity(value); setMapOpen(true); }} onOpen={city ? () => setMapOpen(true) : undefined} actionLabel={point ? "Изменить" : "Выбрать на карте"} renderAction={action => <div className={styles.carrier} data-selected={!!point}>
+    {!packingReady && <p className="notice notice--danger" role="alert">Для одного из товаров магазин ещё не указал вес и размеры упаковки. Проверка Ozon недоступна — выберите другую доставку или обратитесь в магазин.</p>}
+    <OzonPointSearch onReset={clearSelection} onCity={value => { setCity(value); setMapOpen(true); }} onOpen={city ? () => setMapOpen(true) : undefined} actionLabel={point ? "Изменить" : "Выбрать на карте"} renderAction={action => <div className={styles.carrier} data-selected={!!point}>
       <span className={styles.logo}><Image src="/brand/ozon-delivery.svg" alt="Ozon" width={83} height={20} /></span>
-      <div className={styles.service}><strong>Ozon Доставка</strong><small>{quote ? `Примерно ${quote.days} дн. после отгрузки` : "Пункт выдачи или постамат"}</small></div>
+      <div className={styles.service}><strong>Ozon Доставка</strong>{confirmedQuote?.estimatedDate && confirmedQuote.estimatedDateText ? <><span className={styles.estimate}>Ориентировочно: <time dateTime={confirmedQuote.estimatedDate}>{confirmedQuote.estimatedDateText}</time></span><small>С учётом подготовки заказа</small></> : <small>{checking ? "Рассчитываем дату доставки…" : point ? "Дата доставки уточняется" : "Пункт выдачи или постамат"}</small>}</div>
       <strong className={styles.price}>Бесплатно</strong>
-      <div className={styles.address}>{selectedPoint ? <div className={`ozon-point-confirmation ${styles.confirmation}`} role="status"><span>{selectedPoint.address}</span>{!quote && <small>Доставка и телефон ещё не проверены</small>}</div> : <span className={styles.placeholder}>Выберите пункт выдачи</span>}</div>
+      <div className={styles.address}>{selectedPoint ? <div className={`ozon-point-confirmation ${styles.confirmation}`} role="status"><span>{selectedPoint.address}</span>{confirmedQuote ? <small className={styles.verified}>Ozon подтвердил доставку для этого номера.</small> : <small>Доставка и телефон ещё не проверены</small>}</div> : <span className={styles.placeholder}>Выберите пункт выдачи</span>}</div>
       <div className={styles.mapButton}>{action}</div>
     </div>} />
     {city && mapOpen && <PickupPointDialog city={city} selectedPoint={selectedPoint ?? undefined} selected={point} carrier="Ozon" onSelect={selectPoint} onClose={() => setMapOpen(false)} />}
     <div ref={nextStep} className="ozon-recipient-step" tabIndex={-1} aria-label="Телефон получателя и проверка доставки">
     {point && <div className={styles.verification}>
-    {checkIssue && message !== checkIssue && <p className="notice" id="ozon-check-help">{checkIssue}</p>}
-    <button type="button" className="button button--small" onClick={calculate} disabled={!!pending} aria-describedby={message ? "ozon-check-message" : checkIssue ? "ozon-check-help" : undefined}>{pending === "quote" ? "Проверяем доставку…" : "Проверить доставку в выбранный ПВЗ"}</button>
-    {pending === "quote" && <p className="notice" role="status">Проверяем доступность ПВЗ и срок доставки в Ozon… При временном сбое повторим автоматически. Обычно это быстро, но проверка может занять около 45 секунд.</p>}
-    {message && <p className="notice" role="alert" id="ozon-check-message">{message}</p>}
+    {cartPending && <p className="notice" role="status">Обновляем корзину и расчёт доставки…</p>}
+    {checking && <p className="notice" role="status">Проверяем доставку в выбранный ПВЗ и рассчитываем дату… При временном сбое повторим автоматически. Проверка может занять около 45 секунд.</p>}
+    {message && packingReady && <p className="notice" role="alert" id="ozon-check-message">{message}</p>}
     {message && recipientError && <button type="button" className="text-link" onClick={onEditPhone}>Изменить телефон получателя</button>}
-    {quote && quote.phone === phone && quote.verificationRevision === verificationRevision && <p className="notice notice--success" role="status"><strong>Доставка бесплатная · 0 ₽</strong><br />Ozon подтвердил доступность доставки для этого номера.<br />{quote.address}<br />Примерно {quote.days} дн. в пути после отгрузки. Проверка действительна 15 минут.</p>}
+    {current?.status === "error" && <button type="button" className="button button--outline button--small" onClick={() => { revision.current++; setRetryVersion(version => version + 1); }}>Повторить проверку</button>}
     </div>}
     </div>
   </div>;

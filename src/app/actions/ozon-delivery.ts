@@ -14,6 +14,7 @@ import { OzonDeliveryClient, OzonDeliveryError, positiveId } from "@/lib/deliver
 import { deliveryConfigFingerprint, getOzonDeliveryConfig, OZON_DELIVERY_SETTING, ozonDeliveryConfigSchema, requireOzonDelivery } from "@/lib/delivery/ozon-config";
 import { buildOzonPostings, cartDeliveryFingerprint, signOzonQuote } from "@/lib/delivery/ozon-quote";
 import { retryOzonQuote } from "@/lib/delivery/ozon-retry";
+import { checkoutDeliveryDate, formatDeliveryDate } from "@/lib/delivery/estimated-date";
 import { operatorReady } from "@/lib/privacy";
 import { customerDeliveryPrice } from "@/lib/delivery/pricing";
 import { writeDiagnostic } from "@/lib/diagnostics";
@@ -86,7 +87,8 @@ export async function quoteOzonDelivery(phoneInput: string, pointInput: string) 
       return { point, calculation: await api.checkout(request) };
     });
     await writeDiagnostic("delivery.quote.ok", { stage: "quote", durationMs: Date.now() - started, attempts, pointId: selectedPointId, expectedParcels: request.postings.length });
-    return { ...calculation, cost: customerDeliveryPrice(), address: point.full_address, token: signOzonQuote({ ...calculation, quoteVersion: 2, address: point.full_address, request, cart: cartDeliveryFingerprint(cart), config: deliveryConfigFingerprint(config), expires: Date.now() + 15 * 60000 }) };
+    const estimatedDate = checkoutDeliveryDate(request.postings, calculation.days);
+    return { ...calculation, estimatedDate, estimatedDateText: estimatedDate ? formatDeliveryDate(estimatedDate) : null, cost: customerDeliveryPrice(), address: point.full_address, token: signOzonQuote({ ...calculation, quoteVersion: 2, address: point.full_address, request, cart: cartDeliveryFingerprint(cart), config: deliveryConfigFingerprint(config), expires: Date.now() + 15 * 60000 }) };
   } catch (error) {
     const code = error instanceof OzonDeliveryError ? error.code : "provider";
     const reference = await writeDiagnostic(ozonDiagnosticCode(code), { stage: "quote", durationMs: Date.now() - started, reason: code, attempts: error instanceof OzonDeliveryError ? error.attempts : undefined,

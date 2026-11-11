@@ -1,11 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { estimatedDelivery, formatDeliveryDate, validDeliveryDate } from "./estimated-date";
+import { checkoutDeliveryDate, estimatedDelivery, formatDeliveryDate, validDeliveryDate } from "./estimated-date";
 
 const now = new Date("2030-01-05T09:00:00Z");
 function ozon() {
   return { payload: { estimatedDays: 3 }, deliveredAt: null, cdekJob: null, ozonJob: { status: "CREATED", cancelRequestedAt: null, request: { postings: [{ request_id: 1, cutoff_at: "2030-01-04T00:00:00Z" }] }, response: { postings: [{ request_id: 1, posting_number: "p1", estimated_delivery_days: 3 }], statuses: [{ posting_number: "p1", status: "on_way" }] } } };
 }
 describe("estimated delivery date", () => {
+  it("calculates a checkout date from the latest planned handover and carrier duration in Moscow time", () => {
+    const postings = [{ request_id: 1, cutoff_at: "2030-01-04T00:00:00Z" }, { request_id: 2, cutoff_at: "2030-01-04T23:30:00Z" }];
+    expect(checkoutDeliveryDate(postings, 3)).toBe("2030-01-08");
+    expect(checkoutDeliveryDate([{ request_id: 1, cutoff_at: "2031-12-31T22:00:00Z" }], 2)).toBe("2032-01-03");
+    expect(checkoutDeliveryDate(postings, 0)).toBe("2030-01-05");
+  });
+  it("does not invent a checkout date for missing handovers or implausible carrier durations", () => {
+    expect(checkoutDeliveryDate([], 2)).toBeNull();
+    expect(checkoutDeliveryDate([{ request_id: 1, cutoff_at: "not-a-date" }], 2)).toBeNull();
+    expect(checkoutDeliveryDate([{ request_id: 1, cutoff_at: "2030-01-04T00:00:00Z" }], 366)).toBeNull();
+  });
   it("uses the planned handover and carrier duration without pretending it is live tracking", () => {
     expect(estimatedDelivery(ozon(), "PAID", now)).toEqual({ kind: "date", date: "2030-01-07", source: "plan" });
     expect(formatDeliveryDate("2030-01-07")).toBe("7 января 2030 г.");

@@ -36,6 +36,18 @@ export function formatDeliveryDate(value: string): string {
   return new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Moscow", day: "numeric", month: "long", year: "numeric" }).format(new Date(`${value}T12:00:00Z`));
 }
 
+/** Estimate checkout arrival from the planned handover and Ozon's travel duration. */
+export function checkoutDeliveryDate(postings: { request_id: number; cutoff_at: string }[], days: number): string | null {
+  const request = requestSchema.safeParse({ postings });
+  if (!request.success || !duration.safeParse(days).success) return null;
+  const handovers = request.data.postings.map(posting => Date.parse(posting.cutoff_at));
+  if (handovers.some(value => !Number.isFinite(value))) return null;
+  const arrival = new Date(Math.max(...handovers) + days * day);
+  if (!Number.isFinite(arrival.getTime())) return null;
+  const date = moscowDay(arrival);
+  return validDeliveryDate(date) ? date : null;
+}
+
 /** Uses a carrier's original travel duration and planned handover, never polling timestamps as dispatch dates. */
 export function estimatedDelivery(shipment: Shipment, orderStatus: string, now = new Date()): DeliveryEstimate {
   if (!shipment || shipment.deliveredAt || ["CANCELED", "REFUNDED"].includes(orderStatus)) return { kind: "none" };

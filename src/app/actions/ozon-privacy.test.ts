@@ -44,6 +44,12 @@ describe("Ozon delivery quote boundary", () => {
     expect(quote.expires - Date.now()).toBeGreaterThan(14 * 60000);
     expect(quote.expires - Date.now()).toBeLessThanOrEqual(15 * 60000);
   });
+  it("returns the estimated date using the planned handover and Ozon's travel days", async () => {
+    m.postings.mockReturnValue([{ request_id: 1, shipment_method_id: 7, cutoff_at: "2030-01-04T23:30:00Z", declared_value: { amount: "240.00", currency_code: "RUB" }, dimensions: { weight_g: 100, length_mm: 200, width_mm: 100, height_mm: 50 } }]);
+    m.checkout.mockResolvedValue({ cost: 99, days: 3 });
+    const result = await quoteOzonDelivery("+79991234567", "8");
+    expect(result).toMatchObject({ estimatedDate: "2030-01-08", estimatedDateText: "8 января 2030 г." });
+  });
   it("fails closed when parcel measurements are missing", async () => {
     m.postings.mockImplementation(() => { throw new OzonDeliveryError("packaging"); });
     expect(await quoteOzonDelivery("+79991234567", "8")).toEqual({ error: expect.stringContaining("упаковки") }); expect(m.record).not.toHaveBeenCalled(); expect(m.checkout).not.toHaveBeenCalled();

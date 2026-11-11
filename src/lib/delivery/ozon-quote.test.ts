@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/prisma", () => ({ prisma: {} }));
 import { buildOzonPostings, cartDeliveryFingerprint, signOzonQuote, verifyOzonQuote } from "./ozon-quote";
 import { deliveryConfigFingerprint } from "./ozon-config";
+import { checkoutDeliveryDate } from "./estimated-date";
 
 const config = { enabled: true, clientId: "app", clientSecret: "secret", shipmentMethodId: 7, dispatchDays: 1, checkedAt: "2030-01-01T00:00:00Z" };
 const item = { id: "line", quantity: 2, unitPrice: 240, config: { color: "black" }, product: { name: "Test", madeToOrder: true, leadDays: 3, shippingWeightG: 85, shippingLengthMm: 200, shippingWidthMm: 100, shippingHeightMm: 80 } };
@@ -13,6 +14,7 @@ describe("server-owned Ozon shipping quotes", () => {
     expect(postings).toHaveLength(2);
     expect(postings[0]).toMatchObject({ request_id: 1, cutoff_at: "2030-01-04T00:00:00.000Z", declared_value: { amount: "240.00" }, dimensions: { weight_g: 85, length_mm: 200 } });
     expect(postings[1].request_id).toBe(2);
+    expect(checkoutDeliveryDate(postings, 3)).toBe("2030-01-07");
   });
   it("rejects missing packaging and >100 units instead of inventing numbers", () => {
     expect(() => buildOzonPostings([{ ...item, product: { ...item.product, shippingWeightG: null } }], config)).toThrow("packaging");
