@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { PrismaClient } from "@prisma/client";
 import { reserveStock, finishStockReservations, releaseUnsentStock } from "../src/lib/stock-reservations";
 import { adjustLockedCartHold, expireCartHold, holdCartForCheckout, lockCartHold, reserveOrderFromCart } from "../src/lib/cart-stock-holds";
 import { expireUnpaidOrderHold } from "../src/lib/stock-hold-expiration";
 import { restoreExpiredOrderStock } from "../src/lib/late-order-stock";
+import { removeUnchangedReturnedItems } from "../src/lib/order-cart-restore";
 import { applyYooKassaPayment } from "../src/lib/yookassa/payments";
 import { prisma } from "../src/lib/prisma";
 
@@ -18,6 +20,7 @@ const tag = `stock-smoke-${randomUUID()}`;
 const productIds: string[] = [];
 const orderIds: string[] = [];
 const cartIds: string[] = [];
+const userIds: string[] = [];
 async function product(stock: number) {
   const id = `${tag}-${productIds.length}`;
   await db.product.create({ data: { id, sku: id, slug: id, name: "Stock QA", basePrice: 1, status: "PUBLISHED", stock, madeToOrder: false } });
@@ -38,6 +41,18 @@ async function order(id: string, lines: Array<{ productId: string; quantity: num
 }
 async function main() {
   const moment = new Date();
+  const legacyDeadline = new Date(moment.getTime() + 30 * 60_000);
+  for (const [suffix, firstAttemptAt] of [["valid", moment.toISOString()], ["invalid", "not-a-date"]]) {
+    const previous = await db.order.create({ data: { number: `${tag}-deadline-${suffix}`, kind: "ORDER", status: "AWAITING_PAYMENT", inventoryTracked: true, reservationExpiresAt: legacyDeadline, customerName: "QA", customerEmail: "qa@example.test", customerPhone: "+79990000000", subtotal: 1, total: 1, payment: { create: { provider: "yookassa-online", status: "PENDING", amount: 1, payload: { version: 1, firstAttemptAt } } } } });
+    orderIds.push(previous.id);
+  }
+  const migration = await readFile("prisma/migrations/20261111140000_return_unpaid_order_to_cart/migration.sql", "utf8");
+  const updateStatement = migration.slice(migration.indexOf('UPDATE "Order" AS o'));
+  assert(updateStatement.startsWith('UPDATE "Order" AS o'));
+  await db.$executeRawUnsafe(updateStatement);
+  const normalized = await db.order.findMany({ where: { id: { in: orderIds } }, orderBy: { number: "asc" } });
+  assert.equal(normalized.find(value => value.number.endsWith("-valid"))?.reservationExpiresAt?.getTime(), moment.getTime() + 10 * 60_000, "Existing payment windows are shortened to ten minutes");
+  assert.equal(normalized.find(value => value.number.endsWith("-invalid"))?.reservationExpiresAt?.getTime(), legacyDeadline.getTime(), "Malformed historical bindings do not break migration");
   const contested = await product(1);
   async function cartFor(productId: string, quantity: number) {
     const value = await db.cart.create({ data: { sessionKey: `${tag}-cart-${cartIds.length}`, items: { create: { productId, quantity, unitPrice: 1 } } }, include: { items: true } });
@@ -56,7 +71,8 @@ async function main() {
 
   const placed = await db.$transaction(async tx => {
     const reservation = await reserveOrderFromCart(tx, winner.id, [{ productId: contested, quantity: 1 }], new Date(moment.getTime() + 25 * 60_000));
-    const value = await tx.order.create({ data: { number: `${tag}-timed`, kind: "ORDER", status: "AWAITING_PAYMENT", inventoryTracked: true, reservationExpiresAt: reservation.expiresAt, customerName: "QA", customerEmail: "qa@example.test", customerPhone: "+79990000000", subtotal: 1, total: 1, items: { create: { productId: contested, productName: "Stock QA", quantity: 1, unitPrice: 1, totalPrice: 1, reservedStock: reservation.reserved.get(contested) ?? 0, stockReservationState: "ACTIVE" } }, payment: { create: { provider: "yookassa-online", amount: 1, status: "PENDING", externalId: randomUUID(), payload: { version: 1, shopId: "123", firstAttemptAt: moment.toISOString(), request: "synthetic-encrypted-request" } } } }, include: { payment: true } });
+    await tx.cartItem.deleteMany({ where: { cartId: winner.id } });
+    const value = await tx.order.create({ data: { number: `${tag}-timed`, kind: "ORDER", status: "AWAITING_PAYMENT", inventoryTracked: true, checkoutCartId: winner.id, reservationExpiresAt: reservation.expiresAt, customerName: "QA", customerEmail: "qa@example.test", customerPhone: "+79990000000", subtotal: 1, total: 1, items: { create: { productId: contested, productName: "Stock QA", quantity: 1, unitPrice: 1, totalPrice: 1, configuration: { color: "qa" }, reservedStock: reservation.reserved.get(contested) ?? 0, stockReservationState: "ACTIVE" } }, payment: { create: { provider: "yookassa-online", amount: 1, status: "PENDING", externalId: randomUUID(), payload: { version: 1, shopId: "123", firstAttemptAt: moment.toISOString(), request: "synthetic-encrypted-request" } } } }, include: { payment: true } });
     return { order: value, expiresAt: reservation.expiresAt };
   });
   orderIds.push(placed.order.id);
@@ -66,6 +82,9 @@ async function main() {
   assert.equal(await expireUnpaidOrderHold(db, placed.order.id, new Date(placed.expiresAt.getTime() - 1)), false);
   assert.equal(await expireUnpaidOrderHold(db, placed.order.id, new Date(placed.expiresAt.getTime() + 1)), true);
   assert.equal(await expireUnpaidOrderHold(db, placed.order.id, new Date(placed.expiresAt.getTime() + 2)), false, "Order expiration is idempotent");
+  const returned = await db.cartItem.findMany({ where: { cartId: winner.id } });
+  assert.equal(returned.length, 1, "An expired guest order returns its item once to its original cart");
+  assert.equal(returned[0].productId, contested); assert.equal(returned[0].quantity, 1); assert.deepEqual(returned[0].config, { color: "qa" });
   assert.equal((await db.product.findUniqueOrThrow({ where: { id: contested } })).reservedStock, 0);
   const secondStart = new Date(placed.expiresAt.getTime() + 2);
   await holdCartForCheckout(db, loser, secondStart);
@@ -75,8 +94,31 @@ async function main() {
   const otherHold = await db.cartStockHold.findUniqueOrThrow({ where: { cartId: loser.id } });
   assert.equal(await expireCartHold(db, otherHold.id, new Date(secondStart.getTime() + 30 * 60_000)), true);
   assert.equal(await expireCartHold(db, otherHold.id, new Date(secondStart.getTime() + 30 * 60_000)), false);
-  assert.equal(await db.$transaction(async tx => { const ok = await restoreExpiredOrderStock(tx, placed.order.id); if (ok) await tx.order.update({ where: { id: placed.order.id }, data: { stockReviewRequired: false } }); return ok; }), true, "A late payment can recover stock when it is still available");
+  assert.equal(await db.$transaction(async tx => { const ok = await restoreExpiredOrderStock(tx, placed.order.id); if (ok) { await removeUnchangedReturnedItems(tx, placed.order.id); await tx.order.update({ where: { id: placed.order.id }, data: { stockReviewRequired: false } }); } return ok; }), true, "A late payment can recover stock when it is still available");
   assert.equal((await db.product.findUniqueOrThrow({ where: { id: contested } })).reservedStock, 1);
+  assert.equal(await db.cartItem.count({ where: { cartId: winner.id } }), 0, "An untouched restored item is removed when the late payment is recovered");
+
+  const ownedProduct = await product(5);
+  const owner = await db.user.create({ data: { email: `${tag}@example.test`, passwordHash: "qa" } }); userIds.push(owner.id);
+  const ownedCart = await db.cart.create({ data: { userId: owner.id, items: { create: { productId: ownedProduct, quantity: 1, unitPrice: 1 } } } }); cartIds.push(ownedCart.id);
+  const variant = await db.productVariant.create({ data: { productId: ownedProduct, sku: `${tag}-variant`, price: 1, stock: 5 } });
+  const ownedOrder = await order(`${tag}-owned`, [{ productId: ownedProduct, quantity: 2 }]); orderIds.push(ownedOrder);
+  await db.order.update({ where: { id: ownedOrder }, data: { userId: owner.id, status: "AWAITING_PAYMENT", checkoutCartId: loser.id, reservationExpiresAt: new Date(moment.getTime() - 1), payment: { create: { provider: "yookassa-online", amount: 1, status: "PENDING" } } } });
+  await db.orderItem.updateMany({ where: { orderId: ownedOrder }, data: { variantId: variant.id, configuration: { color: "owned" } } });
+  const otherCartBefore = await db.cartItem.count({ where: { cartId: loser.id } });
+  assert.equal(await expireUnpaidOrderHold(db, ownedOrder, moment), true);
+  const ownedItems = await db.cartItem.findMany({ where: { cartId: ownedCart.id }, orderBy: { createdAt: "asc" } });
+  assert.equal(ownedItems.length, 2, "The buyer's existing cart items are preserved");
+  const returnedOwned = ownedItems.find(item => item.returnedOrderItemId);
+  assert(returnedOwned); assert.equal(returnedOwned.variantId, variant.id); assert.equal(returnedOwned.quantity, 2); assert.deepEqual(returnedOwned.config, { color: "owned" });
+  assert.equal(await db.cartItem.count({ where: { cartId: loser.id } }), otherCartBefore, "An order cannot restore items into someone else's cart");
+  const protectedHold = await db.cartStockHold.create({ data: { cartId: ownedCart.id, expiresAt: new Date(moment.getTime() + 30 * 60_000) } });
+  await db.$transaction(tx => removeUnchangedReturnedItems(tx, ownedOrder));
+  assert(await db.cartItem.findUnique({ where: { id: returnedOwned.id } }), "Late-payment cleanup cannot disturb another active cart hold");
+  await db.cartStockHold.delete({ where: { id: protectedHold.id } });
+  await db.cartItem.update({ where: { id: returnedOwned.id }, data: { quantity: 3, returnedOrderItemId: null } });
+  await db.$transaction(tx => removeUnchangedReturnedItems(tx, ownedOrder));
+  assert(await db.cartItem.findUnique({ where: { id: returnedOwned.id } }), "An item explicitly edited by the buyer is never removed automatically");
 
   const adjustable = await product(3), editable = await cartFor(adjustable, 2);
   await holdCartForCheckout(db, editable, moment);
@@ -141,6 +183,7 @@ main().finally(async () => {
   await db.order.deleteMany({ where: { number: { startsWith: tag } } });
   await db.cartStockHold.deleteMany({ where: { cartId: { in: cartIds } } });
   await db.cart.deleteMany({ where: { id: { in: cartIds } } });
+  await db.user.deleteMany({ where: { id: { in: userIds } } });
   await db.product.deleteMany({ where: { id: { in: productIds } } });
   await db.$disconnect();
   await prisma.$disconnect();

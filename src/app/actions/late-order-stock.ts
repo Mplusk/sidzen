@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/auth";
 import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { restoreExpiredOrderStock } from "@/lib/late-order-stock";
+import { removeUnchangedReturnedItems } from "@/lib/order-cart-restore";
 
 export async function reserveLatePaidOrder(form: FormData) {
   const user = await requirePermission(PERMISSIONS.ordersWrite);
@@ -20,6 +21,7 @@ export async function reserveLatePaidOrder(form: FormData) {
       const order = await tx.order.findUnique({ where: { id }, include: { payment: true } });
       if (!order || order.number !== number || order.deletedAt || !order.reservationExpiredAt || !order.stockReviewRequired || order.status !== "PAID" || order.payment?.status !== "PAID") return false;
       if (!await restoreExpiredOrderStock(tx, id)) return false;
+      await removeUnchangedReturnedItems(tx, id);
       await tx.order.update({ where: { id }, data: { stockReviewRequired: false } });
       await tx.auditLog.create({ data: { actorId: user.id, action: "order.stock.late-payment-reserved", entityType: "Order", entityId: id } });
       return true;

@@ -40,7 +40,7 @@ export async function updateCheckoutCartGroup(members: CartGroupMember[], quanti
       for (let i = 0; i < members.length; i++) {
         const member = members[i];
         const where = { id: member.id, cartId: cart.id, quantity: member.quantity, updatedAt: new Date(member.revision) };
-        const result = quantity && i === 0 && quote ? await tx.cartItem.updateMany({ where, data: { quantity, unitPrice: quote.unitPrice, variantId: quote.variantId ?? null, config: quote.config } }) : await tx.cartItem.deleteMany({ where });
+        const result = quantity && i === 0 && quote ? await tx.cartItem.updateMany({ where, data: { quantity, unitPrice: quote.unitPrice, variantId: quote.variantId ?? null, config: quote.config, returnedOrderItemId: null } }) : await tx.cartItem.deleteMany({ where });
         if (result.count !== 1) throw new Error("cart-changed");
       }
     });

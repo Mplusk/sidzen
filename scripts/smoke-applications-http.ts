@@ -6,12 +6,14 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
 import { purchasedProductWhere } from "../src/lib/reviews";
 import { OZON_DELIVERY_SETTING } from "../src/lib/delivery/ozon-config";
+import { createGuestGrant } from "../src/lib/guest-order-grant";
 
 const base = new URL(process.env.SMOKE_BASE_URL || "http://localhost:3101"), db = new URL(process.env.DATABASE_URL || "");
 assert(["localhost", "127.0.0.1"].includes(base.hostname) && ["localhost", "127.0.0.1"].includes(db.hostname) && db.pathname === "/shop_qa");
 assert(!process.env.RESEND_API_KEY, "No email provider allowed in this smoke test");
 const anon = new Map<string, string>(), buyer = new Map<string, string>(), other = new Map<string, string>(), staff = new Map<string, string>();
 const userIds: string[] = [], orderIds: string[] = [], cartIds: string[] = [];
+const temporaryGrantNumbers: string[] = [];
 const prefix = `qa-application-${randomUUID().slice(0, 8)}`;
 const keys = ["legal.seller", "legal.address", "contacts.email", OZON_DELIVERY_SETTING];
 const oldSettings = await prisma.siteSetting.findMany({ where: { key: { in: keys } } });
@@ -106,9 +108,28 @@ try {
   const guestResponse = await request("/checkout/", guestForm), guestLocation = guestResponse.headers.get("location")!; assert(guestLocation.includes("/checkout/success/"));
   const guestOrder = await prisma.order.findUniqueOrThrow({ where: { number: guestLocation.split("/")[3] } }); orderIds.push(guestOrder.id);
   assert.equal(guestOrder.userId, null); assert.equal((await request(guestLocation)).status, 200); assert.equal((await request(guestLocation, undefined, other)).status, 404);
+  // A guest returning from payment sees only the order authorized by this browser.
+  const pendingNumber = `3DP-301101-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+  const pendingGuest = await prisma.order.create({ data: { number: pendingNumber, kind: "ORDER", status: "AWAITING_PAYMENT", reservationExpiresAt: new Date(Date.now() + 600_000), customerName: "QA", customerEmail: "qa@example.test", customerPhone: "+79990000000", subtotal: 250, total: 250, items: { create: { productId, productName: "QA item", quantity: 1, unitPrice: 250, totalPrice: 250 } }, payment: { create: { provider: "yookassa-online", amount: 250, status: "PENDING" } } } }); orderIds.push(pendingGuest.id);
+  const grant = await createGuestGrant(prisma, pendingNumber); temporaryGrantNumbers.push(pendingNumber);
+  const guestPay = new Map([[`3dp_order_${pendingNumber}`, grant]]), forgedPay = new Map([[`3dp_order_${pendingNumber}`, "forged"]]);
+  assert(!(await (await request("/cart/", undefined, forgedPay)).text()).includes(pendingNumber));
+  const pendingCart = await (await request("/cart/", undefined, guestPay)).text();
+  assert(pendingCart.includes(pendingNumber) && pendingCart.includes("Перейти к оплате"));
+  assert.equal((await request(`/checkout/success/${pendingNumber}/`, undefined, guestPay)).status, 200);
+  assert.equal((await request(`/checkout/success/${pendingNumber}/`, undefined, forgedPay)).status, 404);
+  await prisma.order.update({ where: { id: pendingGuest.id }, data: { reservationExpiresAt: new Date(Date.now() - 1000) } });
+  assert(!(await (await request("/cart/", undefined, guestPay)).text()).includes(pendingNumber), "An expired payment is never offered again");
+  const pendingOwnerNumber = `3DP-301101-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+  const pendingOwner = await prisma.order.create({ data: { number: pendingOwnerNumber, userId: owner.id, kind: "ORDER", status: "AWAITING_PAYMENT", reservationExpiresAt: new Date(Date.now() + 600_000), customerName: "QA", customerEmail: "qa@example.test", customerPhone: "+79990000000", subtotal: 250, total: 250, payment: { create: { provider: "yookassa-online", amount: 250, status: "PENDING" } } } }); orderIds.push(pendingOwner.id);
+  const ownerPage = await (await request("/account/", undefined, buyer)).text();
+  assert(ownerPage.includes(pendingOwnerNumber) && ownerPage.includes("Перейти к оплате"));
+  assert((await (await request(`/account/orders/${pendingOwnerNumber}/`, undefined, buyer)).text()).includes("Перейти к оплате"));
+  assert.equal((await request(`/account/orders/${pendingOwnerNumber}/`, undefined, other)).status, 404);
   console.log("PASS applications HTTP: buyer/guest contact requests without payments/receipts, custom delivery without carrier calls, forged/stale payment ignored, validation / price / CSRF / duplicate protection, manual statuses / purchase attestation, scoped access, confirmed archival with durable Ozon cancellation intent / retained history, active and deleted lists. No external APIs.");
 } finally {
   await prisma.auditLog.deleteMany({ where: { entityId: { in: orderIds } } });
+  await prisma.guestOrderGrant.deleteMany({ where: { orderNumber: { in: temporaryGrantNumbers } } });
   await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
   await prisma.cart.deleteMany({ where: { id: { in: cartIds } } });
   await prisma.privacyConsent.deleteMany({ where: { userId: { in: userIds } } });

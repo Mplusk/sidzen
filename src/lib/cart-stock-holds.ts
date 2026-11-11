@@ -74,20 +74,19 @@ export async function adjustLockedCartHold(tx: Tx, hold: Hold | null, product: S
 /** Convert a cart hold into an order reservation without a stock release gap. */
 export async function reserveOrderFromCart(tx: Tx, cartId: string, lines: Line[], now = new Date()) {
   const { hold } = await lockCartHold(tx, cartId, lines.map(line => line.productId));
-  const originalExpiry = hold && hold.expiresAt > now ? hold.expiresAt : null;
   if (hold) await releaseLockedCartHold(tx, hold);
   const reserved = await reserveStock(tx, lines);
-  const expiresAt = new Date(Math.max(now.getTime() + PAYMENT_HOLD_MS, originalExpiry?.getTime() ?? 0));
+  const expiresAt = new Date(now.getTime() + PAYMENT_HOLD_MS);
   return { reserved, expiresAt };
 }
 
-/** Called under the payment locks only for an explicit customer payment attempt. */
-export async function extendOrderPaymentHold(tx: Tx, order: { id: string; reservationExpiresAt: Date | null; reservationExpiredAt: Date | null }, now = new Date()) {
+/** Start the ten-minute payment window once, under the payment locks. */
+export async function startOrderPaymentHold(tx: Tx, order: { id: string; reservationExpiresAt: Date | null; reservationExpiredAt: Date | null }, now = new Date()) {
   if (order.reservationExpiredAt || (order.reservationExpiresAt && order.reservationExpiresAt <= now)) throw new Error("payment-state");
   // Older orders have no timed reservation; do not change their existing policy.
   if (!order.reservationExpiresAt) return null;
-  const expiresAt = new Date(Math.max(order.reservationExpiresAt.getTime(), now.getTime() + PAYMENT_HOLD_MS));
-  if (expiresAt > order.reservationExpiresAt) await tx.order.update({ where: { id: order.id }, data: { reservationExpiresAt: expiresAt } });
+  const expiresAt = new Date(now.getTime() + PAYMENT_HOLD_MS);
+  await tx.order.update({ where: { id: order.id }, data: { reservationExpiresAt: expiresAt } });
   return expiresAt;
 }
 

@@ -162,13 +162,13 @@ async function submitOrder(formData: FormData, inline: boolean): Promise<Checkou
         const remaining = item.productId ? reservedProducts.get(item.productId) ?? 0 : 0;
         const held = Math.min(item.quantity, remaining);
         if (item.productId) reservedProducts.set(item.productId, remaining - held);
-        return { productId: item.productId, productName: item.product!.name, sku: item.product!.sku, quantity: item.quantity, reservedStock: held, stockReservationState: held ? "ACTIVE" : "NONE", unitPrice: item.unitPrice, totalPrice: item.unitPrice * item.quantity, configuration: item.quote!.config, materialId: item.quote!.materialId, colorId: item.quote!.colorId };
+        return { productId: item.productId, variantId: item.variantId, productName: item.product!.name, sku: item.product!.sku, quantity: item.quantity, reservedStock: held, stockReservationState: held ? "ACTIVE" : "NONE", unitPrice: item.unitPrice, totalPrice: item.unitPrice * item.quantity, configuration: item.quote!.config, materialId: item.quote!.materialId, colorId: item.quote!.colorId };
       });
       // Claim the cart rows atomically so a double click cannot create two orders.
       const claimed = await tx.cartItem.deleteMany({ where: { cartId: cart.id, OR: cart.items.map((item) => ({ id: item.id, quantity: item.quantity, updatedAt: item.updatedAt })) } });
       if (claimed.count !== cart.items.length) throw new Error("cart-changed");
       const created = await tx.order.create({ data: {
-        number, userId: user?.id, inventoryTracked: true, reservationExpiresAt: onlinePayment ? reservation.expiresAt : null, kind: onlinePayment ? "ORDER" : "APPLICATION", status: onlinePayment ? "AWAITING_PAYMENT" : "NEW", customerName: parsed.data.name, customerEmail: parsed.data.email, customerPhone: parsed.data.phone,
+        number, userId: user?.id, inventoryTracked: true, reservationExpiresAt: onlinePayment ? reservation.expiresAt : null, checkoutCartId: onlinePayment ? cart.id : null, kind: onlinePayment ? "ORDER" : "APPLICATION", status: onlinePayment ? "AWAITING_PAYMENT" : "NEW", customerName: parsed.data.name, customerEmail: parsed.data.email, customerPhone: parsed.data.phone,
         shippingAddress: ozonQuote ? ozonQuote.address : cdekQuote ? cdekQuote.address : parsed.data.delivery === "pickup" ? "Самовывоз по согласованию" : `${parsed.data.postalCode ? `${parsed.data.postalCode}, ` : ""}${parsed.data.city}, ${parsed.data.address}`,
         customerComment: parsed.data.comment || undefined, subtotal, deliveryPrice, total,
         items: { create: orderItems },
