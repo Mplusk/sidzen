@@ -123,7 +123,9 @@ try {
   const pendingOwnerNumber = `3DP-301101-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
   const pendingOwner = await prisma.order.create({ data: { number: pendingOwnerNumber, userId: owner.id, kind: "ORDER", status: "AWAITING_PAYMENT", reservationExpiresAt: new Date(Date.now() + 600_000), customerName: "QA", customerEmail: "qa@example.test", customerPhone: "+79990000000", subtotal: 250, total: 250, payment: { create: { provider: "yookassa-online", amount: 250, status: "PENDING" } } } }); orderIds.push(pendingOwner.id);
   const ownerPage = await (await request("/account/", undefined, buyer)).text();
-  assert(ownerPage.includes(pendingOwnerNumber) && ownerPage.includes("Перейти к оплате"));
+  assert(ownerPage.includes(`aria-label="Оплатить заказ ${pendingOwnerNumber}"`));
+  const ownerOrders = await (await request("/account/orders/", undefined, buyer)).text();
+  assert(ownerOrders.includes(`aria-label="Оплатить заказ ${pendingOwnerNumber}"`));
   assert((await (await request(`/account/orders/${pendingOwnerNumber}/`, undefined, buyer)).text()).includes("Перейти к оплате"));
   assert.equal((await request(`/account/orders/${pendingOwnerNumber}/`, undefined, other)).status, 404);
   console.log("PASS applications HTTP: buyer/guest contact requests without payments/receipts, custom delivery without carrier calls, forged/stale payment ignored, validation / price / CSRF / duplicate protection, manual statuses / purchase attestation, scoped access, confirmed archival with durable Ozon cancellation intent / retained history, active and deleted lists. No external APIs.");
