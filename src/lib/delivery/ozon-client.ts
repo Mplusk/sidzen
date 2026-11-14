@@ -99,15 +99,20 @@ export class OzonDeliveryClient {
     throw new OzonDeliveryError("pagination");
   }
   async pointInfo(ids: number[]) {
-    return z.object({ delivery_points: z.array(z.object({ delivery_point_id: positiveId, name: z.string(), full_address: z.string(), is_active: z.boolean(), type: z.string(), coordinates: pointCoordinatesSchema.nullish() })) }).parse(await this.json("/v1/delivery-point/info", { delivery_point_ids: ids })).delivery_points;
+    const result = z.object({ delivery_points: z.array(z.object({ delivery_point_id: positiveId, name: z.string(), full_address: z.string(), is_active: z.boolean(), type: z.string(), coordinates: pointCoordinatesSchema.nullish() })) }).safeParse(await this.json("/v1/delivery-point/info", { delivery_point_ids: ids }));
+    if (!result.success) throw new OzonDeliveryError("response");
+    return result.data.delivery_points;
   }
   async pointPage(cursor: string | null) {
     return z.object({ delivery_points: z.array(z.object({ delivery_point_id: positiveId, shipment_method_ids: z.union([z.array(positiveId), positiveId]) })), next_cursor: z.string().nullish() }).parse(await this.json("/v1/delivery-point/list", { pagination: { cursor, limit: 100 } }));
   }
   async checkout(request: OzonCheckoutRequest) {
-    const allowed = z.object({ can_be_delivered: z.boolean() }).parse(await this.json("/v1/delivery/check-client", { phone_number: request.recipient.phone_number }));
-    if (!allowed.can_be_delivered) throw new OzonDeliveryError("recipient");
-    const response = z.object({ results: z.array(z.object({ request_id: positiveId, posting: z.object({ estimated_delivery_cost: money, estimated_insurance_cost: money, estimated_delivery_days: z.number().int().nonnegative(), cutoff_at: z.iso.datetime() }).nullish(), error: z.unknown().optional() })) }).parse(await this.json("/v1/order/checkout", checkoutRequestSchema.parse(request)));
+    const allowed = z.object({ can_be_delivered: z.boolean() }).safeParse(await this.json("/v1/delivery/check-client", { phone_number: request.recipient.phone_number }));
+    if (!allowed.success) throw new OzonDeliveryError("response");
+    if (!allowed.data.can_be_delivered) throw new OzonDeliveryError("recipient");
+    const parsed = z.object({ results: z.array(z.object({ request_id: positiveId, posting: z.object({ estimated_delivery_cost: money, estimated_insurance_cost: money, estimated_delivery_days: z.number().int().nonnegative(), cutoff_at: z.iso.datetime() }).nullish(), error: z.unknown().optional() })) }).safeParse(await this.json("/v1/order/checkout", checkoutRequestSchema.parse(request)));
+    if (!parsed.success) throw new OzonDeliveryError("response");
+    const response = parsed.data;
     const fail = (reason: OzonCheckoutFailure, retryable = false, code = "unavailable"): never => {
       const error = new OzonDeliveryError(code, retryable);
       error.checkoutFailure = reason;

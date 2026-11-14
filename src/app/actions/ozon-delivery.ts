@@ -77,6 +77,7 @@ export async function quoteOzonDelivery(phoneInput: string, pointInput: string) 
   let selectedPointId: number | undefined;
   try {
     const phone = normalizePhone(phoneInput); const id = positiveId.parse(Number(pointInput));
+    selectedPointId = id;
     const [rawCart, config] = await Promise.all([getCart(), getOzonDeliveryConfig()]);
     const cart = checkoutCart(rawCart);
     requireOzonDelivery(config);
@@ -85,7 +86,6 @@ export async function quoteOzonDelivery(phoneInput: string, pointInput: string) 
     const { value: { point, calculation }, attempts } = await retryOzonQuote(config, async api => {
       const point = (await api.pointInfo([id])).find(point => point.delivery_point_id === id && point.is_active);
       if (!point) throw new OzonDeliveryError("point");
-      selectedPointId = id;
       return { point, calculation: await api.checkout(request) };
     });
     await writeDiagnostic("delivery.quote.ok", { stage: "quote", durationMs: Date.now() - started, attempts, pointId: selectedPointId, expectedParcels: request.postings.length });

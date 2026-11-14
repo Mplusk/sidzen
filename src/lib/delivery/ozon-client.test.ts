@@ -59,6 +59,20 @@ describe("official Ozon Delivery API client", () => {
     await expect(new OzonDeliveryClient({ clientId: "app", clientSecret: "secret" }, transport).checkout(request)).rejects.toThrow("recipient");
     expect(transport).toHaveBeenCalledTimes(2);
   });
+  it("classifies malformed quote responses without exposing the provider payload", async () => {
+    for (const stage of ["point-info", "recipient", "checkout"] as const) {
+      const malformed = { unexpected: "private +79991234567 token-value" };
+      const transport = vi.fn<typeof fetch>().mockResolvedValueOnce(json({ access_token: "token" }));
+      if (stage === "point-info") transport.mockResolvedValueOnce(json(malformed));
+      if (stage === "recipient") transport.mockResolvedValueOnce(json(malformed));
+      if (stage === "checkout") transport.mockResolvedValueOnce(json({ can_be_delivered: true })).mockResolvedValueOnce(json(malformed));
+      const api = new OzonDeliveryClient({ clientId: "app", clientSecret: "synthetic" }, transport);
+      const error = await (stage === "point-info" ? api.pointInfo([42]) : api.checkout(request)).catch(e => e);
+      expect(error).toMatchObject({ code: "response", retryable: false, message: "response" });
+      expect(JSON.stringify(error)).not.toMatch(/79991234567|token-value|private/);
+      expect(transport).toHaveBeenCalledTimes(stage === "checkout" ? 3 : 2);
+    }
+  });
   it("never treats a partial, duplicate or errored quote as free delivery", async () => {
     for (const results of [[], [{ request_id: 1, error: { code: "DeliveryPointRestrictionsError" } }], [{ request_id: 2, posting: {} }], [{ request_id: 1 }, { request_id: 1 }]]) {
       const transport = vi.fn<typeof fetch>().mockResolvedValueOnce(json({ access_token: "token" })).mockResolvedValueOnce(json({ can_be_delivered: true })).mockResolvedValueOnce(json({ results }));
