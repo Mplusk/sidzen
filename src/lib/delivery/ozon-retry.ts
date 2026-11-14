@@ -11,7 +11,9 @@ export async function retryOzonQuote<T>(credentials: { clientId: string; clientS
     catch (error) {
       if (!(error instanceof OzonDeliveryError)) throw error;
       error.attempts = attempts;
-      const delay = attempts * 500;
+      // Give an unexplained provider rejection a little time to recover, while
+      // retaining the same total budget and the three-attempt limit.
+      const delay = attempts * (error.checkoutFailure === "provider-rejection" ? 2000 : 500);
       if (attempts >= 3 || (error.code !== "transport" && !error.retryable) || Date.now() + delay >= deadline) throw error;
       await new Promise<void>(resolve => setTimeout(resolve, delay));
     }
