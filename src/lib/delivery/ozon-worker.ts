@@ -19,15 +19,26 @@ export async function syncOzonPointsPage() {
   if (!sync) return false;
   const lockToken = randomUUID();
   if (!(await prisma.ozonDeliverySync.updateMany({ where: { id: sync.id, generation: sync.generation, ...unlocked() }, data: { lockToken, lockedUntil: new Date(Date.now() + 120000), status: "RUNNING" } })).count) return false;
+  let directoryOperation: "config" | "list" | "info" | "save" = "config";
   try {
     const config = await getOzonDeliveryConfig();
     if (config.clientId !== sync.clientId || BigInt(config.shipmentMethodId ?? 0) !== sync.methodId || !config.enabled) throw new OzonDeliveryError("config");
     if (sync.pages >= 5000) throw new OzonDeliveryError("pagination");
     const api = new OzonDeliveryClient(config);
+    directoryOperation = "list";
     const page = await api.pointPage(sync.cursor);
     if (page.next_cursor && page.next_cursor === sync.cursor) throw new OzonDeliveryError("pagination");
     const ids = page.delivery_points.filter(point => (Array.isArray(point.shipment_method_ids) ? point.shipment_method_ids : [point.shipment_method_ids]).includes(Number(sync.methodId))).map(point => point.delivery_point_id);
+    if (new Set(ids).size !== ids.length) throw new OzonDeliveryError("response");
+    directoryOperation = "info";
     const points = ids.length ? await api.pointInfo(ids) : [];
+    const returnedIds = new Set(points.map(point => point.delivery_point_id));
+    // Do not advance the generation if details were omitted, duplicated or
+    // returned for a different point: the final page deactivates stale points.
+    if (points.length !== ids.length || returnedIds.size !== ids.length || ids.some(id => !returnedIds.has(id))) throw new OzonDeliveryError("response");
+    // A completely empty refresh cannot justify deactivating the whole cache.
+    if (!page.next_cursor && sync.points === 0 && points.length === 0) throw new OzonDeliveryError("response");
+    directoryOperation = "save";
     await prisma.$transaction(async tx => {
       // A new settings save invalidates an old worker without publishing stale points.
       const claimed = await tx.ozonDeliverySync.updateMany({ where: { id: sync.id, generation: sync.generation, lockToken }, data: { cursor: page.next_cursor || null, pages: { increment: 1 }, points: { increment: points.length }, status: page.next_cursor ? "RUNNING" : "SUCCEEDED", error: null, lockToken: null, lockedUntil: null } });
@@ -39,8 +50,9 @@ export async function syncOzonPointsPage() {
       if (!page.next_cursor) await tx.ozonDeliveryPoint.updateMany({ where: { generation: { not: sync.generation } }, data: { active: false } });
     }, { timeout: 20000 });
   } catch (error) {
-    await writeDiagnostic("delivery.points.failed", { stage: "points", reason: error instanceof OzonDeliveryError ? error.code : "provider" });
-    await prisma.ozonDeliverySync.updateMany({ where: { id: sync.id, lockToken }, data: { status: "FAILED", error: error instanceof OzonDeliveryError ? error.code : "provider", lockToken: null, lockedUntil: null } });
+    const reason = error instanceof OzonDeliveryError ? error.code : error instanceof z.ZodError && (directoryOperation === "list" || directoryOperation === "info") ? "response" : "provider";
+    await writeDiagnostic("delivery.points.failed", { stage: "points", directoryOperation, reason });
+    await prisma.ozonDeliverySync.updateMany({ where: { id: sync.id, lockToken }, data: { status: "FAILED", error: reason, lockToken: null, lockedUntil: null } });
   }
   return true;
 }

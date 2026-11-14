@@ -72,7 +72,7 @@ export const checkoutFailureLabels = {
   "point-restrictions": "Ozon сообщил об ограничениях выбранного ПВЗ для посылки",
   "provider-rejection": "Ozon явно отклонил расчёт; причина не распознана интеграцией",
 } as const;
-export type DiagnosticDetails = { durationMs?: number; carrierCostKopecks?: number; expectedCarrierCostKopecks?: number; attempts?: number; pointId?: number; expectedParcels?: number; receivedParcels?: number; checkoutFailure?: string; aiFailure?: string; provider?: "vk" | "google" | "yandex" | "ozon" | "wb"; stage?: "quote" | "verify" | "consent" | "recheck" | "shipment" | "status" | "points" | "cancel"; reason?: string };
+export type DiagnosticDetails = { durationMs?: number; carrierCostKopecks?: number; expectedCarrierCostKopecks?: number; attempts?: number; pointId?: number; expectedParcels?: number; receivedParcels?: number; checkoutFailure?: string; aiFailure?: string; provider?: "vk" | "google" | "yandex" | "ozon" | "wb"; stage?: "quote" | "verify" | "consent" | "recheck" | "shipment" | "status" | "points" | "cancel"; directoryOperation?: "config" | "list" | "info" | "save"; reason?: string };
 const safeReasons = ["expired", "signature", "cart", "config", "phone", "credentials", "transport", "rate", "recipient", "packaging", "point", "parcels", "unavailable", "response", "provider", "disabled", "method", "pagination", "unpaid", "cancel-review", "partial", "redirect", "social-expired", "social-canceled", "social-operator", "social-conflict", "social-link-session", "social-disabled", "social-failed", "provider-rejected", "temporary", "uncertain-submission", "provider-status", "already-delivered", "cancel-pending"];
 export function safeDiagnosticDetails(input: DiagnosticDetails = {}): Record<string, string | number> {
   const result: Record<string, string | number> = {};
@@ -82,6 +82,7 @@ export function safeDiagnosticDetails(input: DiagnosticDetails = {}): Record<str
   }
   if (["vk", "google", "yandex", "ozon", "wb"].includes(input.provider ?? "")) result.provider = input.provider!;
   if (["quote", "verify", "consent", "recheck", "shipment", "status", "points", "cancel"].includes(input.stage ?? "")) result.stage = input.stage!;
+  if (["config", "list", "info", "save"].includes(input.directoryOperation ?? "")) result.directoryOperation = input.directoryOperation!;
   if (safeReasons.includes(input.reason ?? "")) result.reason = input.reason!;
   if (input.checkoutFailure && Object.hasOwn(checkoutFailureLabels, input.checkoutFailure)) result.checkoutFailure = input.checkoutFailure;
   if (input.aiFailure && Object.hasOwn(categoryAiFailureLabels, input.aiFailure)) result.aiFailure = input.aiFailure;
