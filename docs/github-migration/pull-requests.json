@@ -1,0 +1,1341 @@
+{
+  "source_repository": "Cossomoj/3d-maniya",
+  "exported_at_utc": "2026-11-14T22:20:01.525Z",
+  "description": "GitHub pull-request records archived during the repository migration. Git commits and branch heads are retained separately.",
+  "pull_requests": [
+    {
+      "number": 58,
+      "title": "Retry unrecognized Ozon delivery quote rejections",
+      "state": "open",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-14T20:25:48Z",
+      "updated_at": "2026-11-14T20:25:48Z",
+      "closed_at": null,
+      "merged_at": null,
+      "merge_commit_sha": "3005ab0aafa820ec4e682449b6a92286ff8264d4",
+      "head": {
+        "ref": "fix/ozon-quote-transient-rejections",
+        "sha": "f05c2c3a13819d195caea829de50ad4cef623f87"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "f36d861d48b9af6016831b85dae1f2bb5f9c992c"
+      },
+      "labels": [],
+      "body": "Ozon can reject a pickup-point quote without a recognized reason and subsequently return a valid quote for the same point. Retry those read-only calculations with a short bounded delay and show a useful retry suggestion if all attempts fail. Confirmed restrictions still fail immediately, and no delivery is treated as verified without a complete successful quote.\n\nValidation: Ozon client, retry, and privacy tests (41 passed); ESLint and TypeScript.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/58"
+    },
+    {
+      "number": 57,
+      "title": "Fit order history to the available width",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-11T16:17:00Z",
+      "updated_at": "2026-11-11T16:21:19Z",
+      "closed_at": "2026-11-11T16:21:18Z",
+      "merged_at": "2026-11-11T16:21:18Z",
+      "merge_commit_sha": "f36d861d48b9af6016831b85dae1f2bb5f9c992c",
+      "head": {
+        "ref": "fix/order-history-fit-screen",
+        "sha": "f36d861d48b9af6016831b85dae1f2bb5f9c992c"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "e847d15cefe510c9b8fa6776c20d701849e2224e"
+      },
+      "labels": [],
+      "body": "The orders table now fits its available width, including the payment action, without horizontal scrolling. When the account content area is narrower, orders switch to the existing responsive cards.\n\nValidation: checked ten viewport widths from 320 to 1920 px, including button and table bounds; ESLint and TypeScript passed.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/57"
+    },
+    {
+      "number": 56,
+      "title": "Make customer order statuses clear and mobile rows compact",
+      "state": "closed",
+      "draft": true,
+      "author": "Cossomoj",
+      "created_at": "2026-11-11T13:48:50Z",
+      "updated_at": "2026-11-11T13:54:00Z",
+      "closed_at": "2026-11-11T13:54:00Z",
+      "merged_at": "2026-11-11T13:54:00Z",
+      "merge_commit_sha": "e847d15cefe510c9b8fa6776c20d701849e2224e",
+      "head": {
+        "ref": "codex/mobile-orders-1794404901857",
+        "sha": "e847d15cefe510c9b8fa6776c20d701849e2224e"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "3e108585d45886dbf1d2f5a5f1ef79f49e3ceebd"
+      },
+      "labels": [],
+      "body": "Mobile account order cards now use a compact layout, with a readable payment action and a smaller, aligned section header. Order status colors distinguish pending payment, canceled/refunded and paid/delivered states in customer and admin views. The order summary cards also align evenly.\n\nValidated responsive layouts at 320, 390, 768 and 1440 pixels, checked payment eligibility and order status rendering, and ran the local unit suite.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/56"
+    },
+    {
+      "number": 55,
+      "title": "Improve payment action in customer orders",
+      "state": "closed",
+      "draft": true,
+      "author": "Cossomoj",
+      "created_at": "2026-11-11T12:05:56Z",
+      "updated_at": "2026-11-11T12:20:04Z",
+      "closed_at": "2026-11-11T12:20:03Z",
+      "merged_at": "2026-11-11T12:20:03Z",
+      "merge_commit_sha": "3e108585d45886dbf1d2f5a5f1ef79f49e3ceebd",
+      "head": {
+        "ref": "codex/payment-actions-1794398731243",
+        "sha": "3e108585d45886dbf1d2f5a5f1ef79f49e3ceebd"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "439014f4eca6b09ff95d536189e90a42a4536d87"
+      },
+      "labels": [],
+      "body": "The pending-payment action now has its own compact, aligned place in customer order lists and adapts to smaller screens. Remove the requested explanatory text from the online checkout summary while retaining the order-terms control.\n\nValidated the payment form with a mocked action, the checkout interaction, and responsive layouts at desktop, tablet and mobile widths.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/55"
+    },
+    {
+      "number": 54,
+      "title": "Fix city, product variants, and cancellations in Telegram alerts",
+      "state": "closed",
+      "draft": true,
+      "author": "Cossomoj",
+      "created_at": "2026-11-11T10:47:42Z",
+      "updated_at": "2026-11-11T11:02:24Z",
+      "closed_at": "2026-11-11T11:02:23Z",
+      "merged_at": "2026-11-11T11:02:23Z",
+      "merge_commit_sha": "439014f4eca6b09ff95d536189e90a42a4536d87",
+      "head": {
+        "ref": "codex/telegram-order-cancellation-20261111",
+        "sha": "439014f4eca6b09ff95d536189e90a42a4536d87"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "37bf011d9621704611bb45a6f04fcb766e46ca6e"
+      },
+      "labels": [],
+      "body": "Order notifications now extract destination cities from pickup addresses and include the purchased product's saved variant and color. Separate queued cancellation and late-payment messages keep the seller informed without resending uncertain Telegram submissions.\n\nValidation: unit tests for formatting, idempotency, expiry, and late payments; PostgreSQL smoke tests exercise cancellation and delivery through a fake Telegram transport.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/54"
+    },
+    {
+      "number": 53,
+      "title": "Return unpaid orders to the cart after ten minutes",
+      "state": "closed",
+      "draft": true,
+      "author": "Cossomoj",
+      "created_at": "2026-11-11T09:47:16Z",
+      "updated_at": "2026-11-11T09:54:49Z",
+      "closed_at": "2026-11-11T09:54:49Z",
+      "merged_at": "2026-11-11T09:54:49Z",
+      "merge_commit_sha": "37bf011d9621704611bb45a6f04fcb766e46ca6e",
+      "head": {
+        "ref": "codex/return-unpaid-orders-1794390422037",
+        "sha": "37bf011d9621704611bb45a6f04fcb766e46ca6e"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "6ab8da998a6ad132fcd43197981a9ae634339b79"
+      },
+      "labels": [],
+      "body": "Allow buyers to resume their existing YooKassa payment until its original ten-minute deadline. Cancel unpaid orders after that deadline and return their items to the correct cart, retaining options and checking availability. Handle delayed payment and guest order access safely.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/53"
+    },
+    {
+      "number": 52,
+      "title": "Bound recovery of unmatched payment notifications",
+      "state": "closed",
+      "draft": true,
+      "author": "Cossomoj",
+      "created_at": "2026-11-11T08:39:36Z",
+      "updated_at": "2026-11-11T08:44:51Z",
+      "closed_at": "2026-11-11T08:44:50Z",
+      "merged_at": "2026-11-11T08:44:50Z",
+      "merge_commit_sha": "6ab8da998a6ad132fcd43197981a9ae634339b79",
+      "head": {
+        "ref": "codex/payment-recovery-guard-1794386359608",
+        "sha": "6ab8da998a6ad132fcd43197981a9ae634339b79"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "5fc9f97f65b62a187994c88b8f382e794e110e9b"
+      },
+      "labels": [],
+      "body": "Avoid unbounded provider calls from unknown notification IDs while preserving recovery of payments whose creation response was lost. Verify the recovery flow against the isolated payment fixture.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/52"
+    },
+    {
+      "number": 51,
+      "title": "Keep stock reserved during payment retries",
+      "state": "closed",
+      "draft": true,
+      "author": "Cossomoj",
+      "created_at": "2026-11-11T08:30:31Z",
+      "updated_at": "2026-11-11T08:34:33Z",
+      "closed_at": "2026-11-11T08:34:33Z",
+      "merged_at": "2026-11-11T08:34:33Z",
+      "merge_commit_sha": "5fc9f97f65b62a187994c88b8f382e794e110e9b",
+      "head": {
+        "ref": "codex/payment-hold-retry-1794385817165",
+        "sha": "5fc9f97f65b62a187994c88b8f382e794e110e9b"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "0a5ee05f2cb54a648d1df83848710fa8d97906c6"
+      },
+      "labels": [],
+      "body": "Extend an active stock reservation when the customer returns to payment, while leaving automated retries unable to renew it. Refresh open order details and verify both behaviors against the isolated payment fixture.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/51"
+    },
+    {
+      "number": 50,
+      "title": "Reserve checkout stock and exclude unavailable items",
+      "state": "closed",
+      "draft": true,
+      "author": "Cossomoj",
+      "created_at": "2026-11-11T08:08:51Z",
+      "updated_at": "2026-11-11T08:21:54Z",
+      "closed_at": "2026-11-11T08:21:53Z",
+      "merged_at": "2026-11-11T08:21:53Z",
+      "merge_commit_sha": "0a5ee05f2cb54a648d1df83848710fa8d97906c6",
+      "head": {
+        "ref": "codex/stock-holds-1794384523421",
+        "sha": "0a5ee05f2cb54a648d1df83848710fa8d97906c6"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "b12b75abbc2da375b8b7f617da851517d91a8c31"
+      },
+      "labels": [],
+      "body": "Reserve available cart items for 30 minutes when checkout begins, preserving at least ten minutes for payment. Expire unpaid holds, recover or flag late payments, and exclude unavailable items from checkout while refreshing open carts and forms.\n\nValidation: TypeScript, ESLint and 925 local tests; CI exercises migration, concurrent reservations and checkout on isolated PostgreSQL.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/50"
+    },
+    {
+      "number": 49,
+      "title": "Исправить отображение корзины и сверку остатков",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-10T09:27:59Z",
+      "updated_at": "2026-11-10T09:54:44Z",
+      "closed_at": "2026-11-10T09:54:44Z",
+      "merged_at": "2026-11-10T09:54:44Z",
+      "merge_commit_sha": "763067be44108415a5a5d5e9dc5adca74690d348",
+      "head": {
+        "ref": "codex/cart-stock-reconciliation",
+        "sha": "bb4ed71ff8fa6930e3c1fae2c135c15c37c07382"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "fa0258bf35398243b58d03ea012a4962fdbacbce"
+      },
+      "labels": [],
+      "body": "Одинаковые позиции корзины отображаются вместе с суммарным количеством; сохранённые параметры и защита от одновременных изменений сохраняются. Товары со старыми несверенными заказами показывают уточнение наличия до оформления, а поиск по артикулу и подсказки помогают администратору сверить остатки.\n\nДобавлены проверки на изолированной PostgreSQL и HTTP: группировка, конкурентные изменения, резервы и сверка старых заказов.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/49"
+    },
+    {
+      "number": 48,
+      "title": "Временная проверка структуры корзины",
+      "state": "closed",
+      "draft": true,
+      "author": "Cossomoj",
+      "created_at": "2026-11-10T09:21:06Z",
+      "updated_at": "2026-11-10T09:22:22Z",
+      "closed_at": "2026-11-10T09:22:22Z",
+      "merged_at": null,
+      "merge_commit_sha": "914f6eb173e953adc4cc29d9dd0b155a7f698f85",
+      "head": {
+        "ref": "codex/cart-inspect-300030",
+        "sha": "4d8a711811e6935e351deb36d08ef922a42c43b0"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "fa0258bf35398243b58d03ea012a4962fdbacbce"
+      },
+      "labels": [],
+      "body": "Только чтение агрегированной структуры корзины для товара SKU 300030 без идентификаторов, значений параметров и данных клиентов. Не объединять.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/48"
+    },
+    {
+      "number": 47,
+      "title": "Временная проверка наличия товара",
+      "state": "closed",
+      "draft": true,
+      "author": "Cossomoj",
+      "created_at": "2026-11-10T09:03:19Z",
+      "updated_at": "2026-11-10T09:04:34Z",
+      "closed_at": "2026-11-10T09:04:34Z",
+      "merged_at": null,
+      "merge_commit_sha": "b2ec7a31025678a84285827e1347f6f0582d8b2f",
+      "head": {
+        "ref": "codex/stock-inspect-300030",
+        "sha": "2639ee91f2338b9cf0f554b7d1ff2727e1ba9538"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "fa0258bf35398243b58d03ea012a4962fdbacbce"
+      },
+      "labels": [],
+      "body": "Только чтение агрегированных данных об остатках и сверке SKU 300030. Ветка временная, не объединять.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/47"
+    },
+    {
+      "number": 46,
+      "title": "Temporary public response headers check",
+      "state": "closed",
+      "draft": true,
+      "author": "Cossomoj",
+      "created_at": "2026-11-10T06:30:52Z",
+      "updated_at": "2026-11-10T06:31:36Z",
+      "closed_at": "2026-11-10T06:31:36Z",
+      "merged_at": null,
+      "merge_commit_sha": "a033af2a1b8987fd61128559994d9e00618182bd",
+      "head": {
+        "ref": "codex/check-confirm-headers-once",
+        "sha": "b8e6f9ad6e9fa30d3ed143095dd959099ce128a6"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "fa0258bf35398243b58d03ea012a4962fdbacbce"
+      },
+      "labels": [],
+      "body": "Performs a read-only GET and reports only response headers and status. Close without merge.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/46"
+    },
+    {
+      "number": 45,
+      "title": "Исправить подтверждение входа в Chrome",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-10T06:10:58Z",
+      "updated_at": "2026-11-10T06:16:20Z",
+      "closed_at": "2026-11-10T06:16:19Z",
+      "merged_at": "2026-11-10T06:16:19Z",
+      "merge_commit_sha": "fa0258bf35398243b58d03ea012a4962fdbacbce",
+      "head": {
+        "ref": "codex/fix-admin-confirm-origin",
+        "sha": "178629404f1aedc5938856ecb93ed3d615abceb7"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "03a5d2f93271c532ea403a649d3dbab83d154a88"
+      },
+      "labels": [],
+      "body": "При подтверждении ссылки браузер отправлял Origin: null из-за политики no-referrer, поэтому сервер отклонял корректную форму. Изолированная страница теперь использует same-origin, а строгая проверка Origin сохранена.\n\nДобавлены проверки заголовков и реальной отправки формы в Chromium с тестовыми данными.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/45"
+    },
+    {
+      "number": 44,
+      "title": "Temporary read-only enrollment diagnostic",
+      "state": "closed",
+      "draft": true,
+      "author": "Cossomoj",
+      "created_at": "2026-11-10T06:04:57Z",
+      "updated_at": "2026-11-10T06:06:01Z",
+      "closed_at": "2026-11-10T06:06:01Z",
+      "merged_at": null,
+      "merge_commit_sha": "12dc081c76987e1c80a626f505c1b7491aa02191",
+      "head": {
+        "ref": "codex/inspect-enrollment-once",
+        "sha": "f1d23aebc571baaa6061592503fbbcad0fa34c19"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "03a5d2f93271c532ea403a649d3dbab83d154a88"
+      },
+      "labels": [],
+      "body": "Runs one read-only SQL query reporting boolean enrollment conditions; no customer data, tokens, hashes, credentials, or production changes. Close without merge.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/44"
+    },
+    {
+      "number": 43,
+      "title": "Подтверждение входа в управление по почте",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-10T05:32:38Z",
+      "updated_at": "2026-11-10T05:40:51Z",
+      "closed_at": "2026-11-10T05:40:51Z",
+      "merged_at": "2026-11-10T05:40:51Z",
+      "merge_commit_sha": "03a5d2f93271c532ea403a649d3dbab83d154a88",
+      "head": {
+        "ref": "codex/admin-email-confirmation",
+        "sha": "eccdd293fc18eb877eeb2eee939aa7828e5bbec9"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "546a629266d2ee5db56f47d40b65b885fbb0871a"
+      },
+      "labels": [],
+      "body": "Добавляет двухэтапный вход в управление: после пароля письмо со ссылкой подтверждается в том же браузере. Защита по умолчанию выключена и включается после проверки пароля и доставки ссылки.\n\nЗапускается CI с изолированной PostgreSQL, проверкой миграции и аварийного восстановления. Объединение приведёт к миграции production-базы; до проверки и разрешения владельца не объединять.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/43"
+    },
+    {
+      "number": 42,
+      "title": "Временная проверка резервных копий",
+      "state": "closed",
+      "draft": true,
+      "author": "Cossomoj",
+      "created_at": "2026-11-10T05:16:03Z",
+      "updated_at": "2026-11-10T05:19:03Z",
+      "closed_at": "2026-11-10T05:19:03Z",
+      "merged_at": null,
+      "merge_commit_sha": "3c3ca5b44fc0b3a921af9371759f5ef4e7795b4b",
+      "head": {
+        "ref": "codex/backup-readonly-check-20261110",
+        "sha": "3a8eba1053209e74832e703ddf46db2def34310d"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "546a629266d2ee5db56f47d40b65b885fbb0871a"
+      },
+      "labels": [],
+      "body": "Только чтение: свежесть, наличие и контрольные суммы файлов, читаемость оглавления дампа. Не объединять.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/42"
+    },
+    {
+      "number": 41,
+      "title": "Добавить защищённые настройки SMTP SpaceWeb",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-09T22:09:16Z",
+      "updated_at": "2026-11-09T22:16:40Z",
+      "closed_at": "2026-11-09T22:16:39Z",
+      "merged_at": "2026-11-09T22:16:39Z",
+      "merge_commit_sha": "546a629266d2ee5db56f47d40b65b885fbb0871a",
+      "head": {
+        "ref": "codex/spaceweb-smtp-settings",
+        "sha": "cde71e9120f713a84dea03a2f2e84cd505660917"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "2984c0991d7890ea24b835e2c41a2ea95b5b7b7f"
+      },
+      "labels": [],
+      "body": "Добавляет настройки подключения почтового ящика поддержки SpaceWeb с зашифрованным хранением пароля и проверкой соединения. Изменение не включает отправку писем и не меняет существующий вход.\n\nПроверки: тесты SMTP и формы, ESLint, проверка lockfile. Требуется успешный CI.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/41"
+    },
+    {
+      "number": 40,
+      "title": "Временная диагностика развёртывания",
+      "state": "closed",
+      "draft": true,
+      "author": "Cossomoj",
+      "created_at": "2026-11-09T21:48:27Z",
+      "updated_at": "2026-11-09T21:49:21Z",
+      "closed_at": "2026-11-09T21:49:20Z",
+      "merged_at": null,
+      "merge_commit_sha": "9c3cdc624f07277d1621ed09453030a58787adb8",
+      "head": {
+        "ref": "codex/release-state-check-38",
+        "sha": "ed8c64e05b4cf1c7eb42a8896f59a53276080540"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "2984c0991d7890ea24b835e2c41a2ea95b5b7b7f"
+      },
+      "labels": [],
+      "body": "Одноразовая read-only диагностика завершена: проверены активная версия, здоровье контейнеров и наличие процессов. PR не объединён.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/40"
+    },
+    {
+      "number": 39,
+      "title": "Редактировать цены из списка товаров",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-09T21:23:31Z",
+      "updated_at": "2026-11-09T21:27:59Z",
+      "closed_at": "2026-11-09T21:27:58Z",
+      "merged_at": "2026-11-09T21:27:58Z",
+      "merge_commit_sha": "2984c0991d7890ea24b835e2c41a2ea95b5b7b7f",
+      "head": {
+        "ref": "codex/edit-prices-product-list",
+        "sha": "2405feb215f7b9d6bc0af398fd2ec1f373ad3f7a"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "e9d1fff9b48844eb7dc09a783479293da9724c97"
+      },
+      "labels": [],
+      "body": "В списке товаров можно открыть изменение текущей и старой цены без перехода в карточку. Для связанных маркетплейсов форма предупреждает о переходе карточки на данные сайта и запрашивает подтверждение; цены отдельных вариантов остаются прежними.\n\nСохранение проверяет права и актуальность данных, выполняет запись и аудит в одной транзакции. Полный редактор защищён от перезаписи цены устаревшей формой. CI проверяет параллельные изменения и синхронизацию на изолированной PostgreSQL.\n\nЛокально проверены TypeScript, ESLint, 17 тестов и адаптивный предпросмотр диалога.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/39"
+    },
+    {
+      "number": 38,
+      "title": "Отделить меню управления магазином в личном кабинете",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-09T20:31:10Z",
+      "updated_at": "2026-11-09T20:42:01Z",
+      "closed_at": "2026-11-09T20:42:00Z",
+      "merged_at": "2026-11-09T20:42:00Z",
+      "merge_commit_sha": "e9d1fff9b48844eb7dc09a783479293da9724c97",
+      "head": {
+        "ref": "codex/account-management-navigation",
+        "sha": "c055cf3d214483421628ac1f159889330662f8ea"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "e4cdecaacd0b526f04b842e03b81240c436dfe87"
+      },
+      "labels": [],
+      "body": "Личные разделы и доступные сотруднику функции управления магазином отображаются отдельными блоками. На телефоне каждый блок раскрывается самостоятельно; состав ссылок по ролям и подсветка текущего раздела сохранены.\n\nПроверено: TypeScript, ESLint и адаптивный локальный предпросмотр на 1440, 768 и 390 px.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/38"
+    },
+    {
+      "number": 37,
+      "title": "Временная диагностика развёртывания № 36",
+      "state": "closed",
+      "draft": true,
+      "author": "Cossomoj",
+      "created_at": "2026-11-09T20:05:44Z",
+      "updated_at": "2026-11-09T20:07:16Z",
+      "closed_at": "2026-11-09T20:07:16Z",
+      "merged_at": null,
+      "merge_commit_sha": "da9daf5a9b80bcf5ccb60f1bd4543c2d9f4db3da",
+      "head": {
+        "ref": "codex/release-state-check-36",
+        "sha": "8a39ad0208da9568c1ed70981b6dcdb3826f855b"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "e4cdecaacd0b526f04b842e03b81240c436dfe87"
+      },
+      "labels": [],
+      "body": "Одноразовая read-only диагностика завершена. Подтверждены активная версия, здоровье сервисов и выполнение двух миграций; объединение этого диагностического PR не требуется.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/37"
+    },
+    {
+      "number": 36,
+      "title": "Защитить остатки и отзывать гостевой доступ к заказам",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-09T17:48:30Z",
+      "updated_at": "2026-11-09T19:34:10Z",
+      "closed_at": "2026-11-09T19:34:10Z",
+      "merged_at": "2026-11-09T19:34:10Z",
+      "merge_commit_sha": "e4cdecaacd0b526f04b842e03b81240c436dfe87",
+      "head": {
+        "ref": "codex/stock-guest-access-20261109",
+        "sha": "f99c959ae67316dc120d87697decfe4f38e713e0"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "d1d80cd5e7e091db52a17dde3f2a18c7dda1b316"
+      },
+      "labels": [],
+      "body": "Оформление атомарно резервирует готовые товары и не допускает продажи одного остатка двум заказам сайта. Старые незавершённые заказы требуют сверки остатков; неопределённые возвраты и отправления требуют проверки оператором. Продажи маркетплейсов остаются вне общего учёта.\n\nГостевые разрешения хранятся на сервере в виде хэшей и отзываются при выходе, смене владельца и удалении заказа. Перед развёртыванием необходимо проверить физические остатки и резервные копии: миграции добавляют учёт резервов и таблицу разрешений.\n\nПроверки: 90 локальных тестов затронутых сценариев, Prisma validate, TypeScript и ESLint; CI дополнительно проверяет миграции и конкурентное резервирование на изолированной PostgreSQL.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/36"
+    },
+    {
+      "number": 35,
+      "title": "Обновить Next.js и исключить лишний перезапуск реле",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-09T16:12:43Z",
+      "updated_at": "2026-11-09T16:18:01Z",
+      "closed_at": "2026-11-09T16:18:01Z",
+      "merged_at": "2026-11-09T16:18:01Z",
+      "merge_commit_sha": "d1d80cd5e7e091db52a17dde3f2a18c7dda1b316",
+      "head": {
+        "ref": "codex/next-16-4-security",
+        "sha": "7c874e52c04714c3c855c14d0d41bfa55bd7c25f"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "71ffacf52e512ad99fed9cd9cfa4093ca12c7136"
+      },
+      "labels": [],
+      "body": "Обновляет Next.js и eslint-config-next с 16.3.4 до 16.4.5, а sharp до 0.35.5 для исправлений безопасности обработки изображений. Добавляет явно используемый Prisma конфигурацией dotenv.\n\nРазвёртывание Telegram-реле запускается при изменении его файлов или вручную; при недоступной истории запускается безопасный вариант с развёртыванием. Это предотвращает повторный ненужный перезапуск реле при обновлении сайта.\n\nПроверки: TypeScript, ESLint, профильные unit-тесты и 8 тестов условий развёртывания; Linux CI проверяет полный набор, сборку и HTTP-сценарии на изолированной БД. Реальные платежи не выполняются.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/35"
+    },
+    {
+      "number": 34,
+      "title": "Исправить обзор города и подсказки с опечатками",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-09T12:12:07Z",
+      "updated_at": "2026-11-09T12:17:59Z",
+      "closed_at": "2026-11-09T12:17:59Z",
+      "merged_at": "2026-11-09T12:17:58Z",
+      "merge_commit_sha": "71ffacf52e512ad99fed9cd9cfa4093ca12c7136",
+      "head": {
+        "ref": "codex/city-typo-map-focus",
+        "sha": "0ac9f8c8744c9ddb82adc53839c95491ceb5daa9"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "4a3803a6fe7383d810de70f55934535aa6c81965"
+      },
+      "labels": [],
+      "body": "Поиск Тамбова включает адреса области и одноимённые улицы; прежний алгоритм показывал всю страну. Начальный обзор теперь выбирает явный городской кластер и исключает из его рамки отделённые пригороды, сохраняя все точки на карте.\n\nПодсказки из существующего справочника предлагают варианты с опечатками и не подменяют город автоматически. Они доступны и после быстрого поиска без результатов; временная недоступность подсказок не мешает ручному поиску.\n\nПроверки: 54 профильных теста, ESLint, TypeScript; реальные публичные данные Тамбова, Омска и Москвы, мобильный предпросмотр Тамбова. Холодное построение словаря адресов в PostgreSQL дополнительно проверить после развёртывания.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/34"
+    },
+    {
+      "number": 33,
+      "title": "Исправить начальный обзор карты ПВЗ",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-09T09:42:09Z",
+      "updated_at": "2026-11-09T09:53:35Z",
+      "closed_at": "2026-11-09T09:53:35Z",
+      "merged_at": "2026-11-09T09:53:35Z",
+      "merge_commit_sha": "4a3803a6fe7383d810de70f55934535aa6c81965",
+      "head": {
+        "ref": "codex/pickup-city-overview",
+        "sha": "49157c3f374b67f9e652bd4f20eccf9ba2dbb411"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "cdc0521dbe418463e0e2ed1ee349ac232e11c450"
+      },
+      "labels": [],
+      "body": "Карта больше не рассчитывает масштаб скрытого диалога: окно открывается до измерения контейнера. Для большого города стартовые границы формируются по центральной части большинства пунктов, чтобы отдалённые пригороды не уменьшали карту. Все пункты остаются на карте и в списке; выбор адреса по-прежнему приближает его.\n\nПроверено: 21 тест, ESLint, TypeScript; локальная проверка на реальных публичных данных Омска, Петербурга и Яблоновского на телефоне и компьютере.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/33"
+    },
+    {
+      "number": 32,
+      "title": "Увеличить карту пунктов выдачи",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-08T22:06:28Z",
+      "updated_at": "2026-11-08T22:16:06Z",
+      "closed_at": "2026-11-08T22:16:06Z",
+      "merged_at": "2026-11-08T22:16:06Z",
+      "merge_commit_sha": "cdc0521dbe418463e0e2ed1ee349ac232e11c450",
+      "head": {
+        "ref": "codex/larger-pickup-map",
+        "sha": "571fb1cdee9eaf9eff62901db6e90870e2d1df1e"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "b64e6a3325845947cb236a5ceeffe2209fe70527"
+      },
+      "labels": [],
+      "body": "Увеличена карта выбора ПВЗ на телефонах и компьютерах, скрыты количество найденных пунктов и пояснение под картой. Сообщения об ошибке и атрибуция карты сохранены.\n\nПроверено: 22 теста, ESLint, TypeScript; в мобильном предпросмотре выбран и подтверждён демонстрационный пункт.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/32"
+    },
+    {
+      "number": 31,
+      "title": "Ускорить карту ПВЗ и обновлять справочник ночью",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-08T21:39:11Z",
+      "updated_at": "2026-11-08T21:45:47Z",
+      "closed_at": "2026-11-08T21:45:46Z",
+      "merged_at": "2026-11-08T21:45:46Z",
+      "merge_commit_sha": "b64e6a3325845947cb236a5ceeffe2209fe70527",
+      "head": {
+        "ref": "codex/fast-cached-ozon-directory",
+        "sha": "b41af3fc56fdeccb7c1876c14fa034f6d576ddbc"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "7730dcbf5ee6a446dd0dd9f68d3fcb3f6345bb53"
+      },
+      "labels": [],
+      "body": "Полная выдача 3931 ПВЗ Петербурга занимала около 29 секунд из-за 20 последовательных запросов. Новый режим карты читает существующий справочник PostgreSQL порциями до 5000 ПВЗ: Петербург загружается одним запросом, большие города сохраняют автоматическую догрузку. При открытии карты больше нет запросов к Ozon и записи координат.\n\nДобавлен ограниченный кэш JSON-ответов на 5 минут (20 записей / 16 МиБ), объединение одинаковых запросов и ETag/304. Настройки доставки и поколение/статус синхронизации проверяются перед чтением кэша. Ошибки и отключённая интеграция не кешируются. Проверка доступности выбранного ПВЗ при оформлении сохранена.\n\nСуществующий worker запускает обновление справочника после 03:00 МСК раз в день в независимом цикле. Текущая синхронизация не перезапускается, ошибка не очищает старый справочник; миграций и новых сервисов нет. Документация обновлена.\n\nПроверка: 82 тематических теста, ESLint, TypeScript. HTTP smoke расширен проверкой 230 ПВЗ одной выдачей и 304. После развёртывания: измерить время полной выдачи 3931 ПВЗ и проверить повторную загрузку.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/31"
+    },
+    {
+      "number": 30,
+      "title": "Показывать все найденные ПВЗ Ozon вместо первых 200",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-08T20:56:24Z",
+      "updated_at": "2026-11-08T21:08:05Z",
+      "closed_at": "2026-11-08T21:08:05Z",
+      "merged_at": "2026-11-08T21:08:05Z",
+      "merge_commit_sha": "7730dcbf5ee6a446dd0dd9f68d3fcb3f6345bb53",
+      "head": {
+        "ref": "codex/ozon-complete-city-points",
+        "sha": "66a76d61bcf62a3aa4473045debe08319000b204"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "b71eb2c6faaadb988f62f9b1eea284a2ebbd6344"
+      },
+      "labels": [],
+      "body": "Поиск города возвращал только первые 200 ПВЗ, поэтому на карте не было части адресов, уже существующих в справочнике. Теперь клиент автоматически загружает все страницы выбранного города и открывает карту после завершения загрузки.\n\nДобавлены отмена при смене города, проверка продолжения и конфигурации доставки, защита от открытия неполной выдачи после ошибки. Существующие ограничения по активному методу доставки сохранены. Большие наборы маркеров добавляются отменяемыми порциями; боковой список раскрывается по 100 адресов, счётчик и карта получают весь результат.\n\nПроверка: 76 тематических тестов, TypeScript и ESLint; локальный интерфейс с 2500 демонстрационными ПВЗ проверен на обычном и мобильном экранах. До исправления публичный production API подтверждает count=200/truncated=true для Петербурга; адреса Савушкина 124к1, Туристская 10к1 и Беговая 3 находятся отдельным поиском. После развёртывания требуется проверить полный результат города.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/30"
+    },
+    {
+      "number": 29,
+      "title": "Оформить окно ПВЗ с логотипом перевозчика и выбранным адресом",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-08T20:20:41Z",
+      "updated_at": "2026-11-08T20:25:16Z",
+      "closed_at": "2026-11-08T20:25:16Z",
+      "merged_at": "2026-11-08T20:25:16Z",
+      "merge_commit_sha": "b71eb2c6faaadb988f62f9b1eea284a2ebbd6344",
+      "head": {
+        "ref": "codex/pickup-brand-design-20261108",
+        "sha": "65b8df2f736040d27300bd5d79602f7a50d97a46"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "274d9988d89cc1476c5b2ea834558f05d4f5b335"
+      },
+      "labels": [],
+      "body": "В окне ПВЗ появились фирменный логотип Ozon/СДЭК, блок выбранного адреса и упорядоченный список с часами работы, если они доступны. Сохраняются палитра SIDZEN, карта OpenStreetMap и явное подтверждение выбора. Нажатие на маркер сразу показывает сведения о пункте; выделение сохраняется при повторной кластеризации.\n\nПроверено: локальный предпросмотр настоящих компонентов на 1440×900, 390×844 и 844×390; выбор метки и подтверждение без изменения production-корзины; тесты карты, диалога и оформления, ESLint, TypeScript. Демонстрационные данные и preview-файлы в PR не входят.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/29"
+    },
+    {
+      "number": 28,
+      "title": "Включить масштабирование карты колесом и жестом",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-08T18:11:41Z",
+      "updated_at": "2026-11-08T18:15:06Z",
+      "closed_at": "2026-11-08T18:15:06Z",
+      "merged_at": "2026-11-08T18:15:06Z",
+      "merge_commit_sha": "274d9988d89cc1476c5b2ea834558f05d4f5b335",
+      "head": {
+        "ref": "codex/pickup-map-zoom-20261108",
+        "sha": "f0d982f47992dfc14f716755a91fb35cdf8f6670"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "0c76c812a702dc2eb4935fb537129a77e885d2b9"
+      },
+      "labels": [],
+      "body": "На карте пунктов выдачи включено изменение масштаба колесом мыши и жестом двумя пальцами. Список адресов и кнопки масштаба работают как прежде.\n\nПроверено: тесты карты и выбора ПВЗ, ESLint.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/28"
+    },
+    {
+      "number": 27,
+      "title": "Использовать OpenStreetMap для выбора пункта выдачи",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-08T17:39:13Z",
+      "updated_at": "2026-11-08T17:43:28Z",
+      "closed_at": "2026-11-08T17:43:27Z",
+      "merged_at": "2026-11-08T17:43:27Z",
+      "merge_commit_sha": "0c76c812a702dc2eb4935fb537129a77e885d2b9",
+      "head": {
+        "ref": "codex/osm-pickup-20261108",
+        "sha": "b52e3e738d1ad2dee8594500b250bc54df9b90b2"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "adbac17436dfc8783656099f9ec4708ad0e3d182"
+      },
+      "labels": [],
+      "body": "Карта пунктов выдачи сразу использует OpenStreetMap через существующий серверный прокси. Выбор на карте и в списке сохранён, устаревшая настройка Яндекс Карт скрыта, а её публичный API отключён. Страницы о данных и cookies обновлены.\n\nПроверки: тесты выбора ПВЗ и карты, серверного прокси и отключённой конфигурации; ESLint и TypeScript.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/27"
+    },
+    {
+      "number": 26,
+      "title": "Добавить Яндекс Карты для выбора пунктов выдачи",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-08T13:47:21Z",
+      "updated_at": "2026-11-08T13:58:47Z",
+      "closed_at": "2026-11-08T13:58:46Z",
+      "merged_at": "2026-11-08T13:58:46Z",
+      "merge_commit_sha": "adbac17436dfc8783656099f9ec4708ad0e3d182",
+      "head": {
+        "ref": "codex/yandex-pickup-map-20261108",
+        "sha": "b144c0c78d5a7eced5d89f96b48fcfab3d7ca16d"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "ad1bda7c4f05c22ffa81c3823fa11e59f1a5c7bb"
+      },
+      "labels": [],
+      "body": "При выборе ПВЗ покупатель сможет открыть Яндекс Карты после отдельного согласия; при отказе или сбое остаются прежняя карта и список. Поддерживаются кластеры, отметки ПВЗ и синхронизация с выбором в списке. Ключ JavaScript API настраивается в защищённом разделе подключений и хранится зашифрованным; в браузер отправляется только публичный ключ, который необходимо ограничить доменом. Обновлены сведения об обработке данных.\n\nПроверено: ESLint, TypeScript, 28 тестов настроек, выбора и оформления.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/26"
+    },
+    {
+      "number": 25,
+      "title": "Выровнять общий подвал магазина",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-08T13:00:04Z",
+      "updated_at": "2026-11-08T13:09:09Z",
+      "closed_at": "2026-11-08T13:09:09Z",
+      "merged_at": "2026-11-08T13:09:09Z",
+      "merge_commit_sha": "ad1bda7c4f05c22ffa81c3823fa11e59f1a5c7bb",
+      "head": {
+        "ref": "codex/footer-layout-20261108",
+        "sha": "8143030960be39c61b9dceb4702683420aa6121f"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "d18d03a0d6105496086775333c9b628a1d568dfa"
+      },
+      "labels": [],
+      "body": "Подвал использовал более узкий контейнер, чем страницы и шапка, из-за чего его содержимое выглядело смещённым. Использована общая ширина, информация и правовые ссылки выровнены по единой двухколоночной сетке; на телефонах сохранена одноколоночная компоновка и увеличены боковые отступы.\n\nПроверено в браузере на ширине 1440, 768 и 390 пикселей на изолированной странице с фактическими стилями и содержимым подвала.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/25"
+    },
+    {
+      "number": 24,
+      "title": "Добавить подсказки городов для доставки Ozon",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-07T23:26:50Z",
+      "updated_at": "2026-11-07T23:31:32Z",
+      "closed_at": "2026-11-07T23:31:32Z",
+      "merged_at": "2026-11-07T23:31:32Z",
+      "merge_commit_sha": "d18d03a0d6105496086775333c9b628a1d568dfa",
+      "head": {
+        "ref": "codex/ozon-city-suggest-20261108",
+        "sha": "74ec160df773ce338e3b3ff8fe3ab9ec756b1571"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "6b11507f36e04be2602f766d88b88771863488fb"
+      },
+      "labels": [],
+      "body": "При вводе города показываются подходящие населённые пункты из активного справочника Ozon. Выбор заполняет поле, а пункт выдачи выбирается отдельно на карте. Поддержаны клавиатура, отмена устаревших запросов и ручной ввод при сбое подсказок; номер получателя при поиске не передаётся.\n\nПроверено: ESLint, TypeScript, 45 тестов поиска, доставки и оформления.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/24"
+    },
+    {
+      "number": 23,
+      "title": "Упростить выбор пункта Ozon при оформлении",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-07T22:23:06Z",
+      "updated_at": "2026-11-07T22:27:39Z",
+      "closed_at": "2026-11-07T22:27:39Z",
+      "merged_at": "2026-11-07T22:27:39Z",
+      "merge_commit_sha": "6b11507f36e04be2602f766d88b88771863488fb",
+      "head": {
+        "ref": "codex/ozon-city-map-20261108",
+        "sha": "daf919fb63d585a249a9bfe840619d55698e0d38"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "acc9354df2c5f5cf96d170997b98b76e115eca21"
+      },
+      "labels": [],
+      "body": "Убрано указанное пояснение и адресные подсказки из формы Ozon. Покупатель вводит город и выбирает пункт в окне карты; список в окне остаётся доступным для пунктов без координат. Согласие на передачу номера и проверка доставки сохранены.\n\nПроверено: ESLint, TypeScript, 20 тестов сценариев поиска и оформления.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/23"
+    },
+    {
+      "number": 22,
+      "title": "Убрать раскрывающиеся настройки товара из корзины",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-07T20:29:43Z",
+      "updated_at": "2026-11-07T20:34:33Z",
+      "closed_at": "2026-11-07T20:34:33Z",
+      "merged_at": "2026-11-07T20:34:33Z",
+      "merge_commit_sha": "acc9354df2c5f5cf96d170997b98b76e115eca21",
+      "head": {
+        "ref": "codex/remove-cart-edit-20261107",
+        "sha": "468e32d148b49276ad8918a908f73c6c02bbcc4a"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "a0a3fee84d405a4cd39aaaf78975e31feead98c7"
+      },
+      "labels": [],
+      "body": "В корзине убран пункт «Изменить параметры и количество»: количество меняется расположенными рядом кнопками. Сообщение для недоступной конфигурации предлагает удалить позицию и выбрать товар заново.\n\nПроверено: ESLint, TypeScript и 8 существующих тестов количества в корзине.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/22"
+    },
+    {
+      "number": 21,
+      "title": "Показывать отменённые заказы в архиве дашборда",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-07T19:03:25Z",
+      "updated_at": "2026-11-07T19:08:22Z",
+      "closed_at": "2026-11-07T19:08:22Z",
+      "merged_at": "2026-11-07T19:08:22Z",
+      "merge_commit_sha": "a0a3fee84d405a4cd39aaaf78975e31feead98c7",
+      "head": {
+        "ref": "codex/dashboard-canceled-archive-20261107",
+        "sha": "0832e48816c0985c26355a68bcd39a2f7d87bdb9"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "2890f01135b0fa240f3061e9e6f9e49678cc20f8"
+      },
+      "labels": [],
+      "body": "Отменённые заказы и заявки отображаются в архиве вместе с полученными, а не среди текущих. В архиве для отмены показывается дата изменения статуса; если отмена у перевозчика ещё не подтверждена, сохраняется предупреждение.\n\nПроверено: тесты отображения, ESLint, проверка типов и сценарии на изолированной базе с отменёнными, полученными и находящимися в пути заказами.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/21"
+    },
+    {
+      "number": 20,
+      "title": "Менять количество товара прямо в корзине",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-07T18:13:14Z",
+      "updated_at": "2026-11-07T18:17:48Z",
+      "closed_at": "2026-11-07T18:17:48Z",
+      "merged_at": "2026-11-07T18:17:48Z",
+      "merge_commit_sha": "2890f01135b0fa240f3061e9e6f9e49678cc20f8",
+      "head": {
+        "ref": "codex/cart-quantity-controls-20261108",
+        "sha": "474ead4a30e8c303c855ddc85648c57bc75ac4a5"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "48befa308e5660ba2645985a65db3300000a5b5e"
+      },
+      "labels": [],
+      "body": "Кнопки «−» и «+» в строке корзины меняют количество и итог без открытия настроек товара. Сохраняются выбранные параметры, актуальные цена и остаток; устаревшие изменения из другой вкладки отклоняются.\n\nПроверено 25 тестов, ESLint, TypeScript и сценарии корзины и оформления в браузере на изолированных данных.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/20"
+    },
+    {
+      "number": 19,
+      "title": "Показывать результат проверки получателя Ozon",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-07T17:45:27Z",
+      "updated_at": "2026-11-07T17:49:33Z",
+      "closed_at": "2026-11-07T17:49:32Z",
+      "merged_at": "2026-11-07T17:49:32Z",
+      "merge_commit_sha": "48befa308e5660ba2645985a65db3300000a5b5e",
+      "head": {
+        "ref": "codex/ozon-verification-confirmation-20261108",
+        "sha": "0a75b1cef03a15b08c4b80504c113628c7dc9944"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "cb24840e081df5505cd866a17eba193ff2ac06a1"
+      },
+      "labels": [],
+      "body": "После успешного ответа Ozon покупатель видит, что доставка для указанного номера подтверждена. При изменении номера это сообщение исчезает и доставка проверяется заново.\n\nПроверено: 17 тестов оформления и доставки, ESLint.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/19"
+    },
+    {
+      "number": 18,
+      "title": "Уточнить проверку телефона и доставки Ozon",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-07T17:27:12Z",
+      "updated_at": "2026-11-07T17:31:09Z",
+      "closed_at": "2026-11-07T17:31:08Z",
+      "merged_at": "2026-11-07T17:31:08Z",
+      "merge_commit_sha": "cb24840e081df5505cd866a17eba193ff2ac06a1",
+      "head": {
+        "ref": "codex/ozon-phone-validation-20261108",
+        "sha": "68a06d22d0d97a920e8da43026673b32d9a50eb1"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "423d9fe96ef75ab5b6cce9f50c7acbcc458eaa23"
+      },
+      "labels": [],
+      "body": "Телефон из нулей раньше проходил проверку длины, а выбор пункта выдачи выглядел как успешная проверка доставки. Для Ozon форма и сервер проверяют формат российского мобильного номера; до подтверждения Ozon форма явно сообщает, что получатель и доставка ещё не проверены.\n\nПроверка Ozon выполняется после отдельного согласия. Отрицательный ответ не позволяет продолжить оформление, при изменении номера расчёт сбрасывается. Проверка формата не считается подтверждением регистрации.\n\nПроверено 32 теста, ESLint, TypeScript проекта.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/18"
+    },
+    {
+      "number": 17,
+      "title": "Использовать один телефон получателя для доставки Ozon",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-07T16:01:28Z",
+      "updated_at": "2026-11-07T16:04:59Z",
+      "closed_at": "2026-11-07T16:04:59Z",
+      "merged_at": "2026-11-07T16:04:58Z",
+      "merge_commit_sha": "423d9fe96ef75ab5b6cce9f50c7acbcc458eaa23",
+      "head": {
+        "ref": "codex/checkout-single-phone-20261107",
+        "sha": "67e344ee995072b2a3f03c11e4285a294a176de9"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "7817d18e69b3f423d3f14091c35d4159a6153f33"
+      },
+      "labels": [],
+      "body": "При оформлении покупатель вводит номер только в контактах получателя; Ozon проверяет этот же номер. При отказе Ozon покупатель видит объяснение и может перейти к полю телефона, не теряя пункт выдачи и согласие. При других ошибках доставки просьба сменить номер не показывается.\n\nПроверены отказы при расчёте и повторной проверке заказа, сохранение данных и проверка доставки после изменения номера; локально прошли 27 тестов, ESLint и проверка типов проекта.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/17"
+    },
+    {
+      "number": 16,
+      "title": "Группировать пункты доставки на карте",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-07T14:54:21Z",
+      "updated_at": "2026-11-07T14:59:00Z",
+      "closed_at": "2026-11-07T14:59:00Z",
+      "merged_at": "2026-11-07T14:59:00Z",
+      "merge_commit_sha": "7817d18e69b3f423d3f14091c35d4159a6153f33",
+      "head": {
+        "ref": "codex/checkout-map-clusters-20261107",
+        "sha": "9f866a7a87dd44e41e3ed01e1185c872853c0012"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "16a5b4e97ee3d530d52b2112c7e68b0bb0c47b11"
+      },
+      "labels": [],
+      "body": "При поиске пунктов в большом городе метки перекрывали друг друга. Близкие адреса группируются в счётчики, которые раскрываются при приближении; выбор адреса из списка показывает его на карте.\n\nПроверено: TypeScript, ESLint, 24 теста карты и оформления; в браузере на 83 тестовых пунктах проверены группировка, приближение и выбор адреса.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/16"
+    },
+    {
+      "number": 15,
+      "title": "Обновить оформление заказа и выбор пунктов доставки",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-07T14:19:50Z",
+      "updated_at": "2026-11-07T14:28:52Z",
+      "closed_at": "2026-11-07T14:28:52Z",
+      "merged_at": "2026-11-07T14:28:51Z",
+      "merge_commit_sha": "16a5b4e97ee3d530d52b2112c7e68b0bb0c47b11",
+      "head": {
+        "ref": "codex/checkout-delivery-design-20261107",
+        "sha": "9b4e839c1e3fe2480c4d831acddcba49722b665d"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "6f7a6dfa78356f909d09c37e27ebd3a0254d79f4"
+      },
+      "labels": [],
+      "body": "Покупатель видит состав заказа, контакты, варианты получения и итог в отдельных блоках в цветах SIDZEN. Количество товаров можно менять прямо при оформлении, а пункты Ozon и СДЭК выбирать на карте или из списка.\n\nСохранены реальные проверки доступности и расчёта перевозчиков: после изменения корзины расчёт доставки запрашивается заново, запоздавшие ответы не применяются. Для Ozon сохранено отдельное согласие на передачу номера.\n\nПроверено: TypeScript, ESLint, 38 тестов оформления и доставки; локально пройдены сценарии заявки, изменения количества и выбора пункта на мобильном и десктопе.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/15"
+    },
+    {
+      "number": 14,
+      "title": "Показывать город назначения на дашборде",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-07T13:29:59Z",
+      "updated_at": "2026-11-07T13:34:25Z",
+      "closed_at": "2026-11-07T13:34:25Z",
+      "merged_at": "2026-11-07T13:34:25Z",
+      "merge_commit_sha": "6f7a6dfa78356f909d09c37e27ebd3a0254d79f4",
+      "head": {
+        "ref": "codex/dashboard-destination-city-20261107",
+        "sha": "a2ffb2e45f5d13eb9fe7cdefff1012e63693acf9"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "8086a2b3c956409f8f4ab3fedef8384f2df2be49"
+      },
+      "labels": [],
+      "body": "## Изменения\n\n- Город назначения показывается рядом со статусом доставки в текущих и архивных заказах.\n- Для Ozon и СДЭК город выделяется из сохранённого адреса; неоднозначные адреса помечаются как неопределённые.\n\n## Проверка\n\n- TypeScript, ESLint и 16 тестов города и расходов на доставку.\n- Текущие и архивные заказы проверены в браузере на синтетической локальной базе; просмотрена мобильная версия.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/14"
+    },
+    {
+      "number": 13,
+      "title": "Показывать стоимость доставки на дашборде",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-06T22:40:44Z",
+      "updated_at": "2026-11-06T22:44:32Z",
+      "closed_at": "2026-11-06T22:44:32Z",
+      "merged_at": "2026-11-06T22:44:31Z",
+      "merge_commit_sha": "8086a2b3c956409f8f4ab3fedef8384f2df2be49",
+      "head": {
+        "ref": "codex/dashboard-delivery-cost-20261107",
+        "sha": "5ed16043e971b9ffebb8cdea3b0f256986ef642a"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "1df37aa23691fc5f7ad7c4d25eb5e4c427f1d371"
+      },
+      "labels": [],
+      "body": "## Изменения\n\n- В текущих и полученных заказах показывается сохранённый предварительный тариф перевозчика и его доля от стоимости товаров без доставки.\n- Если расходы или сумма товаров неизвестны, выводится соответствующее состояние без расчёта некорректного процента.\n- На узких экранах строки заказов становятся читаемыми карточками.\n\n## Проверка\n\n- TypeScript, ESLint, 12 тестов расчёта и доставки.\n- Текущие и архивные заказы проверены в браузере на синтетической локальной базе; просмотрены настольный и мобильный экраны.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/13"
+    },
+    {
+      "number": 12,
+      "title": "Показывать ориентировочную дату доставки покупателю",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-06T22:08:43Z",
+      "updated_at": "2026-11-06T22:13:37Z",
+      "closed_at": "2026-11-06T22:13:37Z",
+      "merged_at": "2026-11-06T22:13:37Z",
+      "merge_commit_sha": "1df37aa23691fc5f7ad7c4d25eb5e4c427f1d371",
+      "head": {
+        "ref": "codex/customer-delivery-estimate-20261107",
+        "sha": "85b9590228d4268da37c843ea4f318442dd98cc4"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "bf37e52d3951b37c79ad6a6c5640378c3180b0e5"
+      },
+      "labels": [],
+      "body": "## Изменения\n\n- Показываем прогноз доставки в списке и карточке заказа; расчёт Ozon помечен как основанный на плановой отгрузке.\n- Для отправлений без актуального прогноза выводим «Дата доставки уточняется»; сотрудник может указать дату перевозчика в админке.\n- На узких экранах заказы отображаются карточками.\n\n## Проверка\n\n- TypeScript, ESLint, 27 тестов доставки и обновления даты.\n- Проверены интерфейсы покупателя и администратора на локальной тестовой базе.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/12"
+    },
+    {
+      "number": 11,
+      "title": "Показывать заказы покупателю и безопасно привязывать гостевые заказы",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-06T21:08:37Z",
+      "updated_at": "2026-11-06T21:14:29Z",
+      "closed_at": "2026-11-06T21:14:29Z",
+      "merged_at": "2026-11-06T21:14:29Z",
+      "merge_commit_sha": "bf37e52d3951b37c79ad6a6c5640378c3180b0e5",
+      "head": {
+        "ref": "codex/customer-order-access-20261107",
+        "sha": "0b7dc5b224bdd6face56c5436e5a28ef15fb17a4"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "e326e4984ea2dfc5dc3e064993f77587be1b4768"
+      },
+      "labels": [],
+      "body": "## Что меняется\n- В списке и карточке собственных заказов покупатель видит текущий статус доставки, в том числе Ozon и СДЭК.\n- При входе гостевой заказ может быть автоматически привязан только при наличии действующего подписанного подтверждения этого конкретного заказа; один лишь email не даёт доступа.\n- Суперадминистратор или сотрудник с правами на управление пользователями и заказами может вручную привязать заказ к аккаунту после проверки владельца, с подтверждением номера и записью в аудит. При передаче активного заказа прежний владелец и условия проверяются повторно внутри транзакции.\n\n## Проверка\n- Локальный тест на отдельной базе проверяет действительные и поддельные подтверждения, запрет доступа чужим аккаунтам, ручную привязку, смену владельца и журнал.\n- Проверен в браузере путь от привязки тестового заказа до списка и карточки покупателя со статусом доставки.\n- Миграции схемы не требуются; полная проверка выполняется в CI.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/11"
+    },
+    {
+      "number": 10,
+      "title": "Показывать заказы и доставку на дашборде",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-06T20:02:50Z",
+      "updated_at": "2026-11-06T20:32:39Z",
+      "closed_at": "2026-11-06T20:32:38Z",
+      "merged_at": "2026-11-06T20:32:38Z",
+      "merge_commit_sha": "e326e4984ea2dfc5dc3e064993f77587be1b4768",
+      "head": {
+        "ref": "codex/dashboard-orders-20261106",
+        "sha": "710031b215c78cd1c7f5aebc8e4dd1e052e81c62"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "9f05afb752ddb118cfa14b9a6ecd53ab9d735041"
+      },
+      "labels": [],
+      "body": "## Изменения\n- Список текущих заявок и архив полученных с датами, статусами заказа и доставки; доступ только с правом просмотра заказов.\n- Заказы с незавершённой доставкой и расхождением статусов остаются в текущем списке, даже если заказ вручную отмечен полученным. Дашборд предлагает проверить статус доставки.\n- Фиксация времени изменения статуса и вручения Ozon и СДЭК; напоминание о необходимости подтвердить получение для расчётов. Миграция сохраняет только достоверно известные исторические даты.\n\n## Проверка\n- Тест фильтрации заказов с настоящей изолированной базой и синтетическими статусами Ozon и СДЭК включён в CI.\n- Тесты фоновых обработчиков доставки; typecheck и ESLint.\n- Миграция проверена на отдельной локальной базе; полная проверка выполняется в CI.\n\nДля выпуска необходима миграция production-базы.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/10"
+    },
+    {
+      "number": 9,
+      "title": "Improve catalog indexing and product metadata",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-06T11:04:14Z",
+      "updated_at": "2026-11-06T11:12:07Z",
+      "closed_at": "2026-11-06T11:12:06Z",
+      "merged_at": "2026-11-06T11:12:06Z",
+      "merge_commit_sha": "9f05afb752ddb118cfa14b9a6ecd53ab9d735041",
+      "head": {
+        "ref": "codex/organic-search-foundations",
+        "sha": "279bd852447bf1f551dc925cfbfa58d2a99486f5"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "8cf9ebf6f7611d0a2085631be9db4e6e849e6425"
+      },
+      "labels": [],
+      "body": "Product pages can have detailed copy but no search description, while the sitemap can list hidden-category, noindex or noncanonical URLs. Use existing product descriptions as a fallback, select a consistent visible product URL, and include only indexable canonical URLs in the sitemap.\n\nAllow actual catalog pagination to be indexed under its own canonical URL, while keeping filters and out-of-range pages noindex. Update the homepage description to reflect the current shop and add unit coverage for the search helpers.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/9"
+    },
+    {
+      "number": 8,
+      "title": "Add Yandex Webmaster site verification",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-06T07:51:28Z",
+      "updated_at": "2026-11-06T07:55:26Z",
+      "closed_at": "2026-11-06T07:55:26Z",
+      "merged_at": "2026-11-06T07:55:26Z",
+      "merge_commit_sha": "8cf9ebf6f7611d0a2085631be9db4e6e849e6425",
+      "head": {
+        "ref": "codex/yandex-webmaster-verification",
+        "sha": "5e877af3b8df458bb55c85dfc88bf6bedce2255a"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "9594b35612c37032b9ae656560016f96b69bbea5"
+      },
+      "labels": [],
+      "body": "Add the requested Yandex verification meta tag to the site's metadata so ownership can be confirmed in Yandex Webmaster.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/8"
+    },
+    {
+      "number": 7,
+      "title": "Send order summaries to private Telegram chats",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-05T21:57:40Z",
+      "updated_at": "2026-11-05T22:04:58Z",
+      "closed_at": "2026-11-05T22:04:58Z",
+      "merged_at": "2026-11-05T22:04:58Z",
+      "merge_commit_sha": "9594b35612c37032b9ae656560016f96b69bbea5",
+      "head": {
+        "ref": "codex/private-telegram-order-summary",
+        "sha": "e2507e309383689947b29d79485910662b9a782b"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "61b276c1831a86d34b922fb526f5335f4b221f41"
+      },
+      "labels": [],
+      "body": "Send order number, items, identifiable city, order totals and delivery costs to verified private Telegram chats. Group and channel notifications retain only the authenticated link. Exclude buyer contacts, full address and comments; update privacy documentation.\n\nIncludes tests for message contents, recipient identity, group fallback and queue retry behavior.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/7"
+    },
+    {
+      "number": 6,
+      "title": "Improve integration settings layout and form spacing",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-05T21:48:26Z",
+      "updated_at": "2026-11-05T21:52:53Z",
+      "closed_at": "2026-11-05T21:52:52Z",
+      "merged_at": "2026-11-05T21:52:52Z",
+      "merge_commit_sha": "61b276c1831a86d34b922fb526f5335f4b221f41",
+      "head": {
+        "ref": "codex/integration-layout-polish",
+        "sha": "ddb7265f0ea6de32cf3ff9fe6a80277cfa844ded"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "a682f0179020d7d372a6a6398109ef1fc78c8977"
+      },
+      "labels": [],
+      "body": "Group related settings actions, separate forms and cards, and add navigation between integration sections. Shared form grids now handle narrow columns, checkbox labels and long technical text without overflow.\n\nChecked representative storefront, account and admin screens locally; inspected form layouts at desktop, tablet and mobile widths; TypeScript and ESLint pass.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/6"
+    },
+    {
+      "number": 5,
+      "title": "Show last known authenticated user visit",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-05T10:36:38Z",
+      "updated_at": "2026-11-05T10:41:16Z",
+      "closed_at": "2026-11-05T10:41:16Z",
+      "merged_at": "2026-11-05T10:41:16Z",
+      "merge_commit_sha": "a682f0179020d7d372a6a6398109ef1fc78c8977",
+      "head": {
+        "ref": "codex/user-last-visit",
+        "sha": "58fc1528540d13b625bb68d4cd831616801b6fb2"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "d9b09e5ee94c17a7650bf5d4c6852df7055bdbb4"
+      },
+      "labels": [],
+      "body": "Show the last known authenticated visit in the active and archived user lists, using Moscow time. Record sign-ins and refresh activity at most hourly; preserve the existing retention timestamp independently. The additive migration backfills only from surviving sessions and leaves unknown visits empty.\n\nValidated the migration with a disposable local database, the admin page in a browser, three focused authentication tests, ESLint and TypeScript.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/5"
+    },
+    {
+      "number": 4,
+      "title": "Normalize form and cart control sizing",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-05T09:37:22Z",
+      "updated_at": "2026-11-05T09:41:04Z",
+      "closed_at": "2026-11-05T09:41:04Z",
+      "merged_at": "2026-11-05T09:41:03Z",
+      "merge_commit_sha": "d9b09e5ee94c17a7650bf5d4c6852df7055bdbb4",
+      "head": {
+        "ref": "codex/compact-controls",
+        "sha": "0c082f7e81211bc75a464aa49a4a24f9ff682104"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "b54730b320f5c86b66d2a0cb05f3a727198bd0e2"
+      },
+      "labels": [],
+      "body": "Form-grid buttons no longer stretch to fill their columns or the height of adjacent labels, and cart editing controls retain a compact, aligned size. Reduce oversized headings on shop, account, and admin screens.\n\nValidated on desktop, tablet, and mobile widths with a local cart fixture and marketplace form; ESLint and TypeScript pass.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/4"
+    },
+    {
+      "number": 3,
+      "title": "Add user archive and protected permanent deletion",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-05T07:27:29Z",
+      "updated_at": "2026-11-05T07:31:18Z",
+      "closed_at": "2026-11-05T07:31:18Z",
+      "merged_at": "2026-11-05T07:31:18Z",
+      "merge_commit_sha": "b54730b320f5c86b66d2a0cb05f3a727198bd0e2",
+      "head": {
+        "ref": "codex/user-archive-erasure",
+        "sha": "8cfc7f8551d964409d96d4b07989d13d74c9c737"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "89e22f2f25b1c6b6109f6ba7ec43154ea96170f0"
+      },
+      "labels": [],
+      "body": "Добавляет на странице пользователей архивирование с блокировкой входа и отзывом сессий, восстановление из архива и подтверждаемое необратимое удаление через защищённый механизм очистки. Сохраняются обязательные расчётные документы; активные обязательства блокируют удаление. Инициализация при развёртывании больше не восстанавливает архивного или ранее удалённого владельца.\n\nПроверено: TypeScript, ESLint, тесты прав и архивирования, локальный интерфейс, а также сценарии на изолированной PostgreSQL с синтетическими данными: конкурентные действия, защита суперадминистратора, активные заказы, сохранение расчётных данных и повторное применение удаления после восстановления копии.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/3"
+    },
+    {
+      "number": 2,
+      "title": "Update customer help for current checkout",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-04T23:17:15Z",
+      "updated_at": "2026-11-04T23:20:27Z",
+      "closed_at": "2026-11-04T23:20:27Z",
+      "merged_at": "2026-11-04T23:20:27Z",
+      "merge_commit_sha": "89e22f2f25b1c6b6109f6ba7ec43154ea96170f0",
+      "head": {
+        "ref": "codex/update-storefront-help",
+        "sha": "112c1bd38fccdc5b0239abe551570cf8e5276536"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "6a84811f560c9371553a5b58b49ef9d971744856"
+      },
+      "labels": [],
+      "body": "Обновляет ответы о выборе товара и доставке и показывает в FAQ режим оплаты, действующий при оформлении. Уточняет сроки изготовления, создание отправления и описание возможности оставить отзыв после подтверждённой покупки.\n\nПроверено: тесты обоих режимов FAQ и разметки, существующие проверки отзывов, TypeScript, ESLint и локальный HTTP-ответ.",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/2"
+    },
+    {
+      "number": 1,
+      "title": "Allow administrators to remove user roles",
+      "state": "closed",
+      "draft": false,
+      "author": "Cossomoj",
+      "created_at": "2026-11-04T22:55:03Z",
+      "updated_at": "2026-11-04T22:59:30Z",
+      "closed_at": "2026-11-04T22:59:29Z",
+      "merged_at": "2026-11-04T22:59:29Z",
+      "merge_commit_sha": "6a84811f560c9371553a5b58b49ef9d971744856",
+      "head": {
+        "ref": "codex/remove-user-roles",
+        "sha": "334b48ef8b402f91c9d02e07951d31861c7b1fdc"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "7aaa09e7e89cfe414cb6b7f641960d2a305dc588"
+      },
+      "labels": [],
+      "body": "## Изменение\n\nНа странице пользователей можно снять отдельную роль после подтверждения. Действие записывается в аудит; сервер запрещает удалять последнего активного суперадминистратора и лишать себя последнего права управления пользователями.\n\n## Проверка\n\n- Пять тестов снятия ролей, проверка TypeScript и ESLint.\n- Локальный PostgreSQL: снятие тестовой роли и запись аудита.\n- Локальная админка: подтверждение и отказ при попытке снять роль последнего суперадминистратора.\n",
+      "original_url": "https://github.com/Cossomoj/3d-maniya/pull/1"
+    }
+  ]
+}

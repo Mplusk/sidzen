@@ -22,7 +22,15 @@ only in `publish` and read access in deployment jobs. On servers, Docker auth is
 kept in a private temporary directory and removed on exit. No permanent registry
 password is written to the host's default Docker config.
 
-Existing production secrets remain `DEPLOY_HOST`, `DEPLOY_USER`,
+In `Mplusk/sidzen`, the registry prefix is `ghcr.io/mplusk/sidzen`.
+The first push runs verification and publishes images but skips both production
+deployments until the repository variable `PRODUCTION_DEPLOY_ENABLED` is set to
+`true`. Before setting it, configure the production secrets and verify the SSH
+identity and pinned host keys on both hosts. Then run the CI workflow manually
+and verify the deployed revision and health checks. Keep the old repository and
+registry images until the new deployment and rollback have been verified.
+
+The required production secrets are `DEPLOY_HOST`, `DEPLOY_USER`,
 `DEPLOY_SSH_PRIVATE_KEY` and `DEPLOY_KNOWN_HOSTS`. The same CI public key is
 authorized once on the Telegram host with forwarding and PTY disabled. Its host
 key is pinned in `deploy/telegram-relay/known_hosts`; do not replace it with an

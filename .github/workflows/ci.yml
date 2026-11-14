@@ -118,7 +118,7 @@ jobs:
       contents: read
       packages: write
     env:
-      REGISTRY_PREFIX: ghcr.io/cossomoj/sidzen
+      REGISTRY_PREFIX: ghcr.io/mplusk/sidzen
     steps:
       - uses: actions/checkout@v4
 
@@ -184,6 +184,8 @@ jobs:
   deploy:
     name: Deploy Russian storefront
     needs: publish
+    # A freshly migrated repository must not deploy before its SSH secrets are set.
+    if: ${{ vars.PRODUCTION_DEPLOY_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -196,7 +198,7 @@ jobs:
       group: production-deploy
       cancel-in-progress: false
     env:
-      REGISTRY_PREFIX: ghcr.io/cossomoj/sidzen
+      REGISTRY_PREFIX: ghcr.io/mplusk/sidzen
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -284,7 +286,7 @@ jobs:
     name: Deploy Docker Telegram relay
     needs: [publish, relay_changes]
     # An unavailable change check must not silently suppress a relay update.
-    if: ${{ always() && needs.publish.result == 'success' && needs.relay_changes.outputs.required != 'false' }}
+    if: ${{ always() && vars.PRODUCTION_DEPLOY_ENABLED == 'true' && needs.publish.result == 'success' && needs.relay_changes.outputs.required != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -295,7 +297,7 @@ jobs:
       group: sidzen-telegram-relay-deploy
       cancel-in-progress: false
     env:
-      REGISTRY_PREFIX: ghcr.io/cossomoj/sidzen
+      REGISTRY_PREFIX: ghcr.io/mplusk/sidzen
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4

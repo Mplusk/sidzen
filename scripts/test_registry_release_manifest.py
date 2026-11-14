@@ -17,6 +17,14 @@ class ManifestTests(unittest.TestCase):
     def test_accepts_only_the_exact_verified_release(self):
         self.assertEqual(module.validate(self.data, self.revision, self.prefix)[0], "b" * 64)
 
+    def test_accepts_images_from_the_migrated_registry(self):
+        prefix = "ghcr.io/mplusk/sidzen"
+        data = copy.deepcopy(self.data)
+        data["images"] = {key: prefix + "-" + key + "@sha256:" + "c" * 64 for key in module.COMPONENTS}
+        self.assertEqual(module.validate(data, self.revision, prefix)[0], "b" * 64)
+        with self.assertRaises(ValueError):
+            module.validate(data, self.revision, self.prefix)
+
     def test_rejects_tags_other_registries_and_wrong_components(self):
         for ref in [self.prefix + "-app:latest", "ghcr.io/attacker/app@sha256:" + "c" * 64, self.data["images"]["migrate"], self.data["images"]["app"] + "\ncommand"]:
             data = copy.deepcopy(self.data)

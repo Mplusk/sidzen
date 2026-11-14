@@ -41,7 +41,7 @@ while IFS= read -r old_image; do
   if [[ -n "$old_image" && "$old_image" != "$current_image" && -z "$(docker ps -aq --filter "ancestor=$old_image")" ]]; then
     while IFS= read -r reference; do
       case "$reference" in
-        ghcr.io/cossomoj/sidzen-telegram-relay:*) docker image rm "$reference" || true ;;
+        ghcr.io/cossomoj/sidzen-telegram-relay:*|ghcr.io/mplusk/sidzen-telegram-relay:*) docker image rm "$reference" || true ;;
       esac
     done < <(docker image inspect --format '{{range .RepoTags}}{{println .}}{{end}}' "$old_image" 2>/dev/null || true)
     docker image rm "$old_image" || true

@@ -147,7 +147,7 @@ cleanup_unused_shop_images() {
       # Remove only this shop's tags; never force-remove another project's tag.
       while IFS= read -r reference; do
         case "$reference" in
-          3dprinta-app:*|3dprinta-migrate:*|3dprinta-marketplace-worker:*|ghcr.io/cossomoj/sidzen-app:*|ghcr.io/cossomoj/sidzen-migrate:*|ghcr.io/cossomoj/sidzen-marketplace-worker:*) docker image rm "$reference" || true ;;
+          3dprinta-app:*|3dprinta-migrate:*|3dprinta-marketplace-worker:*|ghcr.io/cossomoj/sidzen-app:*|ghcr.io/cossomoj/sidzen-migrate:*|ghcr.io/cossomoj/sidzen-marketplace-worker:*|ghcr.io/mplusk/sidzen-app:*|ghcr.io/mplusk/sidzen-migrate:*|ghcr.io/mplusk/sidzen-marketplace-worker:*) docker image rm "$reference" || true ;;
         esac
       done < <(docker image inspect --format '{{range .RepoTags}}{{println .}}{{end}}' "$old_image" 2>/dev/null || true)
       docker image rm "$old_image" || true
