@@ -15,12 +15,14 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     pids_limit: 32
-    mem_limit: 64m
+    # Leave headroom for the relay and its health-check processes.
+    mem_limit: 128m
     cpus: 0.25
     healthcheck:
-      test: [CMD, python, -c, "import socket; socket.create_connection(('185.196.41.131',18443),2).close()"]
+      # BusyBox avoids starting a separate Python interpreter for every check.
+      test: [CMD, /bin/busybox, nc, -z, -w, "2", "185.196.41.131", "18443"]
       interval: 20s
-      timeout: 4s
+      timeout: 8s
       retries: 3
       start_period: 5s
     logging:
