@@ -70,7 +70,7 @@ describe("official Ozon Delivery API client", () => {
       [[], "empty-results", true, "unavailable"],
       [[{ request_id: 1 }], "missing-posting", true, "unavailable"],
       [[{ request_id: 1, error: { code: "DeliveryPointRestrictionsError", message: "private +79991234567", details: "secret" } }], "point-restrictions", false, "unavailable"],
-      [[{ request_id: 1, error: { code: "UnknownError", message: "private email" } }], "provider-rejection", false, "unavailable"],
+      [[{ request_id: 1, error: { code: "UnknownError", message: "private email" } }], "provider-rejection", true, "unavailable"],
       [[{ request_id: 1 }, { request_id: 1 }], "duplicate-results", false, "response"],
       [[{ request_id: 2 }], "unexpected-request-id", false, "response"],
     ] as const) {

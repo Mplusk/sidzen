@@ -81,4 +81,11 @@ describe("Ozon delivery quote boundary", () => {
     expect(m.log).toHaveBeenCalledWith("delivery.unavailable", expect.objectContaining({pointId: 8, checkoutFailure: "point-restrictions", expectedParcels: 1, receivedParcels: 1, attempts: 1}));
     expect(m.checkout).toHaveBeenCalledTimes(1); expect(JSON.stringify(m.log.mock.calls)).not.toMatch(/79991234567|test-key/);
   });
+  it("offers a later retry for an unrecognized carrier rejection without revealing its response", async () => {
+    const error = new OzonDeliveryError("unavailable"); error.checkoutFailure = "provider-rejection";
+    m.checkout.mockRejectedValue(error);
+    expect(await quoteOzonDelivery("+79991234567", "8")).toEqual({ error: expect.stringContaining("через несколько минут") });
+    expect(m.log).toHaveBeenCalledWith("delivery.unavailable", expect.objectContaining({ checkoutFailure: "provider-rejection" }));
+    expect(JSON.stringify(m.log.mock.calls)).not.toMatch(/79991234567|test-key/);
+  });
 });

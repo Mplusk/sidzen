@@ -47,6 +47,31 @@ describe("bounded quote-only Ozon retries", () => {
     expect(fetcher.mock.calls[2][1]!.body).toBe(fetcher.mock.calls[4][1]!.body);
     expect(fetcher.mock.calls.every(([url]) => !String(url).includes("/create"))).toBe(true);
   });
+  it("retries an unknown Ozon rejection for the same point and succeeds only on a complete quote", async () => {
+    const rejected = () => json({ results: [{ request_id: 1, error: { code: "UnknownError", message: "private recipient +79991234567" } }] });
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(json({ access_token: "token" }))
+      .mockResolvedValueOnce(json({ can_be_delivered: true })).mockResolvedValueOnce(rejected())
+      .mockResolvedValueOnce(json({ can_be_delivered: true })).mockResolvedValueOnce(rejected())
+      .mockResolvedValueOnce(json({ can_be_delivered: true })).mockResolvedValueOnce(quote());
+    vi.stubGlobal("fetch", fetcher);
+    const pending = retryOzonQuote(credentials, api => api.checkout(request));
+    await vi.advanceTimersByTimeAsync(5999);
+    expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith("/checkout"))).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await pending).toEqual({ value: { cost: 102, days: 3 }, attempts: 3 });
+    const calls = fetcher.mock.calls.filter(([url]) => String(url).endsWith("/checkout"));
+    expect(calls).toHaveLength(3);
+    expect(calls.every(([, init]) => init!.body === JSON.stringify(request))).toBe(true);
+    expect(fetcher.mock.calls.every(([url]) => !String(url).includes("/create"))).toBe(true);
+  });
+  it("fails closed after three unknown provider rejections without leaking response data", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async url => json(String(url).endsWith("/oauth/token") ? { access_token: "token" } : String(url).endsWith("/check-client") ? { can_be_delivered: true } : { results: [{ request_id: 1, error: { code: "UnknownError", message: "private +79991234567" } }] }));
+    vi.stubGlobal("fetch", fetcher);
+    const pending = retryOzonQuote(credentials, api => api.checkout(request));
+    const assertion = expect(pending).rejects.toMatchObject({ code: "unavailable", message: "unavailable", attempts: 3, checkoutFailure: "provider-rejection" });
+    await vi.advanceTimersByTimeAsync(6000); await assertion;
+    expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith("/checkout"))).toHaveLength(3);
+  });
   it("stops incomplete quotes after three attempts and does not retry explicit restrictions", async () => {
     const fetcher = vi.fn<typeof fetch>().mockImplementation(async url => json(String(url).endsWith("/oauth/token") ? {access_token: "token"} : String(url).endsWith("/check-client") ? {can_be_delivered: true} : {results: []}));
     vi.stubGlobal("fetch", fetcher);

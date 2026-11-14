@@ -117,11 +117,11 @@ export class OzonDeliveryClient {
     if (!response.results.length) fail("empty-results", true);
     if (new Set(response.results.map(row => row.request_id)).size !== response.results.length) fail("duplicate-results", false, "response");
     if (response.results.some(row => !request.postings.some(posting => posting.request_id === row.request_id))) fail("unexpected-request-id", false, "response");
-    // An explicit rejection is not a transient empty/partial response. In particular,
-    // do not retry point restrictions or silently replace the buyer's selected PVZ.
+    // Never ignore an explicit rejection or replace the selected PVZ. An unknown
+    // rejection can be transient; only the bounded, read-only quote client retries it.
     for (const row of response.results) if (row.error != null) {
       const reason = z.object({ code: z.literal("DeliveryPointRestrictionsError") }).safeParse(row.error).success ? "point-restrictions" : "provider-rejection";
-      fail(reason);
+      fail(reason, reason === "provider-rejection");
     }
     if (response.results.length !== request.postings.length) fail("partial-results", true);
     let cost = 0; let days = 0;
