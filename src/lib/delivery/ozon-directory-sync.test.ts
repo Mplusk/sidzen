@@ -18,7 +18,7 @@ const detail = (id: number) => ({ delivery_point_id: id, name: "Synthetic", full
 
 beforeEach(() => {
   vi.resetAllMocks();
-  m.find.mockResolvedValue({ id: "ozon", clientId: "fixture", methodId: 7n, generation: "generation-1", cursor: "cursor", pages: 1, points: 2 });
+  m.find.mockResolvedValue({ id: "ozon", clientId: "fixture", methodId: 7n, generation: "generation-1", status: "RUNNING", cursor: "cursor", pages: 1, points: 2 });
   m.claim.mockResolvedValue({ count: 1 });
   m.config.mockResolvedValue({ enabled: true, clientId: "fixture", shipmentMethodId: 7 });
   m.page.mockResolvedValue({ delivery_points: [{ delivery_point_id: 1, shipment_method_ids: [7] }, { delivery_point_id: 2, shipment_method_ids: [7] }], next_cursor: null });
@@ -28,6 +28,23 @@ beforeEach(() => {
 });
 
 describe("Ozon pickup-directory synchronization", () => {
+  it.each([
+    ["advanced from the first page", { status: "PENDING", cursor: null, pages: 0 }, { status: "RUNNING", cursor: "next", pages: 1 }],
+    ["completed a running page", { status: "RUNNING", cursor: "cursor", pages: 1 }, { status: "SUCCEEDED", cursor: null, pages: 2 }],
+    ["revisited a cursor", { status: "RUNNING", cursor: "cursor", pages: 1 }, { status: "RUNNING", cursor: "cursor", pages: 3 }],
+    ["started a new generation", { status: "RUNNING", cursor: "cursor", pages: 1 }, { status: "RUNNING", cursor: "cursor", pages: 1, generation: "generation-2" }],
+  ])("does not claim a stale page after another worker %s", async (_case, readState, changedState) => {
+    const snapshot = { id: "ozon", clientId: "fixture", methodId: 7n, generation: "generation-1", points: 2, ...readState };
+    const current = { ...snapshot, ...changedState };
+    m.find.mockResolvedValue(snapshot);
+    m.claim.mockImplementation(async ({ where }) => ({ count: ["id", "generation", "status", "cursor", "pages"].every(key => where[key] === current[key as keyof typeof current]) ? 1 : 0 }));
+    expect(await syncOzonPointsPage()).toBe(false);
+    expect(m.claim).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: snapshot.id, generation: snapshot.generation, status: snapshot.status, cursor: snapshot.cursor, pages: snapshot.pages }) }));
+    expect(m.config).not.toHaveBeenCalled();
+    expect(m.page).not.toHaveBeenCalled();
+    expect(m.transaction).not.toHaveBeenCalled();
+  });
+
   it("publishes a complete final page before deactivating old generations", async () => {
     expect(await syncOzonPointsPage()).toBe(true);
     expect(m.upsert).toHaveBeenCalledTimes(2);
@@ -57,7 +74,7 @@ describe("Ozon pickup-directory synchronization", () => {
   });
 
   it("does not deactivate the entire old directory when a refresh returns no eligible points", async () => {
-    m.find.mockResolvedValue({ id: "ozon", clientId: "fixture", methodId: 7n, generation: "generation-1", cursor: null, pages: 0, points: 0 });
+    m.find.mockResolvedValue({ id: "ozon", clientId: "fixture", methodId: 7n, generation: "generation-1", status: "PENDING", cursor: null, pages: 0, points: 0 });
     m.page.mockResolvedValue({ delivery_points: [], next_cursor: null });
     await syncOzonPointsPage();
     expect(m.info).not.toHaveBeenCalled();

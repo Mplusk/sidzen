@@ -18,7 +18,10 @@ export async function syncOzonPointsPage() {
   const sync = await prisma.ozonDeliverySync.findFirst({ where: { status: { in: ["PENDING", "RUNNING"] }, ...unlocked() } });
   if (!sync) return false;
   const lockToken = randomUUID();
-  if (!(await prisma.ozonDeliverySync.updateMany({ where: { id: sync.id, generation: sync.generation, ...unlocked() }, data: { lockToken, lockedUntil: new Date(Date.now() + 120000), status: "RUNNING" } })).count) return false;
+  // Claim exactly the page we read: another worker may have finished it and
+  // released its lock between findFirst and updateMany. pages also prevents an
+  // ABA match if a provider repeats a cursor later in the same generation.
+  if (!(await prisma.ozonDeliverySync.updateMany({ where: { id: sync.id, generation: sync.generation, status: sync.status, cursor: sync.cursor, pages: sync.pages, ...unlocked() }, data: { lockToken, lockedUntil: new Date(Date.now() + 120000), status: "RUNNING" } })).count) return false;
   let directoryOperation: "config" | "list" | "info" | "save" = "config";
   try {
     const config = await getOzonDeliveryConfig();
