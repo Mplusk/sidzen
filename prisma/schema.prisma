@@ -308,6 +308,7 @@ model Product {
   shippingLengthMm Int?
   shippingWidthMm  Int?
   shippingHeightMm Int?
+  ozonDeclaredValue Decimal?           @db.Decimal(12, 2)
   modelAsset       String?
   title            String?
   metaDescription  String?

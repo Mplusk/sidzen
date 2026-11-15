@@ -9,7 +9,13 @@ vi.mock("./ozon-client", async importOriginal => {
   const original = await importOriginal<typeof import("./ozon-client")>();
   return { ...original, OzonDeliveryClient: class { json = mocks.json; call = mocks.call; } };
 });
-import { cancelOzonJob, processOzonJob, refreshOzonJob } from "./ozon-worker";
+import { cancelOzonJob, ozonCreateBody, processOzonJob, refreshOzonJob } from "./ozon-worker";
+
+it("preserves the quoted declared value in the shipment body", () => {
+  const posting = { request_id: 1, shipment_method_id: 7, cutoff_at: "2030-01-01T12:00:00Z", declared_value: { amount: "3500.00", currency_code: "RUB" }, dimensions: { weight_g: 500, length_mm: 300, width_mm: 200, height_mm: 200 } };
+  const result = ozonCreateBody({ recipient: { phone_number: "+79991234567" }, delivery: { delivery_point: { delivery_point_id: 42 } }, postings: [posting] }, "TEST", "Test", ["Lamp"]);
+  expect(result.postings[0].declared_value).toEqual(posting.declared_value);
+});
 
 const fixture = () => ({ id: "job-1", shipmentId: "shipment-1", clientId: "app", status: "PENDING", attempts: 0, cancelRequestedAt: null as Date | null, idempotencyKey: "00000000-0000-4000-8000-000000000001", request: { postings: [{ request_id: 1 }, { request_id: 2 }] }, response: null as unknown, shipment: { order: { kind: "ORDER", status: "AWAITING_PAYMENT", payment: { status: "PAID" } as { status: string } | null } } });
 describe("Ozon delivery outbox", () => {

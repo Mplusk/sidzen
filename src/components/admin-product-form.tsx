@@ -45,6 +45,7 @@ export type ProductFormValue = {
   shippingLengthMm: number | null;
   shippingWidthMm: number | null;
   shippingHeightMm: number | null;
+  ozonDeclaredValue: number | null;
   modelAsset: string | null;
   title: string | null;
   metaDescription: string | null;
@@ -140,6 +141,7 @@ export function AdminProductForm({ options, product, error, canPublish = true, a
         <label className="field"><span>Длина упаковки, мм</span><input name="shippingLengthMm" type="number" min="1" max="10000" step="1" defaultValue={product?.shippingLengthMm ?? ""} /></label>
         <label className="field"><span>Ширина упаковки, мм</span><input name="shippingWidthMm" type="number" min="1" max="10000" step="1" defaultValue={product?.shippingWidthMm ?? ""} /></label>
         <label className="field"><span>Высота упаковки, мм</span><input name="shippingHeightMm" type="number" min="1" max="10000" step="1" defaultValue={product?.shippingHeightMm ?? ""} /></label>
+        <label className="field field--full"><span>Объявленная стоимость для Ozon, ₽</span><input name="ozonDeclaredValue" type="number" min="0.01" max="9999999999.99" step="0.01" defaultValue={product?.ozonDeclaredValue ?? ""} /><small>Действительная стоимость одной единицы товара для страхования доставки. Если поле не заполнено, используется цена товара.</small></label>
         <label className="field field--full"><span>Путь к файлу модели</span><input name="modelAsset" defaultValue={product?.modelAsset ?? ""} maxLength={500} placeholder="/private/..." /></label>
       </div></section>
 

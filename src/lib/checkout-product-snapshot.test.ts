@@ -25,6 +25,7 @@ describe("checkout product snapshot", () => {
       { ...product, specifications: { "Цвет товара": "Чёрный" } },
       { ...product, variants: [{ ...product.variants[0], price: 250 }] },
       { ...product, shippingWeightG: 300 },
+      { ...product, ozonDeclaredValue: "3500.00" },
     ]) expect(checkoutProductSnapshot(changed as unknown as SnapshotProduct)).not.toBe(original);
   });
 

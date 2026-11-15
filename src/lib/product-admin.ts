@@ -37,6 +37,10 @@ const productSchema = z.object({
   shippingLengthMm: optionalNumber(10_000).refine(value => value == null || (Number.isInteger(value) && value > 0)),
   shippingWidthMm: optionalNumber(10_000).refine(value => value == null || (Number.isInteger(value) && value > 0)),
   shippingHeightMm: optionalNumber(10_000).refine(value => value == null || (Number.isInteger(value) && value > 0)),
+  ozonDeclaredValue: z.preprocess(
+    value => value === "" || value == null ? undefined : value,
+    z.string().regex(/^\d{1,10}(?:\.\d{1,2})?$/).transform(Number).refine(value => value > 0 && value <= 9_999_999_999.99).optional(),
+  ),
   modelAsset: z.string().trim().max(500),
   title: z.string().trim().max(180),
   h1: z.string().trim().max(180),
@@ -146,6 +150,7 @@ export function parseProductForm(formData: FormData) {
     shippingLengthMm: formData.get("shippingLengthMm"),
     shippingWidthMm: formData.get("shippingWidthMm"),
     shippingHeightMm: formData.get("shippingHeightMm"),
+    ozonDeclaredValue: formData.get("ozonDeclaredValue"),
     modelAsset: stringValue(formData, "modelAsset"),
     title: stringValue(formData, "title"),
     h1: stringValue(formData, "h1"),

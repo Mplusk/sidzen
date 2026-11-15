@@ -15,7 +15,7 @@ export function checkoutProductSnapshot(product: Product) {
     id: product.id, name: product.name, sku: product.sku, type: product.type, status: product.status, groupId: product.groupId, groupLabel: product.groupLabel, productColor: productColorFromSpecifications(product.specifications),
     basePrice: options.basePrice, weightGrams: options.weightGrams, madeToOrder: product.madeToOrder,
     leadDays: product.leadDays, shippingWeightG: product.shippingWeightG, shippingLengthMm: product.shippingLengthMm,
-    shippingWidthMm: product.shippingWidthMm, shippingHeightMm: product.shippingHeightMm,
+    shippingWidthMm: product.shippingWidthMm, shippingHeightMm: product.shippingHeightMm, ozonDeclaredValue: product.ozonDeclaredValue?.toString() ?? null,
     materials: sorted(options.materials), colors: sorted(options.colors), variants: sorted(options.variants),
   });
 }

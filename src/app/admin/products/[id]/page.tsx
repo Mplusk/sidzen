@@ -37,6 +37,7 @@ export default async function AdminProductPage({ params, searchParams }: { param
     basePrice: Number(product.basePrice),
     oldPrice: product.oldPrice == null ? null : Number(product.oldPrice),
     costPrice: product.costPrice == null ? null : Number(product.costPrice),
+    ozonDeclaredValue: product.ozonDeclaredValue == null ? null : Number(product.ozonDeclaredValue),
     weightGrams: product.weightGrams == null ? null : Number(product.weightGrams),
     widthMm: product.widthMm == null ? null : Number(product.widthMm),
     depthMm: product.depthMm == null ? null : Number(product.depthMm),

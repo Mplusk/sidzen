@@ -3,9 +3,9 @@ import { z } from "zod";
 import { checkoutRequestSchema, OzonDeliveryError, parcelSchema, type OzonCheckoutRequest } from "./ozon-client";
 import { deliveryConfigFingerprint, type OzonDeliveryConfig } from "./ozon-config";
 
-type DeliveryItem = { id: string; quantity: number; unitPrice: number; config: unknown; product: { name: string; madeToOrder: boolean; leadDays: number; shippingWeightG: number | null; shippingLengthMm: number | null; shippingWidthMm: number | null; shippingHeightMm: number | null } | null };
+type DeliveryItem = { id: string; quantity: number; unitPrice: number; config: unknown; product: { name: string; madeToOrder: boolean; leadDays: number; shippingWeightG: number | null; shippingLengthMm: number | null; shippingWidthMm: number | null; shippingHeightMm: number | null; ozonDeclaredValue?: { toString(): string } | number | string | null } | null };
 export function cartDeliveryFingerprint(cart: { id: string; items: DeliveryItem[] }) {
-  return createHash("sha256").update(JSON.stringify([cart.id, cart.items.map(item => [item.id, item.quantity, item.unitPrice, item.config, item.product?.shippingWeightG, item.product?.shippingLengthMm, item.product?.shippingWidthMm, item.product?.shippingHeightMm, item.product?.leadDays, item.product?.madeToOrder])])).digest("hex");
+  return createHash("sha256").update(JSON.stringify([cart.id, cart.items.map(item => [item.id, item.quantity, item.unitPrice, item.config, item.product?.shippingWeightG, item.product?.shippingLengthMm, item.product?.shippingWidthMm, item.product?.shippingHeightMm, item.product?.leadDays, item.product?.madeToOrder, item.product?.ozonDeclaredValue?.toString() ?? null])])).digest("hex");
 }
 export function buildOzonPostings(items: DeliveryItem[], config: OzonDeliveryConfig, now = Date.now()): OzonCheckoutRequest["postings"] {
   if (!config.shipmentMethodId) throw new OzonDeliveryError("method");
@@ -16,9 +16,10 @@ export function buildOzonPostings(items: DeliveryItem[], config: OzonDeliveryCon
   for (const item of items) {
     const product = item.product;
     const dimensions = parcelSchema.safeParse({ weight_g: product?.shippingWeightG, length_mm: product?.shippingLengthMm, width_mm: product?.shippingWidthMm, height_mm: product?.shippingHeightMm });
-    if (!dimensions.success || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.unitPrice <= 0) throw new OzonDeliveryError("packaging");
+    const declaredValue = Number(product?.ozonDeclaredValue ?? item.unitPrice);
+    if (!dimensions.success || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.unitPrice <= 0 || !Number.isFinite(declaredValue) || declaredValue <= 0 || declaredValue > 9_999_999_999.99) throw new OzonDeliveryError("packaging");
     // Each unit is a separately measured, packed parcel. Never guess combined box dimensions.
-    for (let unit = 0; unit < item.quantity; unit++) postings.push({ request_id: postings.length + 1, shipment_method_id: config.shipmentMethodId, cutoff_at: cutoff, declared_value: { amount: item.unitPrice.toFixed(2), currency_code: "RUB" }, dimensions: dimensions.data });
+    for (let unit = 0; unit < item.quantity; unit++) postings.push({ request_id: postings.length + 1, shipment_method_id: config.shipmentMethodId, cutoff_at: cutoff, declared_value: { amount: declaredValue.toFixed(2), currency_code: "RUB" }, dimensions: dimensions.data });
   }
   return postings;
 }

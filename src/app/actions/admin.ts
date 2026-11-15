@@ -185,6 +185,7 @@ function productMutationData(input: Extract<ReturnType<typeof parseProductForm>,
     shippingLengthMm: input.shippingLengthMm ?? null,
     shippingWidthMm: input.shippingWidthMm ?? null,
     shippingHeightMm: input.shippingHeightMm ?? null,
+    ozonDeclaredValue: input.ozonDeclaredValue ?? null,
     modelAsset: optionalText(input.modelAsset),
     title: optionalText(input.title) ?? (fillSeoDefaults ? input.name : null),
     h1: optionalText(input.h1) ?? (fillSeoDefaults ? input.name : null),
@@ -226,7 +227,7 @@ export async function createProductAction(formData: FormData) {
       categoryMode: data.categoryMode,
       name: data.name, slug: data.slug, sku: data.sku, type: data.type, status: data.status, badge: data.badge, shortDescription: data.shortDescription, description: data.description, usage: data.usage, instructions: data.instructions, specifications: data.specifications, basePrice: data.basePrice, oldPrice: data.oldPrice, costPrice: data.costPrice, stock: data.stock, madeToOrder: data.madeToOrder, leadDays: data.leadDays, weightGrams: data.weightGrams, widthMm: data.widthMm, depthMm: data.depthMm, heightMm: data.heightMm, modelAsset: data.modelAsset, title: data.title, h1: data.h1, metaDescription: data.metaDescription, canonical: data.canonical, robots: data.robots, publishedAt: data.publishedAt,
       categories: { create: data.categoryRows }, images: { create: data.images }, materials: { connect: data.materialLinks }, colors: { connect: data.colorLinks },
-      shippingWeightG: data.shippingWeightG, shippingLengthMm: data.shippingLengthMm, shippingWidthMm: data.shippingWidthMm, shippingHeightMm: data.shippingHeightMm,
+      shippingWeightG: data.shippingWeightG, shippingLengthMm: data.shippingLengthMm, shippingWidthMm: data.shippingWidthMm, shippingHeightMm: data.shippingHeightMm, ozonDeclaredValue: data.ozonDeclaredValue,
       } });
       const { refreshCatalogFacets } = await import("@/lib/catalog-facets-server");
       await refreshCatalogFacets(tx, created.id);
@@ -237,7 +238,7 @@ export async function createProductAction(formData: FormData) {
     await removeStoredImages(upload.storedPaths);
     redirect(`/admin/products/new/?error=${productErrorCode(error)}`);
   }
-  await writeAudit({ actorId: user.id, action: "product.create", entityType: "Product", entityId: product.id, after: { name: product.name, slug: product.slug, price: Number(product.basePrice), status: product.status } });
+  await writeAudit({ actorId: user.id, action: "product.create", entityType: "Product", entityId: product.id, after: { name: product.name, slug: product.slug, price: Number(product.basePrice), status: product.status, ozonDeclaredValue: product.ozonDeclaredValue == null ? null : Number(product.ozonDeclaredValue) } });
   updateTag("catalog");
   revalidatePath("/catalog/");
   redirect(`/admin/products/${product.id}/?created=1`);
@@ -271,6 +272,8 @@ export async function updateProductAction(formData: FormData) {
   let removedUploadedPaths: string[] = [];
   try {
     const data = productMutationData(parsed.data, upload.entries, before.images, before.publishedAt);
+    // An editor opened before this field existed must not erase its saved value.
+    if (!formData.has("ozonDeclaredValue")) data.ozonDeclaredValue = before.ozonDeclaredValue == null ? null : Number(before.ozonDeclaredValue);
     if (!data.slug) throw new Error("invalid");
     const keptPaths = new Set(data.images.map((image) => image.path));
     removedUploadedPaths = before.images.map((image) => image.path).filter((path) => !keptPaths.has(path) && storedProductImageName(path) !== null);
@@ -288,7 +291,7 @@ export async function updateProductAction(formData: FormData) {
       ...(linked ? { marketplaceMode: "SITE" } : {}),
       name: data.name, slug: data.slug, sku: data.sku, type: data.type, status: data.status, badge: data.badge, shortDescription: data.shortDescription, description: data.description, usage: data.usage, instructions: data.instructions, specifications: data.specifications, basePrice: data.basePrice, oldPrice: data.oldPrice, costPrice: data.costPrice, stock: data.stock, madeToOrder: data.madeToOrder, leadDays: data.leadDays, weightGrams: data.weightGrams, widthMm: data.widthMm, depthMm: data.depthMm, heightMm: data.heightMm, modelAsset: data.modelAsset, title: data.title, h1: data.h1, metaDescription: data.metaDescription, canonical: data.canonical, robots: data.robots, publishedAt: data.publishedAt,
       categories: { deleteMany: {}, create: data.categoryRows }, images: { deleteMany: {}, create: data.images }, materials: { set: data.materialLinks }, colors: { set: data.colorLinks },
-      shippingWeightG: data.shippingWeightG, shippingLengthMm: data.shippingLengthMm, shippingWidthMm: data.shippingWidthMm, shippingHeightMm: data.shippingHeightMm,
+      shippingWeightG: data.shippingWeightG, shippingLengthMm: data.shippingLengthMm, shippingWidthMm: data.shippingWidthMm, shippingHeightMm: data.shippingHeightMm, ozonDeclaredValue: data.ozonDeclaredValue,
       } });
       const { refreshCatalogFacets } = await import("@/lib/catalog-facets-server");
       await refreshCatalogFacets(tx, id);
@@ -299,7 +302,7 @@ export async function updateProductAction(formData: FormData) {
     await removeStoredImages(upload.storedPaths);
     redirect(`/admin/products/${id}/?error=${productErrorCode(error)}`);
   }
-  await writeAudit({ actorId: user.id, action: "product.update", entityType: "Product", entityId: product.id, before: { name: before.name, slug: before.slug, price: Number(before.basePrice), status: before.status }, after: { name: product.name, slug: product.slug, price: Number(product.basePrice), status: product.status } });
+  await writeAudit({ actorId: user.id, action: "product.update", entityType: "Product", entityId: product.id, before: { name: before.name, slug: before.slug, price: Number(before.basePrice), status: before.status, ozonDeclaredValue: before.ozonDeclaredValue == null ? null : Number(before.ozonDeclaredValue) }, after: { name: product.name, slug: product.slug, price: Number(product.basePrice), status: product.status, ozonDeclaredValue: product.ozonDeclaredValue == null ? null : Number(product.ozonDeclaredValue) } });
   for (const path of removedUploadedPaths) {
     try {
       if (await prisma.productImage.count({ where: { path } }) === 0) {

@@ -17,6 +17,18 @@ function validForm() {
 }
 
 describe("product admin form", () => {
+  it("accepts an optional declared Ozon value with at most two decimal places", () => {
+    const form = validForm();
+    expect(parseProductForm(form)).toMatchObject({ success: true, data: { ozonDeclaredValue: undefined } });
+    form.set("ozonDeclaredValue", "3500.25");
+    expect(parseProductForm(form)).toMatchObject({ success: true, data: { ozonDeclaredValue: 3500.25 } });
+    form.set("ozonDeclaredValue", "");
+    expect(parseProductForm(form)).toMatchObject({ success: true, data: { ozonDeclaredValue: undefined } });
+    for (const invalid of ["0", "-1", "1.001", "1e2", "10000000000", "Infinity"]) {
+      form.set("ozonDeclaredValue", invalid);
+      expect(parseProductForm(form).success).toBe(false);
+    }
+  });
   it("ignores retired associations from stale forms and strips their specification keys", () => {
     const form = validForm();
     for (const key of ["technologyIds", "qualityProfileIds", "postProcessIds"]) form.append(key, "legacy");

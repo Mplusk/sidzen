@@ -21,6 +21,20 @@ describe("server-owned Ozon shipping quotes", () => {
     expect(() => buildOzonPostings([{ ...item, quantity: 101 }], config)).toThrow("parcels");
     expect(() => buildOzonPostings([{ ...item, quantity: 0 }], config)).toThrow();
   });
+  it("uses the seller's declared value for each parcel without changing the sale price", () => {
+    const discounted = { ...item, unitPrice: 10, product: { ...item.product, ozonDeclaredValue: "3500.00" } };
+    const postings = buildOzonPostings([discounted], config);
+    expect(postings.map(posting => posting.declared_value.amount)).toEqual(["3500.00", "3500.00"]);
+    expect(discounted.unitPrice).toBe(10);
+    expect(buildOzonPostings([{ ...discounted, product: { ...discounted.product, ozonDeclaredValue: null } }], config)[0].declared_value.amount).toBe("10.00");
+    expect(() => buildOzonPostings([{ ...discounted, product: { ...discounted.product, ozonDeclaredValue: "0" } }], config)).toThrow("packaging");
+    expect(cartDeliveryFingerprint({ id: "cart", items: [discounted] })).not.toBe(cartDeliveryFingerprint({ id: "cart", items: [{ ...discounted, product: { ...discounted.product, ozonDeclaredValue: "100.00" } }] }));
+    const discountedCart = { id: "cart", items: [discounted] };
+    const quote = { request: { recipient: { phone_number: "+79991234567" }, delivery: { delivery_point: { delivery_point_id: 42 } }, postings }, cart: cartDeliveryFingerprint(discountedCart), config: deliveryConfigFingerprint(config), address: "Test PVZ", cost: 180, days: 3, expires: Date.now() + 60000, quoteVersion: 2 as const };
+    const token = signOzonQuote(quote);
+    expect(verifyOzonQuote(token, discountedCart, config, "+79991234567").request.postings[0].declared_value.amount).toBe("3500.00");
+    expect(() => verifyOzonQuote(token, { ...discountedCart, items: [{ ...discounted, product: { ...discounted.product, ozonDeclaredValue: "100.00" } }] }, config, "+79991234567")).toThrow("quote");
+  });
   it("binds the signed amount, buyer phone, cart, packaging, configuration and expiry", () => {
     const quote = { request: { recipient: { phone_number: "+79991234567" }, delivery: { delivery_point: { delivery_point_id: 42 } }, postings: buildOzonPostings(cart.items, config) }, cart: cartDeliveryFingerprint(cart), config: deliveryConfigFingerprint(config), address: "Test PVZ", cost: 180, days: 3, expires: Date.now() + 60000, quoteVersion: 2 as const };
     const token = signOzonQuote(quote);
