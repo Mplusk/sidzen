@@ -1,5 +1,6 @@
 import { PrismaClient, ProductType, PublicationStatus } from "@prisma/client";
 import { hashPassword } from "../src/lib/password";
+import { TOP_MAIL_ID, TOP_MAIL_SETTING } from "../src/lib/top-mail";
 
 const prisma = new PrismaClient();
 
@@ -206,6 +207,7 @@ async function seedContent() {
     ["legal.address", "", "legal", "Юридический адрес"],
     ["legal.bank", "", "legal", "Банковские реквизиты"],
     ["store.about", "", "general", "О магазине — подтверждённые факты"],
+    [TOP_MAIL_SETTING, true, "analytics", `Счётчик Top.Mail.Ru № ${TOP_MAIL_ID}`],
     ["analytics.yandexMetrika", "", "analytics", "Яндекс Метрика"],
     ["analytics.ga4", "", "analytics", "Google Analytics"],
     ["cookie.message", "Мы используем необходимые cookies для работы корзины и личного кабинета.", "legal", "Cookie-баннер"],

@@ -13,6 +13,7 @@ import { writeAudit } from "@/lib/audit";
 import { slugify } from "@/lib/format";
 import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { TOP_MAIL_SETTING } from "@/lib/top-mail";
 import { removeUserRole } from "@/lib/user-role-removal";
 import { arrangeProductImages, assertImageCapacity, parseProductForm, storedProductImageName, type ProductGalleryEntry } from "@/lib/product-admin";
 import { guardProductWrite } from "@/lib/marketplaces/sync";
@@ -346,7 +347,13 @@ export async function updateSettingAction(formData: FormData) {
   const raw = String(formData.get("value") ?? "");
   const current = await prisma.siteSetting.findUnique({ where: { key } });
   if (!current || ["system", "integrations", "security"].includes(current.group) || key.startsWith("security.")) redirect("/admin/settings/?error=key");
-  const value = typeof current.value === "number" ? Number(raw) : raw;
+  let value: string | number | boolean = raw;
+  if (key === TOP_MAIL_SETTING) {
+    if (raw !== "true" && raw !== "false") redirect("/admin/settings/?error=key");
+    value = raw === "true";
+  } else if (typeof current.value === "number") {
+    value = Number(raw);
+  }
   // Do not write if this setting was moved into a protected group in parallel.
   const updated = await prisma.siteSetting.updateMany({ where: { key, group: current.group }, data: { value } });
   if (updated.count !== 1) redirect("/admin/settings/?error=key");

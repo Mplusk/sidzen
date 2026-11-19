@@ -42,3 +42,15 @@ it("updates ordinary settings while guarding against a concurrent group change",
   expect(m.audit).toHaveBeenCalledTimes(1);
 });
 
+it("persists both Top.Mail.Ru switch positions as booleans and rejects other values", async () => {
+  const key = "analytics.topMailEnabled";
+  m.find.mockResolvedValue({ id: "counter", group: "analytics", value: true });
+  for (const value of [false, true]) {
+    await updateSettingAction(form(key, String(value)));
+    expect(m.update).toHaveBeenLastCalledWith({ where: { key, group: "analytics" }, data: { value } });
+  }
+  await expect(updateSettingAction(form(key, "yes"))).rejects.toThrow("/admin/settings/?error=key");
+  expect(m.update).toHaveBeenCalledTimes(2);
+  expect(m.permission).toHaveBeenCalledWith("settings.write");
+});
+

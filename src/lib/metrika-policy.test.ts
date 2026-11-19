@@ -6,8 +6,9 @@ const storage = (value: string | null) => ({ getItem: (key: string) => key === M
 describe("Metrica consent and route policy", () => {
   it("accepts only a valid, recent, explicit choice", () => {
     for (const value of [null, "bad JSON", '{}', JSON.stringify({choice:"accepted",at:now+1}), JSON.stringify({choice:"accepted",at:now-180*86400000}), JSON.stringify({choice:"other",at:now})]) expect(readMetrikaChoice(storage(value), now)).toBeNull();
-    expect(readMetrikaChoice(storage(JSON.stringify({choice:"accepted",at:now})), now)).toBe("accepted");
-    expect(readMetrikaChoice(storage(JSON.stringify({choice:"rejected",at:now})), now)).toBe("rejected");
+    expect(readMetrikaChoice(storage(JSON.stringify({choice:"accepted",at:now})), now)).toEqual({ choice: "accepted", topMail: false });
+    expect(readMetrikaChoice(storage(JSON.stringify({choice:"accepted",at:now,topMail:true})), now)).toEqual({ choice: "accepted", topMail: true });
+    expect(readMetrikaChoice(storage(JSON.stringify({choice:"rejected",at:now,topMail:true})), now)).toEqual({ choice: "rejected", topMail: false });
     expect(readMetrikaChoice({getItem: () => { throw Error("denied"); }}, now)).toBeNull();
   });
   it("allows only public pages and the fixed Yandex debug flag", () => {

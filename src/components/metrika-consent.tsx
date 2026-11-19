@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { METRIKA_CHOICE_KEY, METRIKA_ID, METRIKA_SETTINGS_EVENT, metrikaPublicUrl, readMetrikaChoice, type MetrikaChoice } from "@/lib/metrika-policy";
+import { CHOICE_MAX_AGE_SECONDS, METRIKA_CHOICE_KEY, METRIKA_ID, METRIKA_SETTINGS_EVENT, metrikaPublicUrl, readMetrikaChoice, type MetrikaChoice, type StatisticsPreference } from "@/lib/metrika-policy";
+import { publicMonitoringPath } from "@/lib/monitoring-policy";
+import { TOP_MAIL_COOKIE, TOP_MAIL_ENDPOINT } from "@/lib/top-mail";
 
 type Ym = ((id: number, command: string, ...args: unknown[]) => void) & { a?: unknown[][]; l?: number };
 type MetrikaWindow = Window & { ym?: Ym; disableYaCounter114060671?: boolean; dataLayer?: unknown[] };
@@ -28,10 +30,10 @@ function loadMetrika(): Promise<void> {
   return loadPromise;
 }
 
-function removeMetrikaCookies() {
+function removeAnalyticsCookies() {
   for (const entry of document.cookie.split(";")) {
     const name = entry.trim().split("=", 1)[0];
-    if (!name.startsWith("_ym_")) continue;
+    if (!name.startsWith("_ym_") && !name.startsWith("tmr_")) continue;
     document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Lax`;
     document.cookie = `${name}=; Max-Age=0; Path=/; Domain=${location.hostname}; SameSite=Lax`;
     const parts = location.hostname.split(".");
@@ -43,13 +45,15 @@ function privacySignal() {
   return navigator.doNotTrack === "1" || (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl === true;
 }
 
-export function MetrikaConsent() {
+export function MetrikaConsent({ topMailEnabled = false }: { topMailEnabled?: boolean }) {
   const pathname = usePathname();
   const search = useSearchParams();
-  const [choice, setChoice] = useState<MetrikaChoice | null>(null);
+  const [preference, setPreference] = useState<StatisticsPreference | null>(null);
+  const choice = preference?.choice ?? null;
   const [ready, setReady] = useState(false);
   const [settings, setSettings] = useState(false);
   const [blocked, setBlocked] = useState(false);
+  const [hasFragment, setHasFragment] = useState(false);
   const active = useRef(false);
   const generation = useRef(0);
   const stop = useCallback(() => {
@@ -67,14 +71,19 @@ export function MetrikaConsent() {
     queueMicrotask(() => {
       if (!mounted) return;
       setBlocked(privacySignal());
-      try { setChoice(readMetrikaChoice(localStorage)); } catch { /* No storage means no consent. */ }
+      setHasFragment(Boolean(location.hash));
+      try { setPreference(readMetrikaChoice(localStorage)); } catch { /* No storage means no consent. */ }
       setReady(true);
     });
     const open = () => setSettings(true);
+    const syncFragment = () => setHasFragment(Boolean(location.hash));
     const sync = (event: StorageEvent) => {
       if (event.key !== METRIKA_CHOICE_KEY && event.key !== null) return;
-      stop();
-      try { setChoice(readMetrikaChoice(localStorage)); } catch { setChoice(null); }
+      try {
+        const saved = readMetrikaChoice(localStorage);
+        if (saved?.choice !== "accepted") stop();
+        setPreference(saved);
+      } catch { stop(); setPreference(null); }
     };
     const beforeNavigation = (event: MouseEvent) => {
       const anchor = (event.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
@@ -86,9 +95,10 @@ export function MetrikaConsent() {
     };
     window.addEventListener(METRIKA_SETTINGS_EVENT, open);
     window.addEventListener("storage", sync);
+    window.addEventListener("hashchange", syncFragment);
     window.addEventListener("popstate", stop);
     document.addEventListener("click", beforeNavigation, true);
-    return () => { mounted = false; window.removeEventListener(METRIKA_SETTINGS_EVENT, open); window.removeEventListener("storage", sync); window.removeEventListener("popstate", stop); document.removeEventListener("click", beforeNavigation, true); stop(); };
+    return () => { mounted = false; window.removeEventListener(METRIKA_SETTINGS_EVENT, open); window.removeEventListener("storage", sync); window.removeEventListener("hashchange", syncFragment); window.removeEventListener("popstate", stop); document.removeEventListener("click", beforeNavigation, true); stop(); };
   }, [stop]);
 
   useEffect(() => {
@@ -110,22 +120,37 @@ export function MetrikaConsent() {
   }, [pathname, search, choice, ready, blocked, stop]);
 
   const choose = (next: MetrikaChoice) => {
-    stop();
-    if (next === "rejected") removeMetrikaCookies();
+    if (next === "rejected") stop();
+    const allowTopMail = next === "accepted" && topMailEnabled && !blocked;
+    const cookieOptions = `Path=${TOP_MAIL_ENDPOINT}; SameSite=Strict${location.protocol === "https:" ? "; Secure" : ""}`;
     try {
-      localStorage.setItem(METRIKA_CHOICE_KEY, JSON.stringify({ choice: next, at: Date.now() }));
-      setChoice(next);
-    } catch { setChoice(null); }
+      if (!allowTopMail) document.cookie = `${TOP_MAIL_COOKIE}=; Max-Age=0; ${cookieOptions}`;
+      if (next === "rejected") {
+        removeAnalyticsCookies();
+        localStorage.removeItem("tmr_lvid");
+        localStorage.removeItem("tmr_lvidTS");
+      }
+      localStorage.setItem(METRIKA_CHOICE_KEY, JSON.stringify({ choice: next, at: Date.now(), topMail: allowTopMail }));
+      if (allowTopMail) document.cookie = `${TOP_MAIL_COOKIE}=1; Max-Age=${CHOICE_MAX_AGE_SECONDS}; ${cookieOptions}`;
+      setPreference({ choice: next, topMail: allowTopMail });
+    } catch { stop(); setPreference(null); }
     setSettings(false);
   };
 
-  if (!ready || (!settings && (choice !== null || blocked))) return null;
-  return <aside className="metrika-consent" aria-label="Настройки статистики" role="region">
-    <p>Необходимые cookies помогают работе сайта. С вашего согласия Яндекс Метрика собирает статистику и записывает действия на публичных страницах с помощью Вебвизора. <Link href="/legal/cookies/">Подробнее о cookies и статистике</Link>.</p>
-    {blocked && <p>В браузере включён запрет отслеживания, поэтому статистика не запускается.</p>}
-    <div className="metrika-consent__actions">
-      <button type="button" onClick={() => choose("rejected")}>Только необходимые</button>
-      {!blocked && <button type="button" onClick={() => choose("accepted")}>Разрешить статистику</button>}
-    </div>
-  </aside>;
+  const path = topMailEnabled && !search.toString() ? publicMonitoringPath(pathname) : null;
+  const counter = path && <iframe key={path} hidden title="Top.Mail.Ru" referrerPolicy="no-referrer" src={`${TOP_MAIL_ENDPOINT}?page=${encodeURIComponent(path)}`} />;
+  const needsChoice = choice === null || (choice === "accepted" && topMailEnabled && !preference?.topMail);
+  const showSettings = ready && (settings || (needsChoice && !blocked));
+  return <>
+    {!ready && counter && <noscript>{counter}</noscript>}
+    {ready && preference?.topMail && !blocked && !hasFragment && counter}
+    {showSettings && <aside className="metrika-consent" aria-label="Настройки статистики" role="region">
+      <p>Необходимые cookies помогают работе сайта. С вашего согласия Яндекс Метрика собирает статистику и записывает действия на публичных страницах с помощью Вебвизора.{topMailEnabled && " Top.Mail.Ru учитывает просмотры этих страниц."} <Link href="/legal/cookies/">Подробнее о cookies и статистике</Link>.</p>
+      {blocked && <p>В браузере включён запрет отслеживания, поэтому статистика не запускается.</p>}
+      <div className="metrika-consent__actions">
+        <button type="button" onClick={() => choose("rejected")}>Только необходимые</button>
+        {!blocked && <button type="button" onClick={() => choose("accepted")}>Разрешить статистику</button>}
+      </div>
+    </aside>}
+  </>;
 }

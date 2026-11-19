@@ -11,6 +11,7 @@ describe("Metrica consent interface", () => {
   let container: HTMLDivElement;
   let root: Root;
   beforeEach(() => {
+    vi.resetModules();
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
     localStorage.clear();
     history.replaceState(null, "", "/catalog/");
@@ -22,6 +23,28 @@ describe("Metrica consent interface", () => {
     container.remove();
     document.head.querySelectorAll('script[src*="mc.yandex.ru"]').forEach(script => script.remove());
     localStorage.clear();
+  });
+  it("requires a choice covering Top.Mail.Ru and removes the frame on private pages, disable and withdrawal", async () => {
+    const { MetrikaConsent } = await import("./metrika-consent");
+    localStorage.setItem(METRIKA_CHOICE_KEY, JSON.stringify({ choice: "accepted", at: Date.now() }));
+    const render = (topMailEnabled = true) => act(async () => root.render(React.createElement(MetrikaConsent, { topMailEnabled })));
+    const frame = () => container.querySelector('iframe[title="Top.Mail.Ru"]');
+    await render();
+    expect(frame()).toBeNull();
+    await act(async () => [...container.querySelectorAll("button")].find(el => el.textContent === "Разрешить статистику")!.click());
+    expect(frame()?.getAttribute("src")).toContain("page=%2Fcatalog%2F");
+    history.pushState(null, "", "/checkout/");
+    await render();
+    expect(frame()).toBeNull();
+    history.pushState(null, "", "/about/");
+    await render(false);
+    expect(frame()).toBeNull();
+    await render();
+    expect(frame()).not.toBeNull();
+    act(() => window.dispatchEvent(new Event(METRIKA_SETTINGS_EVENT)));
+    await act(async () => [...container.querySelectorAll("button")].find(el => el.textContent === "Только необходимые")!.click());
+    expect(frame()).toBeNull();
+    expect(JSON.parse(localStorage.getItem(METRIKA_CHOICE_KEY)!)).toMatchObject({ choice: "rejected", topMail: false });
   });
   it("does not load before consent, initializes after consent and stops on navigation and withdrawal", async () => {
     const { MetrikaConsent } = await import("./metrika-consent");

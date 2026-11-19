@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
+import { TOP_MAIL_SETTING } from "@/lib/top-mail";
 
 export const getSettings = cache(async () => {
   const rows = await prisma.siteSetting.findMany({ where: { group: { not: "integrations" } } });
@@ -9,6 +10,11 @@ export const getSettings = cache(async () => {
 export async function getSetting<T>(key: string, fallback: T): Promise<T> {
   const settings = await getSettings();
   return (settings[key] as T | undefined) ?? fallback;
+}
+
+export async function isTopMailEnabled() {
+  const setting = await prisma.siteSetting.findUnique({ where: { key: TOP_MAIL_SETTING }, select: { value: true } });
+  return setting?.value === true;
 }
 
 export async function getStoreContacts() {

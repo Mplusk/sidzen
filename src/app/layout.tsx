@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { JsonLd } from "@/components/json-ld";
-import { getStoreContacts } from "@/lib/settings";
+import { getSetting, getStoreContacts } from "@/lib/settings";
+import { TOP_MAIL_SETTING } from "@/lib/top-mail";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { PageViewCounter } from "@/components/page-view-counter";
@@ -29,7 +30,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#f8f5ef", colorScheme: "light" };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const [contacts, favorites, cartQuantity] = await Promise.all([getStoreContacts(), getFavoriteIds(), getCartQuantity()]);
+  const [contacts, favorites, cartQuantity, topMailEnabled] = await Promise.all([getStoreContacts(), getFavoriteIds(), getCartQuantity(), getSetting(TOP_MAIL_SETTING, false)]);
   return (
     <html lang="ru">
       <body className="ym-disable-keys">
@@ -38,7 +39,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <ShoppingState ids={favorites} cartQuantity={cartQuantity}><Header />
         <main id="main">{children}</main>
         <Footer /></ShoppingState>
-        <Suspense fallback={null}><PageViewCounter /><MetrikaConsent /></Suspense>
+        <Suspense fallback={null}><PageViewCounter /><MetrikaConsent topMailEnabled={topMailEnabled === true} /></Suspense>
       </body>
     </html>
   );
