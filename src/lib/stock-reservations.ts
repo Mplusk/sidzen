@@ -49,9 +49,9 @@ export async function finishStockReservations(tx: Tx, orderId: string, outcome: 
 
 /** Only release when no carrier request could have left the shop. */
 export async function releaseUnsentStock(tx: Tx, orderId: string) {
-  const order = await tx.order.findUnique({ where: { id: orderId }, include: { shipment: { include: { ozonJob: true, cdekJob: true } } } });
+  const order = await tx.order.findUnique({ where: { id: orderId }, include: { shipment: { include: { ozonJob: true, cdekJob: true, fivePostJob: true } } } });
   if (!order || order.shipment?.shippedAt || order.shipment?.deliveredAt || ["SHIPPED", "DELIVERED", "REFUNDED"].includes(order.status)) return false;
-  for (const job of [order.shipment?.ozonJob, order.shipment?.cdekJob]) {
+  for (const job of [order.shipment?.ozonJob, order.shipment?.cdekJob, order.shipment?.fivePostJob]) {
     if (job && (job.attempts !== 0 || job.lockToken || !["PENDING", "CANCELED"].includes(job.status))) return false;
   }
   const ozon = order.shipment?.ozonJob;
@@ -62,6 +62,11 @@ export async function releaseUnsentStock(tx: Tx, orderId: string) {
   const cdek = order.shipment?.cdekJob;
   if (cdek?.status === "PENDING") {
     const stopped = await tx.cdekDeliveryJob.updateMany({ where: { id: cdek.id, status: "PENDING", attempts: 0, lockToken: null }, data: { status: "CANCELED", cancelRequestedAt: new Date() } });
+    if (!stopped.count) throw new Error("stock-carrier-changed");
+  }
+  const fivePost = order.shipment?.fivePostJob;
+  if (fivePost?.status === "PENDING") {
+    const stopped = await tx.fivePostDeliveryJob.updateMany({ where: { id: fivePost.id, status: "PENDING", attempts: 0, lockToken: null }, data: { status: "CANCELED", cancelRequestedAt: new Date() } });
     if (!stopped.count) throw new Error("stock-carrier-changed");
   }
   await finishStockReservations(tx, orderId, "RELEASED");

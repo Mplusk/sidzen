@@ -22,7 +22,7 @@ export function PickupPointDialog({ points: staticPoints = EMPTY_POINTS, city, s
   city?: PickupMapCity;
   selectedPoint?: Point;
   selected: string;
-  carrier: "Ozon" | "СДЭК";
+  carrier: "Ozon" | "СДЭК" | "5Post";
   onSelect: (id: string, point: Point) => void;
   onClose: () => void;
 }) {
@@ -33,7 +33,7 @@ export function PickupPointDialog({ points: staticPoints = EMPTY_POINTS, city, s
   const confirmButton = useRef<HTMLButtonElement>(null);
   const focusConfirmation = useRef(false);
   const focusRevision = useRef(0);
-  const area = usePickupViewport(Boolean(city));
+  const area = usePickupViewport(Boolean(city), carrier === "5Post" ? "/api/delivery/fivepost/points/" : undefined);
   const points: Point[] = city ? area.listPoints : staticPoints;
   const markerPoints: Point[] = city ? area.points : staticPoints;
   const [highlighted, setHighlighted] = useState(selected);
@@ -53,7 +53,7 @@ export function PickupPointDialog({ points: staticPoints = EMPTY_POINTS, city, s
     if (fromList && hasPointCoordinates(value)) setFocusRequest({ id, revision: ++focusRevision.current });
     else setFocusRequest(undefined);
   }
-  const carrierLogo = <Image src={carrier === "Ozon" ? "/brand/ozon-delivery.svg" : "/brand/cdek.svg"} alt={carrier} width={83} height={24} className={styles.logo} />;
+  const carrierLogo = carrier === "5Post" ? <strong>5Post</strong> : <Image src={carrier === "Ozon" ? "/brand/ozon-delivery.svg" : "/brand/cdek.svg"} alt={carrier} width={83} height={24} className={styles.logo} />;
 
   // Leaflet measures its container in a passive effect. Open the dialog before
   // that effect runs so fitBounds uses the visible map size on every opening.

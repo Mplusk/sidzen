@@ -19,7 +19,16 @@ export function pickupCitySql(clientId: string, methodId: bigint, search: string
 
 // PostgreSQL returns a small zoom-dependent set of points/cells. All matching
 // points contribute: no arbitrary first-page cutoff and no full city payload.
+function ozonSource(clientId: string, methodId: bigint) {
+  return { table: Prisma.sql`"OzonDeliveryPoint"`, filter: Prisma.sql`"clientId" = ${clientId} AND "methodId" = ${methodId} AND "active" = true`, join: Prisma.empty };
+}
+export function fivePostMapSource(generation: string) {
+  return { table: Prisma.sql`"FivePostPoint"`, filter: Prisma.sql`"generation" = ${generation}`, join: Prisma.sql`AND p."generation" = ${generation}` };
+}
 export function pickupViewportSql(clientId: string, methodId: bigint, viewport: PickupViewport, offset = 0) {
+  return scopedViewportSql(ozonSource(clientId, methodId), viewport, offset);
+}
+export function scopedViewportSql(source: ReturnType<typeof ozonSource>, viewport: PickupViewport, offset = 0) {
   const { south, west, north, east } = viewport.bounds;
   // Coincident provider coordinates cannot be separated by zooming any further.
   // The explicit final-zoom list uses bounded pages, rather than hiding these
@@ -27,8 +36,8 @@ export function pickupViewportSql(clientId: string, methodId: bigint, viewport: 
   if (viewport.zoom === 18) return Prisma.sql`
     SELECT "id", 1::integer AS count, "latitude", "longitude", "latitude" AS south, "longitude" AS west,
       "latitude" AS north, "longitude" AS east, "name", "address", "type"
-    FROM "OzonDeliveryPoint"
-    WHERE "clientId" = ${clientId} AND "methodId" = ${methodId} AND "active" = true
+    FROM ${source.table}
+    WHERE ${source.filter}
       AND "latitude" BETWEEN ${south} AND ${north} AND "longitude" BETWEEN ${west} AND ${east}
       AND NOT ("latitude" = 0 AND "longitude" = 0)
     ORDER BY "id" ASC LIMIT ${MAX_VIEWPORT_POINTS + 1} OFFSET ${offset}
@@ -36,8 +45,8 @@ export function pickupViewportSql(clientId: string, methodId: bigint, viewport: 
   const { gridSize, pointBudget } = pickupViewportDensity(viewport.zoom);
   return Prisma.sql`
     WITH visible AS MATERIALIZED (
-      SELECT "id", "latitude", "longitude" FROM "OzonDeliveryPoint"
-      WHERE "clientId" = ${clientId} AND "methodId" = ${methodId} AND "active" = true
+      SELECT "id", "latitude", "longitude" FROM ${source.table}
+      WHERE ${source.filter}
         AND "latitude" BETWEEN ${south} AND ${north} AND "longitude" BETWEEN ${west} AND ${east}
         AND NOT ("latitude" = 0 AND "longitude" = 0)
     ), cells AS (
@@ -52,7 +61,7 @@ export function pickupViewportSql(clientId: string, methodId: bigint, viewport: 
       FROM cells GROUP BY cell
     )
     SELECT g.*, p."name", p."address", p."type" FROM grouped g
-    LEFT JOIN "OzonDeliveryPoint" p ON g.count = 1 AND p."id" = g.id
+    LEFT JOIN ${source.table} p ON g.count = 1 AND p."id" = g.id ${source.join}
     ORDER BY g.id
   `;
 }
@@ -61,12 +70,15 @@ export function pickupViewportSql(clientId: string, methodId: bigint, viewport: 
 // active points inside this camera area; never load the whole city's addresses.
 // Haversine distance also keeps the nearest ordering correct at high latitudes.
 export function pickupViewportListSql(clientId: string, methodId: bigint, viewport: PickupViewport) {
+  return scopedViewportListSql(ozonSource(clientId, methodId), viewport);
+}
+export function scopedViewportListSql(source: ReturnType<typeof ozonSource>, viewport: PickupViewport) {
   const { south, west, north, east } = viewport.bounds;
   const latitude = (south + north) / 2, longitude = (west + east) / 2;
   return Prisma.sql`
     SELECT "id", "name", "address", "type", "latitude", "longitude"
-    FROM "OzonDeliveryPoint"
-    WHERE "clientId" = ${clientId} AND "methodId" = ${methodId} AND "active" = true
+    FROM ${source.table}
+    WHERE ${source.filter}
       AND "latitude" BETWEEN ${south} AND ${north} AND "longitude" BETWEEN ${west} AND ${east}
       AND NOT ("latitude" = 0 AND "longitude" = 0)
     ORDER BY power(sin(radians("latitude" - ${latitude}) / 2), 2)

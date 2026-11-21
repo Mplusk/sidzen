@@ -37,7 +37,7 @@ export async function applyYooKassaPayment(remote: RemotePayment) {
   return prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412026)`;
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412034)`;
-    const payment = await tx.payment.findUnique({ where: { id: remote.metadata.paymentId }, include: { order: true } });
+    const payment = await tx.payment.findUnique({ where: { id: remote.metadata.paymentId }, include: { order: { include: { shipment: { select: { provider: true } } } } } });
     if (!payment || payment.provider !== "yookassa-online") throw new Error("payment-state");
     const binding = bindingSchema.parse(payment.payload);
     if (remote.recipient.account_id !== binding.shopId || remote.metadata.orderId !== payment.orderId || (payment.externalId && payment.externalId !== remote.id) || Number(remote.amount.value) !== Number(payment.amount) || Number(payment.amount) !== Number(payment.order.total) || payment.order.currency !== "RUB") throw new Error("payment-mismatch");
@@ -67,6 +67,7 @@ export async function applyYooKassaPayment(remote: RemotePayment) {
       if (canceledOrder.count) await queueTelegramCancellation(tx, payment.orderId);
       await tx.ozonDeliveryJob.updateMany({ where: { shipment: { orderId: payment.orderId }, status: { notIn: ["CANCELED", "FINISHED"] } }, data: { cancelRequestedAt: new Date(), nextAttemptAt: new Date() } });
       await tx.cdekDeliveryJob.updateMany({ where: { shipment: { orderId: payment.orderId }, status: { notIn: ["CANCELED", "FINISHED"] } }, data: { cancelRequestedAt: new Date(), nextAttemptAt: new Date() } });
+      if (payment.order.shipment?.provider === "fivepost-delivery") await tx.fivePostDeliveryJob.updateMany({ where: { shipment: { orderId: payment.orderId }, status: { notIn: ["CANCELED", "FINISHED"] } }, data: { cancelRequestedAt: new Date(), nextAttemptAt: new Date() } });
     }
     if (nextStatus === "REFUNDED") {
       // Returning money does not prove the physical goods came back. Only an
@@ -77,6 +78,7 @@ export async function applyYooKassaPayment(remote: RemotePayment) {
       await tx.yooKassaSettlement.updateMany({ where: { orderId: payment.orderId, status: { in: ["SENDING", "QUEUED"] } }, data: { status: "MANUAL_REVIEW", errorCode: "refund-in-flight", leaseUntil: null } });
       await tx.ozonDeliveryJob.updateMany({ where: { shipment: { orderId: payment.orderId }, status: { notIn: ["CANCELED", "FINISHED"] } }, data: { cancelRequestedAt: new Date(), nextAttemptAt: new Date() } });
       await tx.cdekDeliveryJob.updateMany({ where: { shipment: { orderId: payment.orderId }, status: { notIn: ["CANCELED", "FINISHED"] } }, data: { cancelRequestedAt: new Date(), nextAttemptAt: new Date() } });
+      if (payment.order.shipment?.provider === "fivepost-delivery") await tx.fivePostDeliveryJob.updateMany({ where: { shipment: { orderId: payment.orderId }, status: { notIn: ["CANCELED", "FINISHED"] } }, data: { cancelRequestedAt: new Date(), nextAttemptAt: new Date() } });
     }
     if (partial) await tx.yooKassaSettlement.updateMany({ where: { orderId: payment.orderId, status: "PENDING", firstAttemptAt: null }, data: { status: "MANUAL_REVIEW", errorCode: "partial-refund" } });
     if (partial) await tx.yooKassaSettlement.updateMany({ where: { orderId: payment.orderId, status: { in: ["SENDING", "QUEUED"] } }, data: { status: "MANUAL_REVIEW", errorCode: "refund-in-flight", leaseUntil: null } });

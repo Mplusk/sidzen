@@ -18,7 +18,7 @@ export async function processTelegramOrder(transport: typeof fetch = telegramFet
   const where = { orderId: job.orderId, status: "RUNNING", leaseToken: job.leaseToken };
   try {
     const config = await getTelegramConfig();
-    const order = await prisma.order.findUnique({ where: { id: job.orderId }, select: { id: true, number: true, status: true, deletedAt: true, personalDataErasedAt: true, shippingAddress: true, subtotal: true, deliveryPrice: true, total: true, shipment: { select: { provider: true, cost: true } }, items: { select: { productName: true, groupLabel: true, productColor: true, configuration: true, quantity: true, totalPrice: true, color: { select: { name: true } }, product: { select: { groupId: true, groupLabel: true, specifications: true } } } } } });
+    const order = await prisma.order.findUnique({ where: { id: job.orderId }, select: { id: true, number: true, status: true, deletedAt: true, personalDataErasedAt: true, shippingAddress: true, subtotal: true, deliveryPrice: true, total: true, shipment: { select: { provider: true, cost: true, payload: true } }, items: { select: { productName: true, groupLabel: true, productColor: true, configuration: true, quantity: true, totalPrice: true, color: { select: { name: true } }, product: { select: { groupId: true, groupLabel: true, specifications: true } } } } } });
     if (!order || order.deletedAt || order.personalDataErasedAt || !config.enabled || config.revision !== job.revision) {
       await prisma.telegramOrderJob.updateMany({ where, data: { status: "CANCELED", leaseToken: null, leaseUntil: null } }); return;
     }

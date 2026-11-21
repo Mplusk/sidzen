@@ -1,6 +1,6 @@
 // An immutable version: change it whenever the consent's meaning or recipients change.
 export const CONSENT_VERSION = "2026-10-18-sidzen-v5";
-export const PRIVACY_NOTICE_VERSION = "2026-11-11-sidzen-v7";
+export const PRIVACY_NOTICE_VERSION = "2026-11-21-sidzen-v8";
 // Policy is narrower; existing account/delivery scopes are not expanded.
 export const SIDZEN_CONSENT_VERSIONS = [CONSENT_VERSION, "2026-10-15-sidzen-v4", "2026-10-11-sidzen-v3", "2026-10-07-sidzen-v2"];
 export const CONSENT_TEXT = {

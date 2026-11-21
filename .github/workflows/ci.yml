@@ -69,6 +69,7 @@ jobs:
           pnpm exec tsx scripts/smoke-user-management.ts
           pnpm exec tsx scripts/smoke-ozon-applications.ts
           pnpm exec tsx scripts/smoke-cdek-applications.ts
+          pnpm exec tsx scripts/smoke-fivepost.ts
       - run: pnpm build
       - name: Verify administrator marketplace controls over HTTP
         env:

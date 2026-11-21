@@ -4,6 +4,8 @@ import type { Prisma } from "@prisma/client";
 // Keep conflicting or unfinished shipments visible until they can be reconciled.
 const unresolvedCarrier: Prisma.OrderWhereInput = {
   OR: [
+    { shipment: { is: { fivePostJob: { is: { status: { notIn: ["FINISHED"] } } } } } },
+    { shipment: { is: { fivePostJob: { is: { status: "FINISHED", deliveryStatus: { not: "PICKED_UP" } } } } } },
     { shipment: { is: { ozonJob: { is: { status: { in: ["PENDING", "CREATED", "REVIEW", "CANCELED"] } } } } } },
     { shipment: { is: { cdekJob: { is: { status: { in: ["PENDING", "SENDING", "ACCEPTED", "CREATED", "REVIEW", "CANCELING", "CANCELED"] } } } } } },
     { shipment: { is: { cdekJob: { is: { status: "FINISHED", deliveryStatus: "NOT_DELIVERED" } } } } },

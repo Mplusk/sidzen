@@ -800,6 +800,53 @@ model Shipment {
   order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   ozonJob     OzonDeliveryJob?
   cdekJob     CdekDeliveryJob?
+  fivePostJob FivePostDeliveryJob?
+}
+
+model FivePostDeliveryJob {
+  id String @id @default(cuid())
+  shipmentId String @unique
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  warehouseId String
+  senderLocation String
+  status String @default("PENDING")
+  remoteId String? @unique
+  deliveryStatus String?
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  cancelRequestedAt DateTime?
+  lockedUntil DateTime?
+  lockToken String?
+  error String?
+  @@index([status, nextAttemptAt])
+}
+
+model FivePostDirectory {
+  id String @id
+  scope String
+  active String?
+  staging String
+  page Int @default(0)
+  refreshedAt DateTime?
+  nextAttemptAt DateTime @default(now())
+  error String?
+}
+
+model FivePostPoint {
+  generation String
+  id String
+  city String
+  cityKey String
+  region String
+  name String
+  address String
+  type String
+  latitude Float
+  longitude Float
+  details Json
+  @@id([generation, id])
+  @@index([generation, cityKey, region])
+  @@index([generation, latitude, longitude])
 }
 
 model CdekDeliveryJob {

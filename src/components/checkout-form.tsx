@@ -11,6 +11,7 @@ import type { CheckoutActionState } from "@/lib/checkout-action-state";
 import { formatPrice } from "@/lib/format";
 import { phoneMask } from "@/lib/phone-input";
 import { OzonDeliveryPicker, type DeliveryQuoteView } from "@/components/ozon-delivery-picker";
+import { FivePostDeliveryPicker, type FivePostQuoteView } from "@/components/fivepost-delivery-picker";
 import { CdekDeliveryPicker, type CdekQuoteView } from "@/components/cdek-delivery-picker";
 import { customerDeliveryPrice } from "@/lib/delivery/pricing";
 import { ValidatedInput } from "@/components/validated-input";
@@ -41,6 +42,7 @@ const deliveryErrors: Record<string, string> = {
   "ozon-disabled": "Доставка Ozon временно выключена магазином. Повторите позже.",
   "ozon-credentials": "Ozon отклонил подключение магазина. Сообщите об этом продавцу.",
   "ozon-rate": "Ozon ограничил частоту проверок. Повторите чуть позже.",
+  "fivepost": "Пункт или тариф 5Post изменился. Выберите пункт выдачи заново.",
   "cdek": "СДЭК не подтвердил доставку или стоимость изменилась. Выберите ПВЗ и тариф заново.",
   "payment-items": "Не удалось подготовить состав чека. Проверьте корзину или обратитесь в магазин.",
   "payment-changed": "Условия оплаты изменились. Обновите страницу и проверьте заказ.",
@@ -49,11 +51,13 @@ function Submit({ needsQuote, noDelivery, noItems, pending, cartPending, onlineP
   return <button className={`button ${styles.submit}`} type="submit" disabled={pending || cartPending || needsQuote || noDelivery || noItems} aria-busy={pending || cartPending}>{pending ? "Оформляем…" : cartPending ? "Обновляем корзину…" : noDelivery ? "Доставка временно недоступна" : noItems ? "Нет доступных товаров" : needsQuote ? "Сначала подтвердите пункт выдачи" : onlinePayment ? "Перейти к оплате" : "Отправить заявку"}</button>;
 }
 
-export function CheckoutForm({ items, methods, user, error, reference, ozonDelivery = false, cdekDelivery = false, packingReady = true, onlinePayment = false, cartFingerprint = "", unavailableCount = 0, holdExpiresAt = null }: {
+export function CheckoutForm({ items, methods, user, error, reference, ozonDelivery = false, cdekDelivery = false, fivePostDelivery = false, fivePostBuyerPays = false, packingReady = true, onlinePayment = false, cartFingerprint = "", unavailableCount = 0, holdExpiresAt = null }: {
   items: Array<{ id: string; name: string; sku?: string; image?: string | null; configuration: string; quantity: number; maxQuantity?: number; total: number; members: CartGroupMember[]; canAdjust?: boolean; stockReviewRequired?: boolean }>;
   methods: Delivery[]; user: { name: string; email: string; phone: string }; error?: string; reference?: string;
   ozonDelivery?: boolean;
   cdekDelivery?: boolean;
+  fivePostDelivery?: boolean;
+  fivePostBuyerPays?: boolean;
   packingReady?: boolean;
   onlinePayment?: boolean;
   cartFingerprint?: string;
@@ -76,6 +80,10 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
   const [cdekQuoteEntry, setCdekQuoteEntry] = useState<{ cartFingerprint: string; value: CdekQuoteView | null }>({ cartFingerprint, value: null });
   const cdekQuote = cdekQuoteEntry.cartFingerprint === cartFingerprint ? cdekQuoteEntry.value : null;
   const setCdekQuote = (value: CdekQuoteView | null) => setCdekQuoteEntry({ cartFingerprint, value });
+  const [fivePostRevision, setFivePostRevision] = useState(0);
+  const [fivePostEntry, setFivePostEntry] = useState<{ fingerprint: string; value: FivePostQuoteView | null } | null>(null);
+  const fivePostQuote = fivePostEntry?.fingerprint === cartFingerprint ? fivePostEntry.value : null;
+  const setFivePostQuote = (value: FivePostQuoteView | null) => setFivePostEntry({ fingerprint: cartFingerprint, value });
   const [cdekRevision, setCdekRevision] = useState(0);
   const [state, formAction, pending] = useActionState(createOrderWithState, {} as CheckoutActionState);
   const [dismissedRecipientError, setDismissedRecipientError] = useState<CheckoutActionState | null>(null);
@@ -85,19 +93,20 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
     if (state.error && /^ozon-(expired|cart|config|phone|signature|consent|unavailable|price|recipient)$/.test(state.error)) {
       setOzonQuote(null); setQuoteRevision(value => value + 1);
     }
+    if (state.error === "fivepost") { setFivePostQuote(null); setFivePostRevision(value => value + 1); }
     if (state.error === "cdek") { setCdekQuote(null); setCdekRevision(value => value + 1); }
   }
   const [contact, setContact] = useState({ name: user.name, email: user.email, city: "", address: "", postalCode: "", comment: "", legal: false });
   const update = (key: "name" | "email" | "city" | "address" | "postalCode" | "comment", value: string) => setContact(previous => ({ ...previous, [key]: value }));
   const currentError = dismissedRecipientError === state ? undefined : state.error ?? error, currentReference = state.reference ?? reference;
-  const [delivery, setDelivery] = useState(ozonDelivery ? "ozon-delivery" : cdekDelivery ? "cdek-delivery" : methods[0]?.code ?? "");
+  const [delivery, setDelivery] = useState(ozonDelivery ? "ozon-delivery" : cdekDelivery ? "cdek-delivery" : fivePostDelivery ? "fivepost-delivery" : methods[0]?.code ?? "");
   const [phone, setPhone] = useState(phoneMask(user.phone));
   const changePhone = (value: string) => { const next = phoneMask(value); setPhone(next); if (next !== phone) { if (currentError === "ozon-recipient") setDismissedRecipientError(state); setOzonQuote(null); setQuoteRevision(value => value + 1); } };
-  const changeDelivery = (code: string) => { setDelivery(code); setOzonQuote(null); setQuoteRevision(value => value + 1); setCdekQuote(null); };
+  const changeDelivery = (code: string) => { setDelivery(code); setFivePostQuote(null); setOzonQuote(null); setQuoteRevision(value => value + 1); setCdekQuote(null); };
   const changeQuantity = (members: CartGroupMember[], next: number) => {
     if (pending || cartPending || cartUpdateInFlight.current) return;
     cartUpdateInFlight.current = true;
-    setCartError(""); setOzonQuote(null); setCdekQuote(null); setQuoteRevision(value => value + 1); setCdekRevision(value => value + 1);
+    setCartError(""); setFivePostRevision(value => value + 1); setFivePostQuote(null); setOzonQuote(null); setCdekQuote(null); setQuoteRevision(value => value + 1); setCdekRevision(value => value + 1);
     updateCart(async () => {
       try {
         const result = await updateCheckoutCartGroup(members, next);
@@ -110,13 +119,14 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
   const subtotal = items.reduce((sum, item) => sum + item.total, 0);
   const isOzon = delivery === "ozon-delivery";
   const isCdek = delivery === "cdek-delivery";
-  const deliveryPrice = isCdek ? cdekQuote?.cost ?? 0 : customerDeliveryPrice();
+  const isFivePost = delivery === "fivepost-delivery";
+  const deliveryPrice = isFivePost ? fivePostQuote?.price ?? 0 : isCdek ? cdekQuote?.cost ?? 0 : customerDeliveryPrice();
   const total = subtotal + deliveryPrice;
   // Dispatch explicitly so expected server errors leave entered fields intact.
   return <form action={formAction} onSubmit={event => { event.preventDefault(); if (!items.length || pending || cartPending || cartUpdateInFlight.current) return; const data = new FormData(event.currentTarget); startTransition(() => formAction(data)); }} className={`checkout-form ${styles.layout}`}>
     <CartAvailabilityRefresh enabled={!pending && !cartPending} />
     <div className={styles.main}>
-      {currentError && <div className="notice notice--danger" role="alert" tabIndex={-1}><p>{deliveryErrors[currentError] ?? (currentError === "price" ? "Цена или условия доставки изменились. Проверьте обновлённую сумму и отправьте заявку заново." : "Проверьте контактные данные, адрес и согласие с условиями.")}</p>{currentError === "ozon-recipient" && <button type="button" className="text-link" onClick={editPhone}>Изменить телефон получателя</button>}{state.fields && <ul>{Object.entries(state.fields).map(([key, messages]) => <li key={key}>{({ name: "ФИО", email: "Email", phone: "Телефон", address: "Адрес", legal: "Согласие", ozonQuote: "Пункт выдачи" } as Record<string, string>)[key] ?? key}: {messages.join(". ")}</li>)}</ul>}{currentReference && /^[a-f0-9-]{36}$/i.test(currentReference) && <small>Код обращения: {currentReference}</small>}<p>Введённые данные остались в форме.</p></div>}
+      {currentError && <div className="notice notice--danger" role="alert" tabIndex={-1}><p>{deliveryErrors[currentError] ?? (currentError === "price" ? "Цена или условия доставки изменились. Проверьте обновлённую сумму и отправьте заявку заново." : "Проверьте контактные данные, адрес и согласие с условиями.")}</p>{currentError === "ozon-recipient" && <button type="button" className="text-link" onClick={editPhone}>Изменить телефон получателя</button>}{state.fields && <ul>{Object.entries(state.fields).map(([key, messages]) => <li key={key}>{({ name: "ФИО", email: "Email", phone: "Телефон", address: "Адрес", legal: "Согласие", ozonQuote: "Пункт выдачи", fivePostQuote: "Пункт выдачи 5Post" } as Record<string, string>)[key] ?? key}: {messages.join(". ")}</li>)}</ul>}{currentReference && /^[a-f0-9-]{36}$/i.test(currentReference) && <small>Код обращения: {currentReference}</small>}<p>Введённые данные остались в форме.</p></div>}
       <input type="hidden" name="paymentMode" value={onlinePayment ? "online" : "application"} />
 
       <section className={styles.panel} aria-labelledby="checkout-products">
@@ -135,7 +145,7 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
         <div className={styles.panelHeading}><div><h2 id="checkout-recipient">Получатель</h2><p>Контакты для связи и доставки</p></div></div>
         <div className={styles.contacts}>
           <label className="field"><span>Имя и фамилия *</span><ValidatedInput aria-label="ФИО получателя" name="name" autoComplete="name" value={contact.name} onChange={event => update("name", event.target.value)} required minLength={2} maxLength={120} /></label>
-          <label className="field"><span>Телефон *</span><ValidatedInput ref={phoneInput} aria-label="Телефон" name="phone" type="tel" autoComplete="tel" inputMode="tel" value={phone} onChange={event => changePhone(event.target.value)} placeholder="+7 (999) 123-45-67" pattern={isOzon ? String.raw`\+7 \(9[0-9]{2}\) [0-9]{3}-[0-9]{2}-[0-9]{2}` : String.raw`\+7 \([0-9]{3}\) [0-9]{3}-[0-9]{2}-[0-9]{2}`} patternMessage={isOzon ? "Для Ozon укажите российский мобильный номер: +7 (9XX) XXX-XX-XX." : undefined} required /></label>
+          <label className="field"><span>Телефон *</span><ValidatedInput ref={phoneInput} aria-label="Телефон" name="phone" type="tel" autoComplete="tel" inputMode="tel" value={phone} onChange={event => changePhone(event.target.value)} placeholder="+7 (999) 123-45-67" pattern={isOzon || isFivePost ? String.raw`\+7 \(9[0-9]{2}\) [0-9]{3}-[0-9]{2}-[0-9]{2}` : String.raw`\+7 \([0-9]{3}\) [0-9]{3}-[0-9]{2}-[0-9]{2}`} patternMessage={isFivePost ? "Укажите мобильный номер в формате +7 (9XX) XXX-XX-XX." : isOzon ? "Для Ozon укажите российский мобильный номер: +7 (9XX) XXX-XX-XX." : undefined} required /></label>
           <label className="field"><span>Электронная почта *</span><ValidatedInput aria-label="Email" name="email" type="email" autoComplete="email" value={contact.email} onChange={event => update("email", event.target.value)} required /></label>
         </div>
         <p className={styles.hint}>Регистрация не обязательна. На почту придёт информация о {onlinePayment ? "заказе и чек" : "заявке"}.</p>
@@ -143,14 +153,16 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
 
       <section className={styles.panel} aria-labelledby="checkout-delivery">
         <div className={styles.panelHeading}><div><h2 id="checkout-delivery">Доставка</h2></div></div>
-        {ozonDelivery && !cdekDelivery && methods.length === 0 ? <input type="hidden" name="delivery" value="ozon-delivery" /> : <fieldset className={styles.methods}><legend className="visually-hidden">Способ доставки</legend>
+        {ozonDelivery && !cdekDelivery && !fivePostDelivery && methods.length === 0 ? <input type="hidden" name="delivery" value="ozon-delivery" /> : <fieldset className={styles.methods}><legend className="visually-hidden">Способ доставки</legend>
           {ozonDelivery && <label className={styles.method}><input type="radio" name="delivery" value="ozon-delivery" checked={isOzon} onChange={() => changeDelivery("ozon-delivery")} required /><span className={styles.carrierLogo}><Image src="/brand/ozon-delivery.svg" alt="" width={83} height={20} /></span><span className={styles.methodText}><strong>Ozon Доставка</strong><small>{ozonQuote?.estimatedDateText ? `Ориентировочно: ${ozonQuote.estimatedDateText}` : ozonQuote ? "Дата доставки уточняется" : "Пункт выдачи или постамат"}</small></span><strong className={styles.methodPrice}>Бесплатно</strong></label>}
           {cdekDelivery && <label className={styles.method}><input type="radio" name="delivery" value="cdek-delivery" checked={isCdek} onChange={() => changeDelivery("cdek-delivery")} required /><span className={styles.carrierLogo}><Image src="/brand/cdek.svg" alt="" width={83} height={24} /></span><span className={styles.methodText}><strong>СДЭК</strong><small>{cdekQuote ? `${cdekQuote.daysMin}–${cdekQuote.daysMax} дн. после отгрузки` : "Доставка в пункт выдачи"}</small></span><strong className={styles.methodPrice}>{cdekQuote ? formatPrice(cdekQuote.cost) : "По тарифу"}</strong></label>}
+          {fivePostDelivery && <label className={styles.method}><input type="radio" name="delivery" value="fivepost-delivery" checked={isFivePost} onChange={() => changeDelivery("fivepost-delivery")} required /><span className={styles.carrierLogo}><strong>5Post</strong></span><span className={styles.methodText}><strong>Доставка в пункт выдачи</strong><small>{fivePostQuote?.days != null ? `До ${fivePostQuote.days} дн. после приёмки` : "Пункт выдачи или постамат"}</small></span><strong className={styles.methodPrice}>{fivePostBuyerPays ? fivePostQuote ? formatPrice(fivePostQuote.price) : "По тарифу" : "Бесплатно"}</strong></label>}
           {methods.map(method => <label className={styles.method} key={method.code}><input type="radio" name="delivery" value={method.code} checked={delivery === method.code} onChange={() => changeDelivery(method.code)} required /><span className={styles.methodIcon} aria-hidden="true">{method.code === "pickup" ? <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10c0 2 3 2 4 0 1 2 3 2 5 0 1 2 4 2 5 0 1 2 4 2 4 0M9 20v-6h6v6" /></svg> : <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 5h11v11H3zM14 9h4l3 3v4h-7M7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm11 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" /></svg>}</span><span className={styles.methodText}><strong>{method.name}</strong>{method.description && <small>{method.description}</small>}</span><strong className={styles.methodPrice}>Бесплатно</strong></label>)}
         </fieldset>}
         {isOzon && <><OzonDeliveryPicker phone={phone} onEditPhone={editPhone} onQuote={setOzonQuote} packingReady={packingReady} verificationRevision={`${quoteRevision}:${cartFingerprint}`} cartPending={cartPending} /><input type="hidden" name="ozonQuote" value={ozonQuote?.token ?? ""} /></>}
         {isCdek && <><CdekDeliveryPicker key={`${cdekRevision}:${cartFingerprint}`} onQuote={setCdekQuote} /><input type="hidden" name="cdekQuote" value={cdekQuote?.token ?? ""} /></>}
-        {delivery && delivery !== "pickup" && !isOzon && !isCdek && <div className="form-grid"><label className="field"><span>Город *</span><input name="city" autoComplete="address-level2" value={contact.city} onChange={event => update("city", event.target.value)} required minLength={2} maxLength={120} /></label><label className="field"><span>Индекс{delivery === "russian-post" ? " *" : ""}</span><input name="postalCode" autoComplete="postal-code" value={contact.postalCode} onChange={event => update("postalCode", event.target.value)} inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required={delivery === "russian-post"} placeholder="6 цифр" /></label><label className="field field--full"><span>Улица, дом, квартира или пункт выдачи *</span><input name="address" autoComplete="street-address" value={contact.address} onChange={event => update("address", event.target.value)} required minLength={4} maxLength={300} /></label></div>}
+        {isFivePost && <><FivePostDeliveryPicker key={`${fivePostRevision}:${cartFingerprint}`} onQuote={setFivePostQuote} /><input type="hidden" name="fivePostQuote" value={fivePostQuote?.token ?? ""} /></>}
+        {delivery && delivery !== "pickup" && !isOzon && !isCdek && !isFivePost && <div className="form-grid"><label className="field"><span>Город *</span><input name="city" autoComplete="address-level2" value={contact.city} onChange={event => update("city", event.target.value)} required minLength={2} maxLength={120} /></label><label className="field"><span>Индекс{delivery === "russian-post" ? " *" : ""}</span><input name="postalCode" autoComplete="postal-code" value={contact.postalCode} onChange={event => update("postalCode", event.target.value)} inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required={delivery === "russian-post"} placeholder="6 цифр" /></label><label className="field field--full"><span>Улица, дом, квартира или пункт выдачи *</span><input name="address" autoComplete="street-address" value={contact.address} onChange={event => update("address", event.target.value)} required minLength={4} maxLength={300} /></label></div>}
         {delivery === "pickup" && <p className={styles.hint}>Место и время самовывоза согласуем при подтверждении заказа.</p>}
         <details className={styles.comment}><summary>Добавить комментарий к заказу</summary><label className="field"><span>Комментарий</span><textarea name="comment" value={contact.comment} onChange={event => update("comment", event.target.value)} maxLength={1000} placeholder="Пожелания к заказу и удобное время для связи" /></label><small>Не указывайте паспортные данные или реквизиты карты.</small></details>
       </section>
@@ -158,11 +170,11 @@ export function CheckoutForm({ items, methods, user, error, reference, ozonDeliv
 
     <aside className={styles.sidebar} aria-labelledby="checkout-total">
       <div className={styles.summary}><p className={styles.summaryKicker}>{onlinePayment ? "К оплате" : "Итого по заявке"}</p><div className={styles.total}><h2 id="checkout-total">{onlinePayment ? "Ваш заказ" : "Ваша заявка"}</h2><strong aria-live="polite" aria-atomic="true">{formatPrice(total)}</strong></div>
-        <div className={styles.summaryLine}><span>Товары</span><strong>{formatPrice(subtotal)}</strong></div><div className={styles.summaryLine}><span>Доставка</span><strong>{!delivery ? "Недоступна" : isCdek ? cdekQuote ? formatPrice(deliveryPrice) : "Выберите пункт" : "Бесплатно · 0 ₽"}</strong></div>
+        <div className={styles.summaryLine}><span>Товары</span><strong>{formatPrice(subtotal)}</strong></div><div className={styles.summaryLine}><span>Доставка</span><strong>{!delivery ? "Недоступна" : isFivePost && fivePostBuyerPays ? fivePostQuote ? formatPrice(deliveryPrice) : "Выберите пункт" : isCdek ? cdekQuote ? formatPrice(deliveryPrice) : "Выберите пункт" : "Бесплатно · 0 ₽"}</strong></div>
         <input type="hidden" name="expectedTotal" value={total.toFixed(2)} />
         <input type="hidden" name="cartFingerprint" value={cartFingerprint} />
         <label className="checkout-consent"><input type="checkbox" name="legal" checked={contact.legal} onChange={event => setContact(previous => ({ ...previous, legal: event.target.checked }))} required /><span>Принимаю <Link href="/legal/offer/" target="_blank">условия оформления {onlinePayment ? "заказа" : "заявки"}</Link>. Это не согласие на рекламу или рассылки.</span></label>
-        <Submit onlinePayment={onlinePayment} pending={pending} cartPending={cartPending} noItems={!items.length} needsQuote={(isOzon && !ozonQuote) || (isCdek && !cdekQuote)} noDelivery={!methods.length && !ozonDelivery && !cdekDelivery} />
+        <Submit onlinePayment={onlinePayment} pending={pending} cartPending={cartPending} noItems={!items.length} needsQuote={(isOzon && !ozonQuote) || (isCdek && !cdekQuote) || (isFivePost && !fivePostQuote)} noDelivery={!methods.length && !ozonDelivery && !cdekDelivery && !fivePostDelivery} />
         {!onlinePayment && <p className={styles.summaryNote}>Оплата на сайте не требуется. Продавец свяжется с вами для подтверждения.</p>}
       </div>
     </aside>

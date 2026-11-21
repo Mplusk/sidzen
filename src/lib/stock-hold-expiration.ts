@@ -11,12 +11,13 @@ export async function expireUnpaidOrderHold(db: PrismaClient, orderId: string, n
     // Use the same locks and order as payment verification and payment creation.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412026)`;
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412034)`;
-    const order = await tx.order.findUnique({ where: { id: orderId }, include: { payment: true, shipment: { include: { ozonJob: true, cdekJob: true } } } });
+    const order = await tx.order.findUnique({ where: { id: orderId }, include: { payment: true, shipment: { include: { ozonJob: true, cdekJob: true, fivePostJob: true } } } });
     if (!order || order.deletedAt || order.kind !== "ORDER" || !order.reservationExpiresAt || order.reservationExpiresAt > now || order.reservationExpiredAt || !["NEW", "APPROVED", "AWAITING_PAYMENT"].includes(order.status) || order.payment?.provider !== "yookassa-online" || order.payment.status !== "PENDING") return false;
     await lockOrderProductsForCartReturn(tx, order.id);
     if (!await releaseUnsentStock(tx, order.id)) return false;
     if (order.shipment?.ozonJob?.status === "PENDING") await tx.ozonDeliveryJob.updateMany({ where: { id: order.shipment.ozonJob.id, status: "CANCELED", attempts: 0 }, data: { cancelError: EXPIRATION_MARKER } });
     if (order.shipment?.cdekJob?.status === "PENDING") await tx.cdekDeliveryJob.updateMany({ where: { id: order.shipment.cdekJob.id, status: "CANCELED", attempts: 0 }, data: { error: EXPIRATION_MARKER } });
+    if (order.shipment?.fivePostJob?.status === "PENDING") await tx.fivePostDeliveryJob.updateMany({ where: { id: order.shipment.fivePostJob.id, status: "CANCELED", attempts: 0 }, data: { error: EXPIRATION_MARKER } });
     const cartRestored = await returnOrderToCart(tx, order, now);
     await tx.order.update({ where: { id: order.id }, data: { status: "CANCELED", statusChangedAt: now, reservationExpiredAt: now, reservationExpiresAt: null, checkoutCartId: null } });
     await queueTelegramCancellation(tx, order.id);

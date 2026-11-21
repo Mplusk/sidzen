@@ -5,6 +5,8 @@ import { claimRun, processRun } from "../src/lib/marketplaces/sync";
 import { catalogInvalidationToken } from "../src/lib/marketplaces/cache-token";
 import { cancelOzonJob, processOzonJob, refreshOzonJob, syncOzonPointsPage } from "../src/lib/delivery/ozon-worker";
 import { scheduleOzonDirectoryRefresh } from "../src/lib/delivery/ozon-directory-schedule";
+import { syncFivePostPage } from "../src/lib/delivery/fivepost-directory";
+import { processFivePostJob } from "../src/lib/delivery/fivepost-worker";
 import { processCdekJob } from "../src/lib/delivery/cdek-worker";
 import { pruneTransientPersonalData } from "../src/lib/privacy-maintenance";
 import { prunePersonalDataRetention } from "../src/lib/privacy-retention";
@@ -102,7 +104,7 @@ async function pickupDirectoryLoop() {
         nextScheduleCheck = Date.now() + 60_000;
         await scheduleOzonDirectoryRefresh();
       }
-      if (!stopping) await syncOzonPointsPage();
+      if (!stopping) await Promise.all([syncOzonPointsPage(), syncFivePostPage()]);
     } catch { await writeDiagnostic("delivery.points.failed", { stage: "points", reason: "temporary" }).catch(() => {}); }
     if (!stopping) await new Promise(resolve => setTimeout(resolve, 2000));
   }
@@ -153,6 +155,7 @@ try {
       await processOzonJob();
       await refreshOzonJob();
       await processCdekJob();
+      await processFivePostJob();
       await new Promise((resolve) => setTimeout(resolve, 2000));
     } catch {
       await writeDiagnostic("worker.failed");

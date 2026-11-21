@@ -7,6 +7,7 @@ import { getTochkaConfig } from "@/lib/tochka/config";
 import { saveDeliveryMethod, savePaymentIntegration } from "@/app/actions/integrations";
 import { OzonDeliverySettings } from "@/components/ozon-delivery-settings";
 import { CdekDeliverySettings } from "@/components/cdek-delivery-settings";
+import { FivePostDeliverySettings } from "@/components/fivepost-delivery-settings";
 import { AdminDeleteDelivery } from "@/components/admin-delete-delivery";
 import { CloudKassirSettings } from "@/components/cloudkassir-settings";
 import { CategoryAiSettings } from "@/components/category-ai-settings";
@@ -113,11 +114,12 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
     </details>
     <OzonDeliverySettings />
     <CdekDeliverySettings />
+    <FivePostDeliverySettings result={params.result} />
     <CategoryAiSettings />
     <CommunicationsSettings />
     {actor.roles.includes("superadmin") && <SmtpSettings message={params.result?.startsWith("smtp-") ? messages[params.result] : undefined} error={Boolean(params.result?.startsWith("smtp-") && !["smtp-saved", "smtp-checked"].includes(params.result))} />}
-    <h2>Другие способы доставки</h2><p className="muted">Управляйте способами с фиксированными тарифами. Эти способы не используют API перевозчика. Ozon Delivery API подключается отдельно выше. Способ можно отключить или удалить с подтверждением — старые заказы не меняются.</p>
-    {!methods.length && <p className="notice">Другие способы доставки не добавлены. При включённом Ozon покупателю доступна только Ozon Доставка.</p>}
+    <h2>Другие способы доставки</h2><p className="muted">Управляйте способами с фиксированными тарифами. Эти способы не используют API перевозчика. Ozon, СДЭК и 5Post подключаются в разделах выше. Способ можно отключить или удалить с подтверждением — старые заказы не меняются.</p>
+    {!methods.length && <p className="notice">Способы доставки с фиксированным тарифом не добавлены.</p>}
     {methods.map((method) => <section className="content-card" key={method.id}><h3>{method.name} · {method.active ? "включён" : "выключен"}</h3>{method.code === "cdek" && <p className="notice">Этот старый фиксированный способ не отображается при оформлении. Подключите СДЭК API выше для расчёта тарифа.</p>}<DeliveryForm method={{ ...method, basePrice: Number(method.basePrice) }} /><AdminDeleteDelivery id={method.id} name={method.name} /></section>)}
     <section className="content-card"><h3>Новый способ доставки</h3><DeliveryForm /></section>
   </div>;

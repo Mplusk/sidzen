@@ -38,7 +38,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
   ]);
   const where: Prisma.OrderWhereInput = { deletedAt: null, ...(archived ? archivedOrdersWhere : { NOT: archivedOrdersWhere }) };
   const [orders, total, needsConfirmation, lateStock] = canReadOrders ? await Promise.all([
-    prisma.order.findMany({ where, include: { shipment: { include: { ozonJob: true, cdekJob: true } } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: (page - 1) * pageSize, take: pageSize }),
+    prisma.order.findMany({ where, include: { shipment: { include: { ozonJob: true, cdekJob: true, fivePostJob: true } } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: (page - 1) * pageSize, take: pageSize }),
     prisma.order.count({ where }),
     prisma.order.count({ where: { deletedAt: null, status: { notIn: ["DELIVERED", "CANCELED", "REFUNDED"] }, shipment: { is: { deliveredAt: { not: null } } }, AND: [receivedOrdersWhere] } }),
     prisma.order.findFirst({ where: { deletedAt: null, stockReviewRequired: true, status: "PAID" }, select: { number: true }, orderBy: { updatedAt: "asc" } }),

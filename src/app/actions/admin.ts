@@ -35,7 +35,7 @@ export async function updateOrderStatusAction(formData: FormData) {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412026)`;
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412032)`;
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412034)`;
-    const before = await tx.order.findUnique({ where: { id: parsed.data.orderId }, include: { payment: true, fiscalReceipts: true, yookassaSettlement: true } });
+    const before = await tx.order.findUnique({ where: { id: parsed.data.orderId }, include: { payment: true, fiscalReceipts: true, yookassaSettlement: true, shipment: { select: { provider: true } } } });
     if (!before || before.deletedAt || before.personalDataErasedAt) { statusError = "missing"; return null; }
     if (before.kind === "APPLICATION") {
       statusError = "application-status";
@@ -68,6 +68,7 @@ export async function updateOrderStatusAction(formData: FormData) {
     if (parsed.data.status === "DELIVERED") await finishStockReservations(tx, before.id, "CONSUMED");
     const updated = await tx.order.update({ where: { id: before.id }, data: { status: parsed.data.status, internalNote: parsed.data.note || null, privacyClosedAt: terminalOrderStatuses.some(status => status === parsed.data.status) ? before.status === parsed.data.status ? before.privacyClosedAt ?? new Date() : new Date() : null, ...(before.kind === "APPLICATION" ? { purchaseConfirmedAt: parsed.data.status === "DELIVERED" ? before.purchaseConfirmedAt ?? new Date() : null } : {}) } });
     if (updated.status === "CANCELED" && before.status !== "CANCELED") await queueTelegramCancellation(tx, before.id);
+    if (parsed.data.status === "CANCELED" && before.shipment?.provider === "fivepost-delivery") await tx.fivePostDeliveryJob.updateMany({ where: { shipment: { orderId: before.id }, status: { notIn: ["CANCELED", "FINISHED"] } }, data: { cancelRequestedAt: new Date(), nextAttemptAt: new Date() } });
     if (parsed.data.status === "CANCELED") await tx.cdekDeliveryJob.updateMany({ where: { shipment: { orderId: before.id }, status: { notIn: ["CANCELED", "FINISHED"] } }, data: { cancelRequestedAt: new Date(), nextAttemptAt: new Date() } });
     await tx.auditLog.create({ data: { actorId: user.id, action: "order.status.update", entityType: "Order", entityId: before.id, before: { status: before.status }, after: { status: updated.status, deliveryConfirmed: formData.get("deliveryConfirmed") === "on", purchaseConfirmed: Boolean(updated.purchaseConfirmedAt) } } });
     return updated;

@@ -20,7 +20,7 @@ export const metadata: Metadata = { title: "Заказ", robots: { index: false,
 export default async function OrderPage({ params }: { params: Promise<{ number: string }> }) {
   const user = await requireUser();
   const { number } = await params;
-  const order = await prisma.order.findFirst({ where: { number, userId: user.id }, include: { items: true, shipment: { include: { ozonJob: { select: { status: true, request: true, response: true, cancelRequestedAt: true } }, cdekJob: { select: { status: true, deliveryStatus: true, deliveryStatusChangedAt: true, cancelRequestedAt: true } } } }, payment: true, yookassaSettlement: true, fiscalReceipts: { orderBy: { createdAt: "asc" } } } });
+  const order = await prisma.order.findFirst({ where: { number, userId: user.id }, include: { items: true, shipment: { include: { ozonJob: { select: { status: true, request: true, response: true, cancelRequestedAt: true } }, fivePostJob: { select: { status: true, deliveryStatus: true, cancelRequestedAt: true } }, cdekJob: { select: { status: true, deliveryStatus: true, deliveryStatusChangedAt: true, cancelRequestedAt: true } } } }, payment: true, yookassaSettlement: true, fiscalReceipts: { orderBy: { createdAt: "asc" } } } });
   if (!order || (order.deletedAt && order.kind === "APPLICATION")) notFound();
   const needsReview = Boolean(order.payment?.payload && typeof order.payment.payload === "object" && !Array.isArray(order.payment.payload) && order.payment.payload.reconciliationRequired === true);
   const pendingPayment = order.payment?.provider === "yookassa-online" && order.payment.status === "PENDING" && ["NEW", "APPROVED", "AWAITING_PAYMENT"].includes(order.status);

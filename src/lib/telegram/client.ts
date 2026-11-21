@@ -42,7 +42,7 @@ export function telegramOrderText(orderId: string, baseUrl: string) {
 type OrderNotification = {
   id: string; number: string; shippingAddress: string | null; subtotal: { toString(): string };
   deliveryPrice: { toString(): string }; total: { toString(): string };
-  shipment: { provider: string; cost: { toString(): string } } | null;
+  shipment: { provider: string; payload?: unknown; cost: { toString(): string } } | null;
   items: Array<{ productName: string; quantity: number; totalPrice: { toString(): string }; configuration?: unknown; groupLabel?: string | null; productColor?: string | null; product?: { groupId: string | null; groupLabel: string | null; specifications?: unknown } | null; color?: { name: string } | null }>;
 };
 const clean = (value: string, limit: number) => value.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, limit);
@@ -58,7 +58,8 @@ function itemText(item: OrderNotification["items"][number], money: (value: { toS
 export function telegramPrivateOrderText(order: OrderNotification, baseUrl: string) {
   const link = telegramOrderText(order.id, baseUrl).split("\n").at(-1)!;
   const money = (value: { toString(): string }) => new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB" }).format(Number(value.toString()));
-  const city = destinationCity(order.shippingAddress, order.shipment?.provider);
+  const payload = order.shipment?.payload;
+  const city = order.shipment?.provider === "fivepost-delivery" && payload && typeof payload === "object" && "city" in payload && typeof payload.city === "string" ? clean(payload.city, 120) : destinationCity(order.shippingAddress, order.shipment?.provider);
   const items: string[] = [];
   for (const item of order.items.slice(0, 25)) {
     const line = itemText(item, money);

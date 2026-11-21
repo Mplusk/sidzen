@@ -22,7 +22,7 @@ export async function deleteOrderAction(formData: FormData) {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412030)`;
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412026)`;
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(73412034)`;
-      const order = await tx.order.findUnique({ where: { id: input.data.orderId }, select: { id: true, number: true, status: true, total: true, deletedAt: true, payment: { select: { provider: true, status: true } }, shipment: { select: { ozonJob: { select: { id: true } }, cdekJob: { select: { id: true, status: true } } } } } });
+      const order = await tx.order.findUnique({ where: { id: input.data.orderId }, select: { id: true, number: true, status: true, total: true, deletedAt: true, payment: { select: { provider: true, status: true } }, shipment: { select: { fivePostJob: { select: { id: true, status: true } }, ozonJob: { select: { id: true } }, cdekJob: { select: { id: true, status: true } } } } } });
       if (!order || order.deletedAt) return null;
       if (order.number !== input.data.confirmation) throw new Error("confirmation");
       if (order.payment?.provider === "yookassa-online" && !["CANCELED", "REFUNDED"].includes(order.payment.status)) throw new Error("payment-active");
@@ -31,6 +31,7 @@ export async function deleteOrderAction(formData: FormData) {
       // Commit cancellation intent with archival. Do not clear an active lease:
       // an in-flight create must save its remote identifiers for cancellation.
       if (order.shipment?.ozonJob) await tx.ozonDeliveryJob.update({ where: { id: order.shipment.ozonJob.id }, data: { cancelRequestedAt: new Date(), cancelError: null, nextAttemptAt: new Date() } });
+      if (order.shipment?.fivePostJob && !["CANCELED", "FINISHED"].includes(order.shipment.fivePostJob.status)) await tx.fivePostDeliveryJob.update({ where: { id: order.shipment.fivePostJob.id }, data: { cancelRequestedAt: new Date(), nextAttemptAt: new Date() } });
       if (order.shipment?.cdekJob && order.shipment.cdekJob.status !== "CANCELED") await tx.cdekDeliveryJob.update({ where: { id: order.shipment.cdekJob.id }, data: { cancelRequestedAt: new Date(), nextAttemptAt: new Date(), ...(order.shipment.cdekJob.status === "FINISHED" ? { status: "REVIEW", error: "already-finished" } : {}) } });
       await tx.order.update({ where: { id: order.id }, data: { deletedAt: new Date(), privacyClosedAt: new Date() } });
       await tx.auditLog.create({ data: { actorId: user.id, action: "order.delete", entityType: "Order", entityId: order.id, ip, before: { number: order.number, status: order.status, total: String(order.total) }, after: { archived: true } } });

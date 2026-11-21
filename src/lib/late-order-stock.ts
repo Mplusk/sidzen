@@ -23,6 +23,7 @@ export async function restoreExpiredOrderStock(tx: Tx, orderId: string) {
   // Reactivate only jobs canceled by this timeout, not a merchant cancellation.
   await tx.ozonDeliveryJob.updateMany({ where: { shipment: { orderId }, status: "CANCELED", attempts: 0, cancelError: EXPIRATION_MARKER }, data: { status: "PENDING", cancelRequestedAt: null, cancelError: null, nextAttemptAt: new Date() } });
   await tx.cdekDeliveryJob.updateMany({ where: { shipment: { orderId }, status: "CANCELED", attempts: 0, error: EXPIRATION_MARKER }, data: { status: "PENDING", cancelRequestedAt: null, error: null, nextAttemptAt: new Date() } });
+  await tx.fivePostDeliveryJob.updateMany({ where: { shipment: { orderId }, status: "CANCELED", attempts: 0, error: EXPIRATION_MARKER }, data: { status: "PENDING", cancelRequestedAt: null, error: null, nextAttemptAt: new Date() } });
   return true;
 }
 

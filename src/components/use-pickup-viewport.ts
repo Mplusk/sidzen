@@ -28,7 +28,7 @@ function padded(bounds: MapBounds): MapBounds {
 }
 
 /** Load only the current camera area; never prefetch the rest of a city. */
-export function usePickupViewport(enabled: boolean) {
+export function usePickupViewport(enabled: boolean, endpoint = "/api/delivery/ozon/points/") {
   const [result, setResult] = useState<PickupViewportResult>(EMPTY);
   const [viewport, setViewport] = useState<PickupViewport | null>(null);
   const [pending, setPending] = useState(enabled);
@@ -68,7 +68,7 @@ export function usePickupViewport(enabled: boolean) {
       const bounds = padded(next.bounds);
       try {
         const bbox = [bounds.west, bounds.south, bounds.east, bounds.north].join(",");
-        const response = await fetch(`/api/delivery/ozon/points/?view=viewport&bbox=${encodeURIComponent(bbox)}&zoom=${next.zoom}`, { cache: "no-cache", signal: request.signal });
+        const response = await fetch(`${endpoint}?view=viewport&bbox=${encodeURIComponent(bbox)}&zoom=${next.zoom}`, { cache: "no-cache", signal: request.signal });
         if (!response.ok) throw new Error(response.status === 429 ? "rate-limit" : "points");
         const data = await response.json() as PickupViewportResult;
         if (!Array.isArray(data.points) || !Array.isArray(data.clusters) || typeof data.scope !== "string"
@@ -89,7 +89,7 @@ export function usePickupViewport(enabled: boolean) {
         }
       }
     }, 220);
-  }, [cancel, enabled]);
+  }, [cancel, enabled, endpoint]);
   const onViewportChange = useCallback((next: PickupViewport) => load(next), [load]);
   const retry = useCallback(() => { if (latest.current) load(latest.current, true); }, [load]);
   const loadMore = useCallback(async () => {
@@ -103,7 +103,7 @@ export function usePickupViewport(enabled: boolean) {
     try {
       const b = area.bounds;
       const bbox = [b.west, b.south, b.east, b.north].join(",");
-      const response = await fetch(`/api/delivery/ozon/points/?view=viewport&bbox=${encodeURIComponent(bbox)}&zoom=${area.zoom}&offset=${offset}`, { cache: "no-cache", signal: request.signal });
+      const response = await fetch(`${endpoint}?view=viewport&bbox=${encodeURIComponent(bbox)}&zoom=${area.zoom}&offset=${offset}`, { cache: "no-cache", signal: request.signal });
       if (!response.ok) throw new Error("points");
       const data = await response.json() as PickupViewportResult;
       if (generation.current !== version) return;
@@ -120,7 +120,7 @@ export function usePickupViewport(enabled: boolean) {
         deadline.current = null; controller.current = null; setPending(false);
       }
     }
-  }, [cancel, enabled, pending, result]);
+  }, [cancel, enabled, endpoint, pending, result]);
   // Markers from the previous district must not appear as results for the new
   // district while its request is pending. The selected point lives separately.
   const visible = useMemo(() => {

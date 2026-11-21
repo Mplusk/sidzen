@@ -17,7 +17,7 @@ export type RetentionOrder = {
   payment: { status: string; refundReviewRequired: boolean; paidAt: Date | null } | null;
   fiscalReceipts: Array<{ status: string; createdAt: Date; processedAt: Date | null }>;
   yookassaSettlement?: { status: string; createdAt: Date; processedAt: Date | null } | null;
-  shipment: { ozonJob: { status: string; lockedUntil: Date | null; cancelRequestedAt: Date | null } | null; cdekJob?: { status: string; lockedUntil: Date | null; cancelRequestedAt: Date | null } | null } | null;
+  shipment: { ozonJob: { status: string; lockedUntil: Date | null; cancelRequestedAt: Date | null } | null; fivePostJob?: { status: string; lockedUntil: Date | null; cancelRequestedAt: Date | null } | null; cdekJob?: { status: string; lockedUntil: Date | null; cancelRequestedAt: Date | null } | null } | null;
 };
 export function erasureBlocked(order: RetentionOrder, now: Date) {
   if (order.retentionHoldUntil && order.retentionHoldUntil > now) return true;
@@ -28,6 +28,8 @@ export function erasureBlocked(order: RetentionOrder, now: Date) {
   if (order.yookassaSettlement && !["PROCESSED", "CANCELED"].includes(order.yookassaSettlement.status)) return true;
   const job = order.shipment?.ozonJob;
   if (job && ((job.lockedUntil && job.lockedUntil > now) || ["PENDING", "RUNNING"].includes(job.status) || (job.cancelRequestedAt && job.status !== "CANCELED"))) return true;
+  const fivePost = order.shipment?.fivePostJob;
+  if (fivePost && ((fivePost.lockedUntil && fivePost.lockedUntil > now) || !["CANCELED", "FINISHED"].includes(fivePost.status))) return true;
   const cdek = order.shipment?.cdekJob;
   if (cdek && ((cdek.lockedUntil && cdek.lockedUntil > now) || ["PENDING", "SENDING", "ACCEPTED", "CREATED", "CANCELING", "REVIEW"].includes(cdek.status) || (cdek.cancelRequestedAt && cdek.status !== "CANCELED"))) return true;
   return false;

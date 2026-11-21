@@ -5,7 +5,7 @@ const ozonLabels: Record<string, string> = { created: "Создано", forming:
 const queueLabels: Record<string, string> = { PENDING: "Ожидает отправки", SENDING: "Создаётся", ACCEPTED: "Ожидает подтверждения", CREATED: "Передано в доставку", REVIEW: "Требуется проверка", CANCELED: "Отменено", CANCELING: "Отменяется", FINISHED: "Завершено — проверьте результат" };
 const cdekLabels: Record<string, string> = { DELIVERED: "Получено", NOT_DELIVERED: "Не вручено", ACCEPTED: "Принято", CREATED: "Создано", IN_TRANSIT: "В пути", READY_FOR_RECIPIENT_CITY_DELIVERY: "Готово к выдаче", TAKEN_BY_COURIER: "У курьера" };
 
-export function dashboardDelivery(shipment: { provider: string; method: string; deliveredAt: Date | null; ozonJob: { status: string; response: unknown; cancelRequestedAt: Date | null } | null; cdekJob: { status: string; deliveryStatus: string | null; deliveryStatusChangedAt: Date | null; cancelRequestedAt: Date | null } | null } | null) {
+export function dashboardDelivery(shipment: { provider: string; method: string; deliveredAt: Date | null; ozonJob: { status: string; response: unknown; cancelRequestedAt: Date | null } | null; fivePostJob?: { status: string; deliveryStatus: string | null; cancelRequestedAt: Date | null } | null; cdekJob: { status: string; deliveryStatus: string | null; deliveryStatusChangedAt: Date | null; cancelRequestedAt: Date | null } | null } | null) {
   if (!shipment) return { label: "Не оформлена", changedAt: null as Date | null };
   if (shipment.ozonJob) {
     const job = shipment.ozonJob;
@@ -18,6 +18,13 @@ export function dashboardDelivery(shipment: { provider: string; method: string; 
       return { label: `Ozon: ${labels.join(", ")}`, changedAt: dates.every(Number.isFinite) ? new Date(Math.max(...dates)) : null };
     }
     return { label: `Ozon: ${queueLabels[job.status] ?? "Проверяется"}`, changedAt: null };
+  }
+  if (shipment.fivePostJob) {
+    const job = shipment.fivePostJob;
+    const stages: Record<string, string> = { PICKED_UP: "Получено", PLACED_IN_POSTAMAT: "В пункте выдачи", PLACED_IN_PICKUP_POINT: "В пункте выдачи", RETURNED: "Возвращено" };
+    const stage = job.deliveryStatus ? stages[job.deliveryStatus] : null;
+    const label = job.cancelRequestedAt && job.status !== "CANCELED" ? "Отмена запрошена" : job.status === "CREATED" || job.status === "FINISHED" ? stage ?? queueLabels[job.status] : queueLabels[job.status];
+    return { label: `5Post: ${label ?? "Проверяется"}`, changedAt: shipment.deliveredAt };
   }
   if (shipment.cdekJob) {
     const job = shipment.cdekJob;
