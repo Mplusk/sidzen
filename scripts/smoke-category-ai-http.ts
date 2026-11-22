@@ -35,9 +35,11 @@ try {
   await prisma.siteSetting.upsert({ where: { key: CATEGORY_AI_KEY }, create: { key: CATEGORY_AI_KEY, group: "integrations", value: config }, update: { value: config, group: "integrations" } });
   for (let i = 0; i < 2; i++) categories.push((await prisma.category.create({ data: { name: `${prefix} Категория ${i}`, slug: `${prefix}-${i}` } })).id);
   const login = (await form("/login/", 'name="email"')).body; login.set("email", "qa@example.test"); login.set("password", "LocalGalleryQA-2026"); assert.equal((await request("/login/", login)).status, 303);
-  const integrations = await form("/account/integrations/", 'name="apiKey"');
+  const integrations = await form("/account/integrations/", 'name="allowCreate"');
+  assert.equal(integrations.body.get("revision"), config.revision, "Expected the DeepSeek category settings form");
   assert(integrations.html.includes("DeepSeek · категории товаров")); assert(!integrations.html.includes("sk-http-fixture-only")); assert(!integrations.html.includes(config.apiKey));
-  for (const [name, value] of Object.entries({ revision: config.revision, apiKey: "Bearer invalid key", model: "deepseek-flash" })) integrations.body.set(name, value);
+  integrations.body.set("apiKey", "Bearer invalid key");
+  integrations.body.set("model", "deepseek-flash");
   assert.match((await request("/account/integrations/", integrations.body, false)).headers.get("location") ?? "", /^\/login/);
   assert([400, 403, 500].includes((await request("/account/integrations/", integrations.body, true, "https://foreign.invalid")).status));
   const roles = await prisma.userRole.findMany({ where: { userId: actor.id } });
