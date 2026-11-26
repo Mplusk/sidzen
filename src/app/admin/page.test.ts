@@ -3,10 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => ({
   findMany: vi.fn(), findFirst: vi.fn(), count: vi.fn(), productCount: vi.fn(), redirectCount: vi.fn(),
-  queryRaw: vi.fn(), transaction: vi.fn((queries: Promise<unknown>[]) => Promise.all(queries)),
+  queryRaw: vi.fn(), executeRaw: vi.fn(), transaction: vi.fn((queries: Promise<unknown>[]) => Promise.all(queries)),
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: {
   $queryRaw: m.queryRaw,
+  $executeRaw: m.executeRaw,
   $transaction: m.transaction,
   order: { findMany: m.findMany, findFirst: m.findFirst, count: m.count },
   product: { count: m.productCount },
@@ -27,6 +28,7 @@ const order = {
 beforeEach(() => {
   vi.clearAllMocks();
   m.count.mockResolvedValue(0);
+  m.executeRaw.mockResolvedValue(0);
   m.queryRaw.mockResolvedValue([{ ordersToday: 0, revenue: 0, average: 0, newApplications: 0, inProduction: 0 }]);
   m.productCount.mockResolvedValue(0); m.redirectCount.mockResolvedValue(0);
   m.findFirst.mockResolvedValue(null);
@@ -49,6 +51,7 @@ describe("dashboard archive", () => {
     expect(html).toContain("Оплата поступила после окончания резерва");
     expect(html).toContain('/admin/orders/QA-LATE');
     expect(m.transaction).toHaveBeenCalledOnce();
+    expect(m.executeRaw).toHaveBeenCalledWith(["SET LOCAL jit = off"]);
   });
   it("labels a canceled order as canceled and warns if carrier cancellation is unconfirmed", async () => {
     m.findMany.mockResolvedValue([order]);

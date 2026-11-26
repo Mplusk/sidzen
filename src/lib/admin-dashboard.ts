@@ -44,6 +44,8 @@ export async function loadAdminDashboard({ archived, page, canReadOrders }: { ar
   today.setHours(0, 0, 0, 0);
   const startOfDay = today.toISOString();
   const summaryQueries = [
+    // Compiling the carrier filters costs much more than executing the dashboard queries.
+    prisma.$executeRaw`SET LOCAL jit = off`,
     prisma.$queryRaw<OrderSummary[]>`
       SELECT
         COUNT(*) FILTER (WHERE o."deletedAt" IS NULL AND o."createdAt" >= ${startOfDay}::timestamp)::integer AS "ordersToday",
@@ -80,7 +82,7 @@ export async function loadAdminDashboard({ archived, page, canReadOrders }: { ar
 
   // A single database connection serves each dashboard load, including its order list and counts.
   const options = { isolationLevel: "RepeatableRead" } as const;
-  const [[summary], thinContent, brokenRedirects, fiscalAttention, orders = [], total = 0, needsConfirmation = 0, lateStock = null] =
+  const [, [summary], thinContent, brokenRedirects, fiscalAttention, orders = [], total = 0, needsConfirmation = 0, lateStock = null] =
     canReadOrders ? await prisma.$transaction([...summaryQueries, ...orderQueries], options) : await prisma.$transaction([...summaryQueries], options);
   return { ...summary, thinContent, brokenRedirects, fiscalAttention, orders, total, needsConfirmation, lateStock };
 }
