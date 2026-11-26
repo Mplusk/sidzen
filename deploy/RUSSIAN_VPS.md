@@ -48,10 +48,25 @@ it on the previous foreign server. Keep the previous installation unchanged
 until DNS cutover and the migrated database/files have been verified; prevent
 parallel writes during the final cutover snapshot.
 
-Daily backups run through `/usr/local/sbin/3dprinta-backup`; the executable is a
-symlink to the active release's backup script. Archives are stored under
-`/var/backups/3dprinta` on the VPS and retained for 14 days. Additional independent
-Russian backup storage requires separate configuration.
+The cron job at 03:20 server time invokes `/usr/local/sbin/3dprinta-backup`.
+Local archives under `/var/backups/3dprinta` include a PostgreSQL dump, uploaded
+models and product images, the privacy ledger, and shop-specific configuration.
+Up to 12 days of backups are kept, with a margin for the daily rotation.
+
+To enable Yandex Disk uploads, install `age` and `rclone` and configure
+`/opt/3dprinta/shared/backup` with mode `0700`. Store the authorized `rclone`
+configuration as `yandex-rclone.conf` with mode `0600` and a remote named
+`sidzen-backup`. `remote-path` contains that remote and the dedicated backup
+folder. `age.recipient` contains the public encryption key. Keep the private
+recovery key outside the VPS and Yandex Disk. The job uploads only the encrypted
+archive, checks the uploaded hash, and rotates its own old backups in the folder.
+
+To recover, decrypt with `age --decrypt -i RECOVERY_KEY ARCHIVE.tar.age`, extract
+the tar into an empty directory, and run `sha256sum --check SHA256SUMS` there.
+`release.txt` identifies the application revision. Review `configuration.tar.gz`
+before installing the server-specific settings. Restore `database.dump` with
+`pg_restore` into PostgreSQL and the other three archives into the matching
+Docker volumes. Preserve the stored ownership and application secrets.
 
 For manual Compose operations on the active release, select its immutable image
 tag and the persistent host overlay explicitly:
