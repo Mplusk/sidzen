@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
+import { loadAdminDashboard } from "../src/lib/admin-dashboard";
 import { archivedOrdersWhere, receivedOrdersWhere } from "../src/lib/dashboard-orders";
 import { dashboardDelivery } from "../src/lib/dashboard-delivery";
 
@@ -18,8 +19,9 @@ const cdek = (status: string, deliveryStatus: string, deliveredAt?: Date): Prism
   provider: "cdek", method: "QA", deliveredAt,
   cdekJob: { create: { clientId: "qa", environment: "test", request: {}, status, deliveryStatus, deliveryStatusChangedAt: new Date("2030-01-01T12:00:00Z") } },
 });
-async function order(status: Prisma.EnumOrderStatusFieldUpdateOperationsInput["set"], shipment?: Prisma.ShipmentCreateWithoutOrderInput) {
-  const created = await prisma.order.create({ data: { number: `${prefix}-${ids.length}`, status, customerName: "Synthetic buyer", customerEmail: "qa@example.test", customerPhone: "+70000000000", subtotal: 240, total: 240, ...(shipment ? { shipment: { create: shipment } } : {}) }, include: { shipment: { include: { ozonJob: true, cdekJob: true } } } });
+type OrderDetails = Pick<Prisma.OrderCreateInput, "kind" | "createdAt" | "deletedAt" | "payment">;
+async function order(status: Prisma.EnumOrderStatusFieldUpdateOperationsInput["set"], shipment?: Prisma.ShipmentCreateWithoutOrderInput, details: OrderDetails = {}) {
+  const created = await prisma.order.create({ data: { number: `${prefix}-${ids.length}`, status, customerName: "Synthetic buyer", customerEmail: "qa@example.test", customerPhone: "+70000000000", subtotal: 240, total: 240, ...details, ...(shipment ? { shipment: { create: shipment } } : {}) }, include: { shipment: { include: { ozonJob: true, cdekJob: true } } } });
   ids.push(created.id);
   return created;
 }
@@ -50,7 +52,42 @@ try {
   assert.deepEqual(new Set(received.map(row => row.id)), new Set([confirmedManually.id, confirmedOzon.id, confirmedCdek.id, previouslyConfirmed.id]));
   assert.equal(dashboardDelivery(inTransit.shipment).label, "Ozon: В пути");
   assert.equal(dashboardDelivery(conflictingCdek.shipment).label, "СДЭК: Не вручено");
-  console.log("PASS dashboard: canceled and received orders are archived; in-transit orders remain visible; deleted orders are excluded.");
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const payment = { create: { provider: "dashboard-fixture", status: "PAID" as const, amount: 240 } };
+  const paidToday = await order("PAID", undefined, { createdAt: today, payment });
+  await order("PAID", undefined, { createdAt: new Date(today.getTime() - 1), payment });
+  await order("CANCELED", undefined, { payment });
+  await order("REFUNDED", undefined, { payment });
+  await order("PAID", undefined, { deletedAt: new Date(), payment });
+  await order("NEW", undefined, { kind: "APPLICATION" });
+  await order("PRINTING");
+
+  const paidOrders = { kind: "ORDER", status: { notIn: ["CANCELED", "REFUNDED"] }, payment: { is: { status: "PAID" } } } satisfies Prisma.OrderWhereInput;
+  const [ordersToday, revenue, average, applications, printing] = await prisma.$transaction([
+    prisma.order.count({ where: { deletedAt: null, createdAt: { gte: today } } }),
+    prisma.order.aggregate({ where: { ...paidOrders, createdAt: { gte: today } }, _sum: { total: true } }),
+    prisma.order.aggregate({ where: paidOrders, _avg: { total: true } }),
+    prisma.order.count({ where: { deletedAt: null, kind: "APPLICATION", status: "NEW" } }),
+    prisma.order.count({ where: { deletedAt: null, status: { in: ["IN_PROGRESS", "QUEUED", "PRINTING", "POST_PROCESSING"] } } }),
+  ]);
+  const [active, archive, limited] = await Promise.all([
+    loadAdminDashboard({ archived: false, page: 1, canReadOrders: true }),
+    loadAdminDashboard({ archived: true, page: 1, canReadOrders: true }),
+    loadAdminDashboard({ archived: false, page: 1, canReadOrders: false }),
+  ]);
+  assert.equal(active.ordersToday, ordersToday);
+  assert.equal(Number(active.revenue), Number(revenue._sum.total));
+  assert.equal(Number(active.average), Number(average._avg.total));
+  assert.equal(active.newApplications, applications);
+  assert.equal(active.inProduction, printing);
+  assert(active.orders.some(row => row.id === paidToday.id));
+  assert(archive.orders.some(row => row.id === canceled.id));
+  assert.deepEqual(limited.orders, []);
+  assert.equal(limited.total, 0);
+  assert.equal(limited.ordersToday, active.ordersToday);
+  console.log("PASS dashboard: active and archived orders, financial totals, aggregate counts and order permissions with concurrent loads.");
 } finally {
   await prisma.order.deleteMany({ where: { id: { in: ids } } });
   await prisma.$disconnect();

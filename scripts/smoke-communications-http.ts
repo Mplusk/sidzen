@@ -40,6 +40,14 @@ try {
     assert(management.includes(`href="${href}"`), `Missing management link ${href}`);
     assert(!personal.includes(`href="${href}"`), `Management link ${href} must not appear in personal navigation`);
   }
+  const dashboardViews = ["/admin/", "/admin/?view=received"];
+  await Promise.all(Array.from({ length: 6 }, async (_, index) => {
+    const dashboard = await request(dashboardViews[index % dashboardViews.length]);
+    assert.equal(dashboard.status, 200);
+    const html = await dashboard.text();
+    assert.match(html, /id="dashboard-orders"/);
+    assert(!html.includes('data-dgst='), "Dashboard should finish rendering without a server error");
+  }));
   const profile = await (await request('/account/profile/')).text();
   assert(!profile.includes('href="/account/privacy/"'));
   assert.equal((await request('/account/privacy/')).headers.get("location"), "/contacts/");

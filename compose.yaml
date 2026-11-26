@@ -58,6 +58,8 @@ services:
       target: runner
     restart: unless-stopped
     env_file: .env.production
+    environment:
+      SHOP_DB_CONNECTION_LIMIT: "6"
     depends_on:
       migrate:
         condition: service_completed_successfully
