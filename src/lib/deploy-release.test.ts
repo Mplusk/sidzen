@@ -34,7 +34,8 @@ describe("SSH-streamed release deployment", () => {
 
   it("keeps backups from consuming following commands in a streamed SSH session", () => {
     const backup = readFileSync("scripts/backup.sh", "utf8");
-    expect(backup).toContain('--format=custom < /dev/null > "${destination}/database.dump"');
+    expect(backup).toContain('--format=custom < /dev/null > "${staging}/database.dump"');
+    expect(backup).toContain('pg_restore --list < "${staging}/database.dump"');
   });
 
   it("cleans orphaned shop migrators without removing rollback or other used images", () => {
