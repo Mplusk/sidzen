@@ -217,18 +217,29 @@ jobs:
           chmod 0600 "${HOME}/.ssh/3dprinta_deploy" "${HOME}/.ssh/known_hosts"
           ssh-keygen -y -f "${HOME}/.ssh/3dprinta_deploy" > /dev/null
 
-      - name: Upload small release manifest and activation scripts
+      - name: Transfer release manifest and activation scripts over SSH
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         run: |
-          ssh_options=(-i "${HOME}/.ssh/3dprinta_deploy" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15)
-          ssh "${ssh_options[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" "install -d -m 0750 /opt/3dprinta/incoming"
-          scp "${ssh_options[@]}" "release/3dprinta-${GITHUB_SHA}.tar.gz" "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/3dprinta/incoming/${GITHUB_SHA}.tar.gz"
-          scp "${ssh_options[@]}" "release/3dprinta-${GITHUB_SHA}.images.json" "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/3dprinta/incoming/${GITHUB_SHA}.images.json"
-          scp "${ssh_options[@]}" scripts/registry-release-manifest.py "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/3dprinta/incoming/${GITHUB_SHA}.manifest-validator.py"
-          scp "${ssh_options[@]}" scripts/deploy-registry-release.sh "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/3dprinta/incoming/${GITHUB_SHA}.registry-deploy.sh"
-          scp "${ssh_options[@]}" scripts/deploy-release.sh "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/3dprinta/incoming/${GITHUB_SHA}.activate.sh"
+          ssh_options=(-T -i "${HOME}/.ssh/3dprinta_deploy" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2)
+          staging="$(mktemp -d "${RUNNER_TEMP}/sidzen-upload.XXXXXX")"
+          install -m 0600 "release/3dprinta-${GITHUB_SHA}.tar.gz" "${staging}/${GITHUB_SHA}.tar.gz"
+          install -m 0600 "release/3dprinta-${GITHUB_SHA}.images.json" "${staging}/${GITHUB_SHA}.images.json"
+          install -m 0600 scripts/registry-release-manifest.py "${staging}/${GITHUB_SHA}.manifest-validator.py"
+          install -m 0600 scripts/deploy-registry-release.sh "${staging}/${GITHUB_SHA}.registry-deploy.sh"
+          install -m 0600 scripts/deploy-release.sh "${staging}/${GITHUB_SHA}.activate.sh"
+          package="${staging}.tar"
+          tar -cf "$package" -C "$staging" .
+          for attempt in 1 2 3; do
+            if timeout --kill-after=5s 150s ssh "${ssh_options[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+              'install -d -m 0750 /opt/3dprinta/incoming && tar --no-overwrite-dir --no-same-owner -xf - -C /opt/3dprinta/incoming' < "$package"; then
+              exit 0
+            fi
+            printf 'Release upload attempt %s failed.\n' "$attempt" >&2
+            if [[ "$attempt" != 3 ]]; then sleep 5; fi
+          done
+          exit 1
 
       - name: Activate release and clean previous versions
         env:
