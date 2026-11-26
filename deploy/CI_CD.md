@@ -13,7 +13,7 @@ Do not hot-patch running containers or manually activate copied release bundles.
    each image by digest, validates the revision and uses the existing migration,
    proxy, health, rollback and scoped cleanup procedure. Host-specific Compose
    overrides and Telegram transport settings are preserved.
-4. `deploy_telegram` uploads only Telegram deployment files to 185.196.41.131.
+4. `deploy_telegram` uploads only Telegram deployment files to 132.243.234.163.
    It provisions Docker if absent and runs only the restricted Telegram relay.
    There is no shop, database, customer upload directory or bot token there.
 
@@ -44,8 +44,8 @@ tags and Compose project. Never run global Docker/container/volume prune.
 The app's `fetch-cache` volume retains cached public map tiles across releases;
 the runner creates the cache directory with ownership for uid 1001. Keep this
 volume alongside `image-cache` when applying host-specific Compose overrides.
-No extra public HTTP gateway or other application is installed on the Telegram
-host. New site domains and their routing belong on the Russian host.
+This deployment manages only the Telegram relay on its shared host. New shop
+domains and their routing belong on the Russian host.
 
 To change a deployed release, commit/revert the source and let CI publish a new
 revision. A failed image pull does not stop the working application. Failed shop

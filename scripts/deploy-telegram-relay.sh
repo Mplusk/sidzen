@@ -3,7 +3,8 @@ set -Eeuo pipefail
 revision="${1:-}"
 registry_prefix="${2:-}"
 registry_user="${3:-}"
-[[ "$revision" =~ ^[0-9a-f]{40}$ && "$registry_prefix" =~ ^ghcr\.io/[a-z0-9-]+/sidzen$ && "$registry_user" =~ ^[A-Za-z0-9-]+$ ]] || exit 2
+relay_listen_ip="${4:-}"
+[[ "$revision" =~ ^[0-9a-f]{40}$ && "$registry_prefix" =~ ^ghcr\.io/[a-z0-9-]+/sidzen$ && "$registry_user" =~ ^[A-Za-z0-9-]+$ && "$relay_listen_ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || exit 2
 root=/opt/sidzen-telegram-relay
 release="${root}/releases/${revision}"
 validated="$(python3 "${release}/scripts/registry-release-manifest.py" "${release}/images.json" "$revision" "$registry_prefix" telegram-relay)"
@@ -21,7 +22,7 @@ docker --config "$registry_auth" pull "$relay_image" < /dev/null
 previous="$(readlink -f "${root}/current" 2>/dev/null || true)"
 legacy_active=false
 if systemctl is-active --quiet sidzen-telegram-relay.service; then legacy_active=true; fi
-printf 'RELAY_IMAGE=%s\n' "$relay_image" > "${release}/.env"
+printf 'RELAY_IMAGE=%s\nRELAY_LISTEN_IP=%s\n' "$relay_image" "$relay_listen_ip" > "${release}/.env"
 chmod 0600 "${release}/.env"
 relay_compose() {
   docker compose --project-name sidzen-telegram-relay --env-file "${1}/.env" --file "${1}/deploy/telegram-relay/compose.yaml" "${@:2}" < /dev/null

@@ -5,7 +5,7 @@ The shop/database remain on the Russian VPS. `TELEGRAM_PROXY_URL` is read only b
 the order worker. It is **not** HTTP_PROXY/HTTPS_PROXY and never changes global
 fetch or the route used by other integrations.
 
-The relay on 185.196.41.131 accepts only source 92.63.101.127 and only the exact
+The relay on 132.243.234.163 accepts only source 92.63.101.127 and only the exact
 CONNECT destination `api.telegram.org:443`. There is no general forward proxy,
 Bot API token, Telegram account configuration or database on the relay. Telegram
 TLS is verified end-to-end on the shop VPS. The relay never decrypts or logs bot
@@ -36,7 +36,7 @@ The previous systemd service stops only after the image is available; on failed
 container health the job restarts it. After successful migration the old unit is
 disabled. Do not disable or overwrite the host's firewall or unrelated services.
 
-Set `TELEGRAM_PROXY_URL=http://185.196.41.131:18443` in the shop's protected
+Set `TELEGRAM_PROXY_URL=http://132.243.234.163:18443` in the shop's protected
 production environment and recreate only app/worker using the current immutable
 release tag and the existing host Compose overlay (see RUSSIAN_VPS.md). Verify
 getMe/getChat before enabling notifications. A test message must contain no buyer

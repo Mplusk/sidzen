@@ -7,7 +7,7 @@ services:
     network_mode: host
     environment:
       SHOP_SOURCE_IP: 92.63.101.127
-      RELAY_LISTEN_IP: 185.196.41.131
+      RELAY_LISTEN_IP: ${RELAY_LISTEN_IP:?Relay bind address is required}
       RELAY_PORT: "18443"
     read_only: true
     tmpfs:
@@ -20,7 +20,7 @@ services:
     cpus: 0.25
     healthcheck:
       # BusyBox avoids starting a separate Python interpreter for every check.
-      test: [CMD, /bin/busybox, nc, -z, -w, "2", "185.196.41.131", "18443"]
+      test: [CMD-SHELL, '/bin/busybox nc -z -w 2 "$$RELAY_LISTEN_IP" "$$RELAY_PORT"']
       interval: 20s
       timeout: 8s
       retries: 3

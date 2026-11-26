@@ -3,7 +3,7 @@ import asyncio
 import os
 
 ALLOWED_IP = os.environ.get("SHOP_SOURCE_IP", "92.63.101.127")
-LISTEN_IP = os.environ.get("RELAY_LISTEN_IP", "185.196.41.131")
+LISTEN_IP = os.environ.get("RELAY_LISTEN_IP", "127.0.0.1")
 PORT = int(os.environ.get("RELAY_PORT", "18443"))
 MAX_CONNECTIONS = 16
 active = 0

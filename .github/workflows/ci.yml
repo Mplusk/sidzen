@@ -341,6 +341,7 @@ jobs:
       cancel-in-progress: false
     env:
       REGISTRY_PREFIX: ghcr.io/mplusk/sidzen
+      TELEGRAM_RELAY_HOST: 132.243.234.163
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -355,21 +356,26 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > "${HOME}/.ssh/relay_deploy"
           cp deploy/telegram-relay/known_hosts "${HOME}/.ssh/relay_known_hosts"
           chmod 0600 "${HOME}/.ssh/relay_deploy" "${HOME}/.ssh/relay_known_hosts"
+          ssh-keygen -y -f "${HOME}/.ssh/relay_deploy" > /dev/null
       - name: Upload only Telegram service sources
         run: |
-          ssh_options=(-i "${HOME}/.ssh/relay_deploy" -o UserKnownHostsFile="${HOME}/.ssh/relay_known_hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15)
+          ssh_options=(-T -i "${HOME}/.ssh/relay_deploy" -o UserKnownHostsFile="${HOME}/.ssh/relay_known_hosts" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2)
           relay_root="/opt/sidzen-telegram-relay/releases/${GITHUB_SHA}"
-          tar -czf "${RUNNER_TEMP}/telegram-relay.tar.gz" deploy/telegram-relay/compose.yaml scripts/deploy-telegram-relay.sh scripts/provision-docker-host.sh scripts/registry-release-manifest.py
-          ssh "${ssh_options[@]}" root@185.196.41.131 "install -d -m 0750 '${relay_root}'"
-          scp "${ssh_options[@]}" "${RUNNER_TEMP}/telegram-relay.tar.gz" "root@185.196.41.131:${relay_root}/relay-sources.tar.gz"
-          scp "${ssh_options[@]}" "release/3dprinta-${GITHUB_SHA}.images.json" "root@185.196.41.131:${relay_root}/images.json"
-          ssh "${ssh_options[@]}" root@185.196.41.131 "tar -xzf '${relay_root}/relay-sources.tar.gz' -C '${relay_root}'"
+          staging="$(mktemp -d "${RUNNER_TEMP}/sidzen-relay.XXXXXX")"
+          install -D -m 0600 deploy/telegram-relay/compose.yaml "${staging}/deploy/telegram-relay/compose.yaml"
+          install -d -m 0700 "${staging}/scripts"
+          install -m 0600 scripts/deploy-telegram-relay.sh scripts/provision-docker-host.sh scripts/registry-release-manifest.py "${staging}/scripts/"
+          install -m 0600 "release/3dprinta-${GITHUB_SHA}.images.json" "${staging}/images.json"
+          package="${staging}.tar.gz"
+          tar -czf "$package" -C "$staging" .
+          timeout --kill-after=5s 90s ssh "${ssh_options[@]}" "root@${TELEGRAM_RELAY_HOST}" \
+            "install -d -m 0750 '${relay_root}' && tar --no-overwrite-dir --no-same-owner -xzf - -C '${relay_root}'" < "$package"
       - name: Provision Docker and activate the Telegram-only container
         env:
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ssh_options=(-i "${HOME}/.ssh/relay_deploy" -o UserKnownHostsFile="${HOME}/.ssh/relay_known_hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=20)
-          printf '%s\n' "$REGISTRY_TOKEN" | ssh "${ssh_options[@]}" root@185.196.41.131 "bash '/opt/sidzen-telegram-relay/releases/${GITHUB_SHA}/scripts/deploy-telegram-relay.sh' '${GITHUB_SHA}' '${REGISTRY_PREFIX}' '${GITHUB_ACTOR}'"
+          ssh_options=(-T -i "${HOME}/.ssh/relay_deploy" -o UserKnownHostsFile="${HOME}/.ssh/relay_known_hosts" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=20)
+          printf '%s\n' "$REGISTRY_TOKEN" | ssh "${ssh_options[@]}" "root@${TELEGRAM_RELAY_HOST}" "bash '/opt/sidzen-telegram-relay/releases/${GITHUB_SHA}/scripts/deploy-telegram-relay.sh' '${GITHUB_SHA}' '${REGISTRY_PREFIX}' '${GITHUB_ACTOR}' '${TELEGRAM_RELAY_HOST}'"
       - name: Remove relay runner credentials
         if: always()
         run: rm -f -- "${HOME}/.ssh/relay_deploy"
