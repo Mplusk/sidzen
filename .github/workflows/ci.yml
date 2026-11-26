@@ -188,7 +188,7 @@ jobs:
     # A freshly migrated repository must not deploy before its SSH secrets are set.
     if: ${{ vars.PRODUCTION_DEPLOY_ENABLED == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     permissions:
       contents: read
       packages: read
@@ -241,22 +241,53 @@ jobs:
           done
           exit 1
 
-      - name: Activate release and clean previous versions
+      - name: Start the release on the VPS and watch for activation
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ssh_options=(-i "${HOME}/.ssh/3dprinta_deploy" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=20)
-          printf '%s\n' "$REGISTRY_TOKEN" | ssh "${ssh_options[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" "bash '/opt/3dprinta/incoming/${GITHUB_SHA}.registry-deploy.sh' '${GITHUB_SHA}' '${REGISTRY_PREFIX}' '${GITHUB_ACTOR}'"
+          ssh_options=(-T -i "${HOME}/.ssh/3dprinta_deploy" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=2)
+          target="${DEPLOY_USER}@${DEPLOY_HOST}"
+          release="bash '/opt/3dprinta/incoming/${GITHUB_SHA}.registry-deploy.sh' '${GITHUB_SHA}' '${REGISTRY_PREFIX}' '${GITHUB_ACTOR}'"
+          run="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          started=false
+          for attempt in 1 2 3; do
+            if printf '%s\n' "$REGISTRY_TOKEN" | timeout --kill-after=5s 30s ssh "${ssh_options[@]}" "$target" "$release start '$run'"; then
+              started=true
+              break
+            fi
+            sleep 5
+          done
+          unset REGISTRY_TOKEN
+          [[ "$started" == true ]] || exit 1
+
+          deadline=$((SECONDS + 1440))
+          while ((SECONDS < deadline)); do
+            if state="$(timeout --kill-after=5s 25s ssh "${ssh_options[@]}" "$target" "$release status '$run'" < /dev/null)"; then
+              case "$state" in
+                success) exit 0 ;;
+                failed) exit 1 ;;
+              esac
+            fi
+            sleep 15
+          done
+          printf 'Timed out waiting for release %s on the VPS.\n' "$GITHUB_SHA" >&2
+          exit 1
 
       - name: Verify the active release and marketplace worker
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         run: |
-          ssh_options=(-i "${HOME}/.ssh/3dprinta_deploy" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15)
-          ssh "${ssh_options[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" "test \"\$(readlink -f /opt/3dprinta/current)\" = '/opt/3dprinta/releases/${GITHUB_SHA}' && test \"\$(docker inspect --format '{{.State.Health.Status}}' 3dprinta-marketplace-worker-1)\" = healthy" < /dev/null
+          ssh_options=(-T -i "${HOME}/.ssh/3dprinta_deploy" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=2)
+          for attempt in 1 2 3; do
+            if timeout --kill-after=5s 25s ssh "${ssh_options[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" "test \"\$(readlink -f /opt/3dprinta/current)\" = '/opt/3dprinta/releases/${GITHUB_SHA}' && test \"\$(docker inspect --format '{{.State.Health.Status}}' 3dprinta-marketplace-worker-1)\" = healthy" < /dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
 
       - name: Verify Russian-domain HTTPS redirects
         run: |
