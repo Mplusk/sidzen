@@ -103,8 +103,15 @@ export PATH="/tmp/sidzen-restore-bin:$PATH"
 cd "$release"
 compose=(docker compose --project-name 3dprinta --env-file .env.production --file compose.yaml)
 "${compose[@]}" up -d db
-for attempt in $(seq 1 40); do docker exec 3dprinta-db-1 pg_isready -U 3dprinta >/dev/null 2>&1 && break; sleep 1; done
-docker exec 3dprinta-db-1 pg_isready -U 3dprinta >/dev/null
+ready=false
+for attempt in $(seq 1 60); do
+  if docker exec 3dprinta-db-1 psql -U 3dprinta -d 3dprinta -Atqc 'SELECT 1' >/dev/null 2>&1; then
+    sleep 3
+    if docker exec 3dprinta-db-1 psql -U 3dprinta -d 3dprinta -Atqc 'SELECT 1' >/dev/null 2>&1; then ready=true; break; fi
+  fi
+  sleep 1
+done
+[[ "$ready" == true ]]
 "${compose[@]}" run --rm --no-deps --entrypoint ./node_modules/.bin/prisma marketplace-worker migrate deploy
 "${compose[@]}" up -d --wait --wait-timeout 90 app marketplace-worker proxy
 docker run --rm --volume 3dprinta_privacy-ledger:/data alpine:3.20 sh -c 'chown 1001:1001 /data; chmod 0700 /data'
