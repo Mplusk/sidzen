@@ -28,17 +28,12 @@ age-keygen -y "$root/shared/backup/restore.agekey" > "$root/shared/backup/age.re
 printf '[sidzen-backup]\ntype = local\n' > "$root/shared/backup/yandex-rclone.conf"
 printf 'sidzen-backup:%s\n' "$remote" > "$root/shared/backup/remote-path"
 
-cat > "$root/shared/restore/Caddyfile" <<'CADDY'
-:8080 {
-    @restoring file {
-        root /run/sidzen-restore
-        try_files maintenance
-    }
-    route {
-        respond @restoring "restoring" 503
-        reverse_proxy app:3000
-    }
-}
+python3 - "$release/deploy/caddy/Caddyfile" "$root/shared/restore/Caddyfile" <<'CADDY'
+from pathlib import Path
+import sys
+site = Path(sys.argv[1]).read_text().split('\nwww.sidzen.shop {', 1)[0]
+assert site.startswith('sidzen.shop {')
+Path(sys.argv[2]).write_text(site.replace('sidzen.shop {', ':8080 {', 1) + '\n')
 CADDY
 cat > "$release/compose.yaml" <<'COMPOSE'
 services:
@@ -137,13 +132,44 @@ if bash "$release/scripts/restore-production.sh" "$(cat /proc/sys/kernel/random/
   printf 'Restore unexpectedly succeeded after the injected replay failure.\n' >&2
   exit 1
 fi
+[[ ! -f /tmp/sidzen-restore-fail-replay ]]
+python3 -c 'import json; s=json.load(open("/opt/3dprinta/shared/restore/status.json")); assert s["status"] == "failed" and s["phase"] == "validating"'
 assert_fixture before_rollback_test
 printf 'PASS: failure after switching restores the previous database and uploaded files.\n'
 
 sleep 2
-bash "$release/scripts/restore-production.sh" "$(cat /proc/sys/kernel/random/uuid)" "$source_backup"
+install -m 0644 "$release/deploy/sidzen-restore-control.service" /etc/systemd/system/sidzen-restore-control.service
+systemctl daemon-reload
+systemctl set-environment PATH="$PATH"
+systemctl start sidzen-restore-control.service
+for attempt in $(seq 1 20); do [[ -S "$root/shared/restore/api/control.sock" ]] && break; sleep 1; done
+python3 - "$source_backup" <<'CONTROL'
+import json, socket, sys, uuid
+path = '/opt/3dprinta/shared/restore/api/control.sock'
+def request(data):
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+        connection.settimeout(45); connection.connect(path)
+        connection.sendall(json.dumps(data).encode() + b'\n')
+        answer = b''
+        while not answer.endswith(b'\n'):
+            block = connection.recv(65536)
+            if not block: raise RuntimeError('Missing controller response')
+            answer += block
+        return json.loads(answer)
+listing = request({'action': 'list'})
+assert any(item['name'] == sys.argv[1] for item in listing['backups'])
+assert request({'action': 'start', 'id': str(uuid.uuid4()), 'name': '../../etc/passwd'})['error'] == 'invalid'
+result = request({'action': 'start', 'id': str(uuid.uuid4()), 'name': sys.argv[1]})
+assert result['status'] == 'queued', result
+CONTROL
+for attempt in $(seq 1 120); do
+  result="$(python3 -c 'import json; print(json.load(open("/opt/3dprinta/shared/restore/status.json"))["status"])')"
+  [[ "$result" == succeeded || "$result" == failed || "$result" == attention ]] && break
+  sleep 3
+done
+[[ "$result" == succeeded ]]
 assert_fixture snapshot
-printf 'PASS: database and uploaded files restored from the encrypted test backup.\n'
+printf 'PASS: controller restored the database and files from the encrypted test backup.\n'
 
 docker exec 3dprinta-db-1 psql -U 3dprinta -d 3dprinta -v ON_ERROR_STOP=1 -c \
   "INSERT INTO \"Order\" (id,number,\"customerName\",\"customerEmail\",\"customerPhone\",subtotal,total,\"updatedAt\") VALUES ('fixture-order','fixture-order','Test','qa@example.test','',1,1,now())" > /dev/null
@@ -152,6 +178,7 @@ if bash "$release/scripts/restore-production.sh" "$(cat /proc/sys/kernel/random/
   printf 'Restore unexpectedly accepted changed order data.\n' >&2
   exit 1
 fi
+python3 -c 'import json; s=json.load(open("/opt/3dprinta/shared/restore/status.json")); assert s["status"] == "failed" and s["phase"] == "external_changes"'
 assert_fixture do_not_replace
 [[ "$(docker exec 3dprinta-db-1 psql -U 3dprinta -d 3dprinta -Atqc "SELECT count(*) FROM \"Order\" WHERE id='fixture-order'")" == 1 ]]
 printf 'PASS: changed orders stop the restore without losing current data.\n'
