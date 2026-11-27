@@ -47,6 +47,7 @@ jobs:
       - run: python3 -m unittest discover -s scripts -p 'test_telegram_relay_change_required.py'
       - run: python3 -m unittest discover -s scripts -p 'test_nginx_shop_idn.py'
       - run: python3 -m unittest discover -s scripts -p 'test_backup_auth.py'
+      - run: python3 -m unittest discover -s scripts -p 'test_restore_space.py'
       - name: Verify marketplace database synchronization with fixture APIs
         env:
           DATABASE_URL: postgresql://postgres:ci-qa-only@127.0.0.1:5432/shop_qa

@@ -39,7 +39,10 @@ def main():
             if not (local / 'SHA256SUMS').is_file():
                 print(f'Skipped {name}: local comparison is unavailable.')
                 continue
-            run(['sha256sum', '--check', '--status', 'SHA256SUMS'], cwd=local)
+            checked = subprocess.run(['sha256sum', '--check', '--status', 'SHA256SUMS'], cwd=local, check=False)
+            if checked.returncode:
+                print(f'Skipped {name}: the local backup failed verification.')
+                continue
             size = row['Size']
             if not isinstance(size, int) or size <= 0 or size + 536870912 >= shutil.disk_usage(LOCAL).free:
                 raise ValueError('Not enough space to verify an existing backup')
@@ -59,7 +62,8 @@ def main():
                     decrypt.stdout.close()
                 decrypt_result = decrypt.wait(timeout=180)
                 if verified.returncode or decrypt_result:
-                    raise ValueError('Existing encrypted backup could not be verified')
+                    print(f'Skipped {name}: the encrypted backup could not be verified.')
+                    continue
                 if (extracted / 'SHA256SUMS').read_bytes() != (local / 'SHA256SUMS').read_bytes():
                     print(f'Skipped {name}: local and remote backup contents differ.')
                     continue

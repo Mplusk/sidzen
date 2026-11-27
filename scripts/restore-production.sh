@@ -73,7 +73,8 @@ start_services() {
   "${compose[@]}" up -d --no-deps --no-build app marketplace-worker < /dev/null
   for attempt in $(seq 1 40); do
     if curl -fsS --connect-timeout 2 --max-time 4 http://127.0.0.1:3000/api/health/ | \
-      python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["status"] == "ok" and d["database"] == "ok"' 2>/dev/null; then
+      python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["status"] == "ok" and d["database"] == "ok"' 2>/dev/null && \
+      [[ "$(docker inspect -f '{{.State.Health.Status}}' 3dprinta-app-1)" == healthy && "$(docker inspect -f '{{.State.Health.Status}}' 3dprinta-marketplace-worker-1)" == healthy ]]; then
       return 0
     fi
     sleep 3
@@ -183,7 +184,7 @@ set_maintenance on
 # Never replay financial/provider side effects whose state has changed since
 # the snapshot. These tables include all payment, delivery and message jobs.
 for table in Order OrderItem Payment Shipment FiscalReceipt YooKassaSettlement OzonDeliveryJob CdekDeliveryJob FivePostDeliveryJob TelegramOrderJob TelegramOrderStatusJob OrderNotification MarketplaceSyncRun ReviewAiJob ProductCategoryAiJob; do
-  query="SELECT md5(COALESCE(string_agg(md5((to_jsonb(t) - 'updatedAt' - 'nextAttemptAt' - 'availableAt' - 'lockedUntil' - 'leaseUntil')::text), '' ORDER BY md5((to_jsonb(t) - 'updatedAt' - 'nextAttemptAt' - 'availableAt' - 'lockedUntil' - 'leaseUntil')::text)), '')) FROM \"$table\" t"
+  query="SELECT encode(sha256(convert_to(COALESCE(string_agg(encode(sha256(convert_to((to_jsonb(t) - 'updatedAt' - 'nextAttemptAt' - 'availableAt' - 'lockedUntil' - 'leaseUntil')::text, 'UTF8')), 'hex'), '' ORDER BY encode(sha256(convert_to((to_jsonb(t) - 'updatedAt' - 'nextAttemptAt' - 'availableAt' - 'lockedUntil' - 'leaseUntil')::text, 'UTF8')), 'hex')), ''), 'UTF8')), 'hex') FROM \"$table\" t"
   live_digest="$(sql 3dprinta "$query")"
   backup_digest="$(sql "$candidate" "$query")"
   if [[ "$live_digest" != "$backup_digest" ]]; then
@@ -192,7 +193,7 @@ for table in Order OrderItem Payment Shipment FiscalReceipt YooKassaSettlement O
     false
   fi
 done
-integration_query="SELECT md5(COALESCE(string_agg(md5(jsonb_build_object('key', t.key, 'value', t.value)::text), '' ORDER BY t.key), '')) FROM \"SiteSetting\" t WHERE (t.key LIKE 'integrations.%' AND t.key NOT LIKE 'integrations.fivepost-token.%') OR t.key IN ('notifications.telegram.orders', 'notifications.smtp.spaceweb', 'catalog.category-ai.deepseek', 'reviews.deepseek.moderation')"
+integration_query="SELECT encode(sha256(convert_to(COALESCE(jsonb_agg(jsonb_build_object('key', t.key, 'value', t.value) ORDER BY t.key), '[]'::jsonb)::text, 'UTF8')), 'hex') FROM \"SiteSetting\" t WHERE (t.key LIKE 'integrations.%' AND t.key NOT LIKE 'integrations.fivepost-token.%') OR t.key IN ('notifications.telegram.orders', 'notifications.smtp.spaceweb', 'catalog.category-ai.deepseek', 'reviews.deepseek.moderation')"
 live_digest="$(sql 3dprinta "$integration_query")"
 backup_digest="$(sql "$candidate" "$integration_query")"
 if [[ "$live_digest" != "$backup_digest" ]]; then
@@ -200,6 +201,35 @@ if [[ "$live_digest" != "$backup_digest" ]]; then
   printf 'Integration settings changed after the selected backup.\n' >&2
   false
 fi
+
+# A restore must not revive revoked privileges or discard the active admin's
+# credentials or login protection. Compare hashes, never log those credentials.
+admin_query="$(cat <<'SQL'
+SELECT encode(sha256(convert_to(COALESCE(jsonb_agg(jsonb_build_object(
+  'id', u.id, 'email', u.email, 'passwordHash', u."passwordHash",
+  'isActive', u."isActive", 'twoFactorKey', u."twoFactorKey", 'emailVerified', u."emailVerified",
+  'roles', (SELECT jsonb_agg(jsonb_build_object('code', r.code, 'permissions',
+    (SELECT COALESCE(jsonb_agg(p.code ORDER BY p.code), '[]'::jsonb)
+     FROM "RolePermission" rp JOIN "Permission" p ON p.id = rp."permissionId" WHERE rp."roleId" = r.id)) ORDER BY r.code)
+    FROM "UserRole" ur JOIN "Role" r ON r.id = ur."roleId"
+    WHERE ur."userId" = u.id AND (r.code = 'superadmin' OR EXISTS (SELECT FROM "RolePermission" rp WHERE rp."roleId" = r.id)))
+) ORDER BY u.id), '[]'::jsonb)::text, 'UTF8')), 'hex')
+FROM "User" u WHERE EXISTS (
+  SELECT FROM "UserRole" ur JOIN "Role" r ON r.id = ur."roleId"
+  WHERE ur."userId" = u.id AND (r.code = 'superadmin' OR EXISTS (SELECT FROM "RolePermission" rp WHERE rp."roleId" = r.id))
+)
+SQL
+)"
+security_query="SELECT encode(sha256(convert_to(COALESCE(jsonb_agg(jsonb_build_object('key', key, 'value', value) ORDER BY key), '[]'::jsonb)::text, 'UTF8')), 'hex') FROM \"SiteSetting\" WHERE \"group\" = 'security' OR key LIKE 'security.%'"
+for query in "$admin_query" "$security_query"; do
+  live_digest="$(sql 3dprinta "$query")"
+  backup_digest="$(sql "$candidate" "$query")"
+  if [[ "$live_digest" != "$backup_digest" ]]; then
+    set_phase admin_changes
+    printf 'Administrator access changed after the selected backup.\n' >&2
+    false
+  fi
+done
 uncertain_query="SELECT (EXISTS (SELECT FROM \"Payment\" WHERE status IN ('PENDING','AUTHORIZED') AND payload IS NOT NULL AND \"externalId\" IS NULL) OR EXISTS (SELECT FROM \"FiscalReceipt\" WHERE status IN ('SENDING','QUEUED') OR (status='PENDING' AND attempts>0)) OR EXISTS (SELECT FROM \"YooKassaSettlement\" WHERE status IN ('SENDING','QUEUED') OR (status='PENDING' AND attempts>0)) OR EXISTS (SELECT FROM \"OzonDeliveryJob\" WHERE (status='PENDING' AND attempts>0) OR (\"cancelRequestedAt\" IS NOT NULL AND status <> 'CANCELED')) OR EXISTS (SELECT FROM \"CdekDeliveryJob\" WHERE status IN ('SENDING','CANCELING','ACCEPTED') OR (status='PENDING' AND attempts>0)) OR EXISTS (SELECT FROM \"FivePostDeliveryJob\" WHERE status IN ('SENDING','CANCELING') OR (status='PENDING' AND attempts>0)) OR EXISTS (SELECT FROM \"TelegramOrderJob\" WHERE status IN ('RUNNING','UNCERTAIN')) OR EXISTS (SELECT FROM \"TelegramOrderStatusJob\" WHERE status IN ('RUNNING','UNCERTAIN')) OR EXISTS (SELECT FROM \"MarketplaceSyncRun\" WHERE status='RUNNING') OR EXISTS (SELECT FROM \"ReviewAiJob\" WHERE status='RUNNING') OR EXISTS (SELECT FROM \"ProductCategoryAiJob\" WHERE status='RUNNING'))"
 if [[ "$(sql 3dprinta "$uncertain_query")" != f ]]; then
   set_phase external_changes
@@ -215,6 +245,10 @@ volume_snapshot model-files "$work/previous-model.tar.gz"
 volume_snapshot product-images "$work/previous-products.tar.gz"
 sync -f "$work/previous-model.tar.gz"
 sync -f "$work/previous-products.tar.gz"
+set_phase insufficient_space
+python3 "$release/scripts/check-restore-space.py" "$work/archive" \
+  "$(docker volume inspect -f '{{.Mountpoint}}' 3dprinta_model-files)" \
+  "$(docker volume inspect -f '{{.Mountpoint}}' 3dprinta_product-images)"
 set_phase prepared
 update_status running switching
 terminate_connections

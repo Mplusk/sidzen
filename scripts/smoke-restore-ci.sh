@@ -220,6 +220,19 @@ assert_fixture snapshot
 printf 'PASS: controller restored the database and files from the encrypted test backup.\n'
 
 docker exec 3dprinta-db-1 psql -U 3dprinta -d 3dprinta -v ON_ERROR_STOP=1 -c \
+  "INSERT INTO \"User\" (id,email,\"passwordHash\",\"updatedAt\") VALUES ('fixture-admin','admin@example.test','test-hash',now()); INSERT INTO \"Role\" (id,code,name) VALUES ('fixture-admin-role','superadmin','Test') ON CONFLICT (code) DO NOTHING; INSERT INTO \"UserRole\" (\"userId\",\"roleId\") SELECT 'fixture-admin',id FROM \"Role\" WHERE code='superadmin'" > /dev/null
+set_fixture preserve_admin
+if bash "$release/scripts/restore-production.sh" "$(cat /proc/sys/kernel/random/uuid)" "$source_backup"; then
+  printf 'Restore unexpectedly accepted changed administrator access.\n' >&2
+  exit 1
+fi
+python3 -c 'import json; s=json.load(open("/opt/3dprinta/shared/restore/status.json")); assert s["status"] == "failed" and s["phase"] == "admin_changes"'
+assert_fixture preserve_admin
+[[ "$(docker exec 3dprinta-db-1 psql -U 3dprinta -d 3dprinta -Atqc "SELECT count(*) FROM \"User\" WHERE id='fixture-admin'")" == 1 ]]
+docker exec 3dprinta-db-1 psql -U 3dprinta -d 3dprinta -v ON_ERROR_STOP=1 -c "DELETE FROM \"User\" WHERE id='fixture-admin'" > /dev/null
+printf 'PASS: changed administrator access stops the restore without losing current data.\n'
+
+docker exec 3dprinta-db-1 psql -U 3dprinta -d 3dprinta -v ON_ERROR_STOP=1 -c \
   "INSERT INTO \"Order\" (id,number,\"customerName\",\"customerEmail\",\"customerPhone\",subtotal,total,\"updatedAt\") VALUES ('fixture-order','fixture-order','Test','qa@example.test','',1,1,now())" > /dev/null
 set_fixture do_not_replace
 if bash "$release/scripts/restore-production.sh" "$(cat /proc/sys/kernel/random/uuid)" "$source_backup"; then
