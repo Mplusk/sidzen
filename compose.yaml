@@ -10,6 +10,7 @@ services:
       - "443:443/udp"
     volumes:
       - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /opt/3dprinta/shared/restore/flags:/run/sidzen-restore:ro
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
@@ -71,6 +72,7 @@ services:
       - image-cache:/app/.next/cache/images
       - fetch-cache:/app/.next/cache/fetch-cache
       - privacy-ledger:/app/privacy-ledger
+      - /opt/3dprinta/shared/restore/api:/run/sidzen-restore:ro
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 15s
@@ -100,6 +102,7 @@ services:
       - product-images:/app/public/uploads/products
       - model-files:/app/private-uploads
       - privacy-ledger:/app/privacy-ledger
+      - /opt/3dprinta/shared/restore/flags:/run/sidzen-restore:ro
     healthcheck:
       test: ["CMD", "node", "-e", "const fs=require('fs');if(Date.now()-Number(fs.readFileSync('/tmp/3dprinta-marketplace-heartbeat','utf8'))>60000)process.exit(1)"]
       interval: 20s

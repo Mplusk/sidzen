@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { access, writeFile } from "node:fs/promises";
 import { backfillCatalogFacets } from "../src/lib/catalog-facets-server";
 import { prisma } from "../src/lib/prisma";
 import { claimRun, processRun } from "../src/lib/marketplaces/sync";
@@ -31,12 +31,25 @@ process.on("SIGINT", () => { stopping = true; });
 async function heartbeat() { await writeFile("/tmp/3dprinta-marketplace-heartbeat", String(Date.now())); }
 await heartbeat();
 const pulse = setInterval(() => { void heartbeat().catch(() => {}); }, 10_000);
+async function waitForRestore() {
+  while (!stopping) {
+    try {
+      await access("/run/sidzen-restore/maintenance");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      console.warn("Restore state cannot be read; background work remains paused.");
+    }
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+}
 // Bank / fiscal work must not wait for a large marketplace import or carrier
 // request. A separate awaited loop avoids overlapping ticks and drains safely
 // before the shared database client is disconnected on shutdown.
 async function financeLoop() {
   while (!stopping) {
     try {
+      await waitForRestore();
+      if (stopping) break;
       if (Date.now() >= nextPaymentCheck) {
         nextPaymentCheck = Date.now() + 60_000;
         await reconcileTochkaPayments(() => stopping).catch(async () => { await writeDiagnostic("payment.reconcile.failed"); });
@@ -54,6 +67,8 @@ async function categoryAiLoop() {
   let dirty = true;
   while (!stopping) {
     try {
+      await waitForRestore();
+      if (stopping) break;
       dirty = await backfillCatalogFacets() || dirty;
       dirty = await processCategoryAiJob() || dirty;
       if (dirty && !stopping) {
@@ -68,7 +83,7 @@ async function categoryAiLoop() {
 const categories = categoryAiLoop();
 async function communicationLoop(task: () => Promise<unknown>) {
   while (!stopping) {
-    try { await task(); } catch { await writeDiagnostic("communications.failed"); }
+    try { await waitForRestore(); if (!stopping) await task(); } catch { await writeDiagnostic("communications.failed"); }
     if (!stopping) await new Promise(resolve => setTimeout(resolve, 2000));
   }
 }
@@ -86,6 +101,8 @@ const telegram = communicationLoop(async () => { await processTelegramOrder(); a
 async function privacyRetentionLoop() {
   let next = 0;
   while (!stopping) {
+    await waitForRestore();
+    if (stopping) break;
     if (Date.now() >= next) {
       try { await prunePersonalDataRetention(); next = Date.now() + 3600000; }
       catch { next = Date.now() + 60000; await writeDiagnostic("worker.failed"); }
@@ -100,6 +117,8 @@ async function pickupDirectoryLoop() {
   let nextScheduleCheck = 0;
   while (!stopping) {
     try {
+      await waitForRestore();
+      if (stopping) break;
       if (Date.now() >= nextScheduleCheck) {
         nextScheduleCheck = Date.now() + 60_000;
         await scheduleOzonDirectoryRefresh();
@@ -115,6 +134,8 @@ async function stockHoldLoop() {
   let dirty = false;
   while (!stopping) {
     try {
+      await waitForRestore();
+      if (stopping) break;
       dirty = await releaseExpiredStockHolds(prisma) || dirty;
       if (dirty) {
         const base = process.env.MARKETPLACE_APP_URL || "http://app:3000";
@@ -130,6 +151,8 @@ console.log("Marketplace, delivery and independent financial queues ready.");
 try {
   while (!stopping) {
     try {
+      await waitForRestore();
+      if (stopping) break;
       if (Date.now() >= nextOAuthCleanup) {
         await prisma.oAuthAttempt.deleteMany({ where: { expiresAt: { lte: new Date() } } });
         nextOAuthCleanup = Date.now() + 60_000;

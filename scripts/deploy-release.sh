@@ -194,6 +194,8 @@ if [[ "$previous_release" == "$final_release" ]]; then
 fi
 
 install -d -m 0750 "$release_root" "$incoming_root"
+install -d -m 0755 "${project_root}/shared/restore" "${project_root}/shared/restore/flags"
+install -d -m 0750 -o root -g 1001 "${project_root}/shared/restore/api"
 rm -rf -- "$staging_release"
 install -d -m 0750 "$staging_release"
 

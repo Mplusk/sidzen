@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+# This test provisions an entirely separate store on a disposable CI runner.
+set -Eeuo pipefail
+[[ "${GITHUB_ACTIONS:-}" == true && "${CI_RESTORE_ISOLATED:-}" == true && "$(id -u)" == 0 ]]
+[[ ! -e /opt/3dprinta && -z "$(docker ps -aq --filter label=com.docker.compose.project=3dprinta)" ]]
+
+repository="${GITHUB_WORKSPACE:?}"
+revision="$(git -c "safe.directory=$repository" -C "$repository" rev-parse HEAD)"
+root=/opt/3dprinta
+release="$root/releases/$revision"
+remote=/opt/sidzen-restore-fixture-remote
+install -d -m 0755 "$release" "$root/shared" "$root/incoming" "$root/shared/restore/flags" "$root/shared/restore/api" "$remote" /var/backups/3dprinta /tmp/sidzen-restore-bin
+git -c "safe.directory=$repository" -C "$repository" archive HEAD | tar -xf - -C "$release"
+ln -s "$release" "$root/current"
+cat > "$root/shared/.env.production" <<'ENVIRONMENT'
+POSTGRES_PASSWORD=isolated-test-password
+DATABASE_URL=postgresql://3dprinta:isolated-test-password@db:5432/3dprinta
+AUTH_SECRET=isolated-test-secret
+INTEGRATION_ENCRYPTION_KEY=isolated-test-encryption-key
+NEXT_PUBLIC_SITE_URL=https://sidzen.shop
+PERSONAL_DATA_RF_STORAGE_CONFIRMED=true
+ENVIRONMENT
+chmod 0600 "$root/shared/.env.production"
+ln -s "$root/shared/.env.production" "$release/.env.production"
+install -d -m 0700 "$root/shared/backup"
+age-keygen -o "$root/shared/backup/restore.agekey" > /dev/null 2>&1
+age-keygen -y "$root/shared/backup/restore.agekey" > "$root/shared/backup/age.recipient"
+printf '[sidzen-backup]\ntype = local\n' > "$root/shared/backup/yandex-rclone.conf"
+printf 'sidzen-backup:%s\n' "$remote" > "$root/shared/backup/remote-path"
+
+cat > "$root/shared/restore/Caddyfile" <<'CADDY'
+:8080 {
+    @restoring file {
+        root /run/sidzen-restore
+        try_files maintenance
+    }
+    route {
+        respond @restoring "restoring" 503
+        reverse_proxy app:3000
+    }
+}
+CADDY
+cat > "$release/compose.yaml" <<'COMPOSE'
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: 3dprinta
+      POSTGRES_DB: 3dprinta
+      POSTGRES_PASSWORD: isolated-test-password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+  app:
+    image: node:22-alpine
+    command: ["node", "-e", "require('http').createServer((q,r)=>{r.writeHead(200,{'Content-Type':'application/json'});r.end(JSON.stringify({status:'ok',database:'ok'}))}).listen(3000,'0.0.0.0')"]
+    ports: ["127.0.0.1:3000:3000"]
+    volumes:
+      - model-files:/app/private-uploads
+      - product-images:/app/public/uploads/products
+      - privacy-ledger:/app/privacy-ledger
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>{if(!r.ok)process.exit(1)})"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+  marketplace-worker:
+    image: sidzen-restore-qa:latest
+    env_file: .env.production
+    command: ["sleep", "infinity"]
+    volumes:
+      - model-files:/app/private-uploads
+      - product-images:/app/public/uploads/products
+      - privacy-ledger:/app/privacy-ledger
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+  proxy:
+    image: caddy:2-alpine
+    ports: ["127.0.0.1:18080:8080"]
+    volumes:
+      - /opt/3dprinta/shared/restore/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /opt/3dprinta/shared/restore/flags:/run/sidzen-restore:ro
+volumes:
+  postgres-data:
+  model-files:
+  product-images:
+  privacy-ledger:
+COMPOSE
+cat > /tmp/sidzen-restore-bin/curl <<'CURL'
+#!/usr/bin/env bash
+if [[ "$*" == *'--resolve sidzen.shop:443:127.0.0.1'* ]]; then
+  exec /usr/bin/curl -sS --connect-timeout 3 --max-time 8 -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/health/
+fi
+exec /usr/bin/curl "$@"
+CURL
+cat > /tmp/sidzen-restore-bin/docker <<'DOCKER'
+#!/usr/bin/env bash
+if [[ -f /tmp/sidzen-restore-fail-replay && "$*" == *'scripts/replay-privacy-erasures.ts'* ]]; then
+  rm -f /tmp/sidzen-restore-fail-replay
+  exit 1
+fi
+exec /usr/bin/docker "$@"
+DOCKER
+chmod 0755 /tmp/sidzen-restore-bin/curl /tmp/sidzen-restore-bin/docker
+export PATH="/tmp/sidzen-restore-bin:$PATH"
+cd "$release"
+compose=(docker compose --project-name 3dprinta --env-file .env.production --file compose.yaml)
+"${compose[@]}" up -d db
+for attempt in $(seq 1 40); do docker exec 3dprinta-db-1 pg_isready -U 3dprinta >/dev/null 2>&1 && break; sleep 1; done
+docker exec 3dprinta-db-1 pg_isready -U 3dprinta >/dev/null
+"${compose[@]}" run --rm --no-deps --entrypoint ./node_modules/.bin/prisma marketplace-worker migrate deploy
+"${compose[@]}" up -d --wait --wait-timeout 90 app marketplace-worker proxy
+docker run --rm --volume 3dprinta_privacy-ledger:/data alpine:3.20 sh -c 'chown 1001:1001 /data; chmod 0700 /data'
+docker exec 3dprinta-db-1 psql -U 3dprinta -d 3dprinta -v ON_ERROR_STOP=1 -c \
+  "INSERT INTO \"Product\" (id,name,slug,sku,\"basePrice\",\"updatedAt\") VALUES ('fixture','snapshot','fixture','fixture',100,now())"
+docker run --rm --volume 3dprinta_model-files:/data alpine:3.20 sh -c 'printf snapshot > /data/fixture.txt'
+bash "$release/scripts/backup.sh"
+source_backup="$(find "$remote" -maxdepth 1 -type f -name 'sidzen-*.tar.age' -printf '%f\n' | head -1)"
+[[ -n "$source_backup" ]]
+sleep 2
+
+set_fixture() {
+  docker exec 3dprinta-db-1 psql -U 3dprinta -d 3dprinta -v ON_ERROR_STOP=1 -c "UPDATE \"Product\" SET name='$1' WHERE id='fixture'" > /dev/null
+  docker run --rm --volume 3dprinta_model-files:/data alpine:3.20 sh -c "printf '%s' '$1' > /data/fixture.txt"
+}
+assert_fixture() {
+  [[ "$(docker exec 3dprinta-db-1 psql -U 3dprinta -d 3dprinta -Atqc "SELECT name FROM \"Product\" WHERE id='fixture'")" == "$1" ]]
+  [[ "$(docker run --rm --volume 3dprinta_model-files:/data:ro alpine:3.20 cat /data/fixture.txt)" == "$1" ]]
+  [[ ! -e "$root/shared/restore/flags/maintenance" ]]
+}
+
+set_fixture before_rollback_test
+touch /tmp/sidzen-restore-fail-replay
+if bash "$release/scripts/restore-production.sh" "$(cat /proc/sys/kernel/random/uuid)" "$source_backup"; then
+  printf 'Restore unexpectedly succeeded after the injected replay failure.\n' >&2
+  exit 1
+fi
+assert_fixture before_rollback_test
+printf 'PASS: failure after switching restores the previous database and uploaded files.\n'
+
+sleep 2
+bash "$release/scripts/restore-production.sh" "$(cat /proc/sys/kernel/random/uuid)" "$source_backup"
+assert_fixture snapshot
+printf 'PASS: database and uploaded files restored from the encrypted test backup.\n'
+
+docker exec 3dprinta-db-1 psql -U 3dprinta -d 3dprinta -v ON_ERROR_STOP=1 -c \
+  "INSERT INTO \"Order\" (id,number,\"customerName\",\"customerEmail\",\"customerPhone\",subtotal,total,\"updatedAt\") VALUES ('fixture-order','fixture-order','Test','qa@example.test','',1,1,now())" > /dev/null
+set_fixture do_not_replace
+if bash "$release/scripts/restore-production.sh" "$(cat /proc/sys/kernel/random/uuid)" "$source_backup"; then
+  printf 'Restore unexpectedly accepted changed order data.\n' >&2
+  exit 1
+fi
+assert_fixture do_not_replace
+[[ "$(docker exec 3dprinta-db-1 psql -U 3dprinta -d 3dprinta -Atqc "SELECT count(*) FROM \"Order\" WHERE id='fixture-order'")" == 1 ]]
+printf 'PASS: changed orders stop the restore without losing current data.\n'

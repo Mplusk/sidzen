@@ -25,9 +25,11 @@ if ! flock -n 9; then
 fi
 staging="$(mktemp -d "${backup_dir}/.creating.XXXXXX")"
 encrypted=''
+signature=''
 cleanup() {
   if [[ -d "$staging" ]]; then rm -rf -- "$staging"; fi
   if [[ -n "$encrypted" ]]; then rm -f -- "$encrypted"; fi
+  if [[ -n "$signature" ]]; then rm -f -- "$signature"; fi
 }
 trap cleanup EXIT
 # Rotate even if creating today's backup later fails. Never let a failed dump
@@ -81,6 +83,15 @@ if [[ -f "$offsite_config" ]]; then
   fi
   printf 'Encrypted backup uploaded and verified: sidzen-%s.tar.age\n' "$timestamp"
 
+  if [[ -f "${shared_dir}/backup/restore.agekey" ]]; then
+    signature="$(mktemp "${backup_dir}/.signature.XXXXXX")"
+    python3 "${project_dir}/scripts/backup-auth.py" sign "${shared_dir}/backup/restore.agekey" "$encrypted" > "$signature"
+    rclone "${rclone_options[@]}" copyto --immutable --checksum "$signature" "${remote_file}.hmac"
+    signature_hash="$(md5sum "$signature" | cut -d ' ' -f 1)"
+    remote_signature_hash="$(rclone "${rclone_options[@]}" md5sum "${remote_file}.hmac" | cut -d ' ' -f 1)"
+    [[ "$signature_hash" == "$remote_signature_hash" ]]
+  fi
+
   rclone "${rclone_options[@]}" delete --max-depth 1 --min-age "${retention_days}d" \
-    --include '/sidzen-????????T??????Z.tar.age' --yandex-hard-delete "$remote"
+    --include '/sidzen-????????T??????Z.tar.age' --include '/sidzen-????????T??????Z.tar.age.hmac' --yandex-hard-delete "$remote"
 fi

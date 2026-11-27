@@ -4,8 +4,15 @@ sidzen.shop {
         max_size 105MB
     }
     header Strict-Transport-Security "max-age=31536000; includeSubDomains"
-    reverse_proxy app:3000 {
-        header_up X-Sidzen-Client-IP {remote_host}
+    @restoring file {
+        root /run/sidzen-restore
+        try_files maintenance
+    }
+    route {
+        respond @restoring "Магазин временно недоступен. Идёт восстановление данных." 503
+        reverse_proxy app:3000 {
+            header_up X-Sidzen-Client-IP {remote_host}
+        }
     }
 }
 
