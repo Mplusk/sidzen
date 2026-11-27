@@ -98,7 +98,7 @@ export function BackupRestore() {
     <p><button className="button button--outline" type="button" onClick={() => { setLoading(true); void refresh(); }} disabled={loading || submitting}>Обновить список</button></p>
     <dialog className="confirm-dialog" ref={dialog} aria-labelledby={title} aria-describedby={description}>
       <h2 id={title}>Восстановить магазин?</h2>
-      <p id={description}>Данные магазина будут заменены состоянием на {selectedBackup ? date(selectedBackup.modifiedAt) : "выбранную дату"}. Заказы, изменения товаров и другие записи, появившиеся после этой даты, будут потеряны. Во время восстановления магазин будет недоступен.</p>
+      <p id={description}>Данные магазина будут возвращены к состоянию на {selectedBackup ? date(selectedBackup.modifiedAt) : "выбранную дату"}. Изменения товаров и другие записи после этой даты будут потеряны. Если изменились заказы, платежи, доставка, подключения или доступ администратора, восстановление остановится. Во время восстановления магазин будет недоступен.</p>
       <div className="confirm-dialog__actions">
         <button autoFocus className="button button--outline" type="button" disabled={submitting} onClick={() => dialog.current?.close()}>Отмена</button>
         <button className="button button--danger" type="button" disabled={submitting} onClick={() => void restore()}>{submitting ? "Запускаем…" : "Да, восстановить"}</button>
