@@ -69,7 +69,7 @@ def main():
                     continue
                 signature = directory / 'signature'
                 with signature.open('wb') as output:
-                    run([sys.executable, str(SCRIPTS / 'backup-auth.py'), 'sign', str(CONFIG / 'restore.agekey'), str(encrypted)], stdout=output)
+                    run([sys.executable, str(SCRIPTS / 'backup-auth.py'), 'sign', str(CONFIG / 'restore.agekey'), str(encrypted), name], stdout=output)
                 destination = remote.rstrip('/') + '/' + name + '.hmac'
                 run(options + ['copyto', '--immutable', '--checksum', str(signature), destination], stdout=subprocess.DEVNULL)
                 uploaded = run(options + ['cat', destination], capture_output=True).stdout

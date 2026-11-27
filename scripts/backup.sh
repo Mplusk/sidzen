@@ -85,7 +85,7 @@ if [[ -f "$offsite_config" ]]; then
 
   if [[ -f "${shared_dir}/backup/restore.agekey" ]]; then
     signature="$(mktemp "${backup_dir}/.signature.XXXXXX")"
-    python3 "${project_dir}/scripts/backup-auth.py" sign "${shared_dir}/backup/restore.agekey" "$encrypted" > "$signature"
+    python3 "${project_dir}/scripts/backup-auth.py" sign "${shared_dir}/backup/restore.agekey" "$encrypted" "sidzen-${timestamp}.tar.age" > "$signature"
     rclone "${rclone_options[@]}" copyto --immutable --checksum "$signature" "${remote_file}.hmac"
     signature_hash="$(md5sum "$signature" | cut -d ' ' -f 1)"
     remote_signature_hash="$(rclone "${rclone_options[@]}" md5sum "${remote_file}.hmac" | cut -d ' ' -f 1)"

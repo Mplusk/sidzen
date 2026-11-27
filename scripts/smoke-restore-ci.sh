@@ -135,15 +135,14 @@ printf 'PASS: an older encrypted copy was authenticated against its local origin
 tampered=sidzen-20000101T000000Z.tar.age
 cp "$remote/$source_backup" "$remote/$tampered"
 cp "$remote/$source_backup.hmac" "$remote/$tampered.hmac"
-printf 'tampered' >> "$remote/$tampered"
 install -d -m 0700 "$root/shared/restore/tampered-test"
 if bash "$release/scripts/stage-backup-restore.sh" "$tampered" "$root/shared/restore/tampered-test"; then
-  printf 'Tampered encrypted backup was unexpectedly accepted.\n' >&2
+  printf 'A relabelled encrypted backup was unexpectedly accepted.\n' >&2
   exit 1
 fi
 [[ -z "$(ls -A "$root/shared/restore/tampered-test")" ]]
 rm -f -- "$remote/$tampered" "$remote/$tampered.hmac"
-printf 'PASS: a modified encrypted archive was rejected before extraction.\n'
+printf 'PASS: a relabelled encrypted archive was rejected before extraction.\n'
 sleep 2
 
 set_fixture() {

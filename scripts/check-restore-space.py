@@ -22,11 +22,25 @@ def check(archive_dir, destinations):
         raise ValueError('Not enough free space to replace uploaded files safely')
 
 
+def check_database(destination, live_size, dump_size):
+    live_size, dump_size = int(live_size), int(dump_size)
+    if live_size <= 0 or dump_size <= 0:
+        raise ValueError('Invalid database size')
+    # A compressed custom dump can expand considerably. Keep room for both the
+    # candidate and write-ahead log while the existing database remains intact.
+    required = max(live_size * 2, dump_size * 8) + HEADROOM
+    if shutil.disk_usage(destination).free < required:
+        raise ValueError('Not enough free space to stage a separate database')
+
+
 if __name__ == '__main__':
     try:
-        if len(sys.argv) != 4:
-            raise ValueError('Expected the archive directory and two volume paths')
-        check(sys.argv[1], sys.argv[2:])
+        if len(sys.argv) == 5 and sys.argv[1] == 'files':
+            check(sys.argv[2], sys.argv[3:])
+        elif len(sys.argv) == 5 and sys.argv[1] == 'database':
+            check_database(*sys.argv[2:])
+        else:
+            raise ValueError('Expected a database or files space check')
     except (OSError, ValueError, tarfile.TarError) as error:
         print(f'Restore space check failed: {error}', file=sys.stderr)
         sys.exit(1)

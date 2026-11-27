@@ -11,6 +11,7 @@ import struct
 import subprocess
 import threading
 import time
+from datetime import datetime, timezone
 
 ROOT = Path('/opt/3dprinta/shared/restore')
 SOCKET = ROOT / 'api/control.sock'
@@ -51,9 +52,17 @@ def backups():
         )
     rows = json.loads(result.stdout)
     names = {item['Name'] for item in rows}
-    return sorted(({'name': item['Name'], 'modifiedAt': item['ModTime'], 'size': item['Size']}
-                   for item in rows if BACKUP_NAME.fullmatch(item['Name']) and item['Size'] > 0 and item['Name'] + '.hmac' in names),
-                  key=lambda item: item['name'], reverse=True)
+    valid = []
+    for item in rows:
+        name = item['Name']
+        if not BACKUP_NAME.fullmatch(name) or item['Size'] <= 0 or name + '.hmac' not in names:
+            continue
+        try:
+            timestamp = datetime.strptime(name[7:23], '%Y%m%dT%H%M%SZ').replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        valid.append({'name': name, 'modifiedAt': timestamp.isoformat(), 'size': item['Size']})
+    return sorted(valid, key=lambda item: item['name'], reverse=True)
 
 
 def handle(command):

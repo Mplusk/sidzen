@@ -155,6 +155,12 @@ for container in 3dprinta-app-1 3dprinta-marketplace-worker-1; do
   [[ "$(docker inspect -f '{{.State.Health.Status}}' "$container")" == healthy ]]
 done
 bash "$release/scripts/stage-backup-restore.sh" "$name" "$work/archive"
+set_phase insufficient_space
+python3 "$release/scripts/check-restore-space.py" database \
+  "$(docker volume inspect -f '{{.Mountpoint}}' 3dprinta_postgres-data)" \
+  "$(sql 3dprinta 'SELECT pg_database_size(current_database())')" \
+  "$(wc -c < "$work/archive/database.dump")"
+set_phase preparing
 sql postgres "CREATE DATABASE \"$candidate\" TEMPLATE template0"
 docker exec -i "$db" pg_restore -U 3dprinta --no-owner --no-privileges --exit-on-error -d "$candidate" < "$work/archive/database.dump"
 
@@ -246,7 +252,7 @@ volume_snapshot product-images "$work/previous-products.tar.gz"
 sync -f "$work/previous-model.tar.gz"
 sync -f "$work/previous-products.tar.gz"
 set_phase insufficient_space
-python3 "$release/scripts/check-restore-space.py" "$work/archive" \
+python3 "$release/scripts/check-restore-space.py" files "$work/archive" \
   "$(docker volume inspect -f '{{.Mountpoint}}' 3dprinta_model-files)" \
   "$(docker volume inspect -f '{{.Mountpoint}}' 3dprinta_product-images)"
 set_phase prepared

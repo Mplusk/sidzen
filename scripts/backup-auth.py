@@ -7,12 +7,15 @@ import re
 import sys
 
 
-def signature(identity, archive):
+def signature(identity, archive, name):
+    if not re.fullmatch(r'sidzen-[0-9]{8}T[0-9]{6}Z\.tar\.age', name):
+        raise ValueError('Invalid backup name')
     lines = [line.strip() for line in Path(identity).read_bytes().splitlines() if line.startswith(b'AGE-SECRET-KEY-')]
     if len(lines) != 1:
         raise ValueError('Expected one age identity')
-    key = hashlib.sha256(b'SIDZEN backup authentication v1\x00' + lines[0]).digest()
+    key = hashlib.sha256(b'SIDZEN backup authentication v2\x00' + lines[0]).digest()
     digest = hmac.new(key, digestmod=hashlib.sha256)
+    digest.update(name.encode('ascii') + b'\x00')
     with open(archive, 'rb') as source:
         while block := source.read(1024 * 1024):
             digest.update(block)
@@ -21,11 +24,11 @@ def signature(identity, archive):
 
 if __name__ == '__main__':
     try:
-        if len(sys.argv) == 4 and sys.argv[1] == 'sign':
-            print(signature(sys.argv[2], sys.argv[3]))
-        elif len(sys.argv) == 5 and sys.argv[1] == 'verify':
-            expected = Path(sys.argv[4]).read_text(encoding='ascii').strip()
-            if not re.fullmatch(r'[0-9a-f]{64}', expected) or not hmac.compare_digest(expected, signature(sys.argv[2], sys.argv[3])):
+        if len(sys.argv) == 5 and sys.argv[1] == 'sign':
+            print(signature(sys.argv[2], sys.argv[3], sys.argv[4]))
+        elif len(sys.argv) == 6 and sys.argv[1] == 'verify':
+            expected = Path(sys.argv[5]).read_text(encoding='ascii').strip()
+            if not re.fullmatch(r'[0-9a-f]{64}', expected) or not hmac.compare_digest(expected, signature(sys.argv[2], sys.argv[3], sys.argv[4])):
                 raise ValueError('Backup authentication failed')
         else:
             raise ValueError('Invalid backup authentication command')

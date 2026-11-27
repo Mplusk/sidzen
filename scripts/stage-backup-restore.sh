@@ -23,6 +23,6 @@ trap 'rm -f -- "$encrypted" "$signature"' EXIT
 rclone "${options[@]}" cat "$file" > "$encrypted"
 [[ "$(wc -c < "$encrypted")" -eq "$size" ]]
 rclone "${options[@]}" cat "${file}.hmac" | head -c 256 > "$signature"
-python3 "$(dirname "$0")/backup-auth.py" verify "$directory/restore.agekey" "$encrypted" "$signature"
+python3 "$(dirname "$0")/backup-auth.py" verify "$directory/restore.agekey" "$encrypted" "$name" "$signature"
 age --decrypt -i "$directory/restore.agekey" < "$encrypted" |
   python3 "$(dirname "$0")/extract-restore-backup.py" "$destination"

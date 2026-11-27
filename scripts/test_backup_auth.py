@@ -54,9 +54,11 @@ class BackupAuthentication(unittest.TestCase):
             identity.write_text('# fixture only\nAGE-SECRET-KEY-1FIXTURE\n')
             payload = directory / 'archive'
             payload.write_bytes(b'encrypted fixture')
-            signed = backup_auth.signature(identity, payload)
+            name = 'sidzen-20261128T020000Z.tar.age'
+            signed = backup_auth.signature(identity, payload, name)
+            self.assertNotEqual(signed, backup_auth.signature(identity, payload, 'sidzen-20261129T020000Z.tar.age'))
             payload.write_bytes(b'encrypted fixture changed')
-            self.assertNotEqual(signed, backup_auth.signature(identity, payload))
+            self.assertNotEqual(signed, backup_auth.signature(identity, payload, name))
 
     def test_checksum_and_nested_paths_are_checked_before_use(self):
         for payload, expected in [(archive(), 0), (archive(corrupt=True), 1), (archive('../outside'), 1)]:

@@ -12,6 +12,14 @@ SPEC.loader.exec_module(restore_space)
 
 
 class RestoreSpace(unittest.TestCase):
+    def test_database_has_room_for_a_separate_candidate_and_wal(self):
+        with patch.object(restore_space.shutil, 'disk_usage') as usage:
+            usage.return_value.free = restore_space.HEADROOM + 199
+            with self.assertRaises(ValueError):
+                restore_space.check_database('.', 100, 10)
+            usage.return_value.free = restore_space.HEADROOM + 200
+            restore_space.check_database('.', 100, 10)
+
     def test_files_on_same_disk_are_counted_together(self):
         with tempfile.TemporaryDirectory() as folder:
             for name in ('model-files.tar.gz', 'product-images.tar.gz'):
