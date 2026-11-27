@@ -121,6 +121,7 @@ if ! flock -n 9; then
   if [[ "$recover" != true ]]; then update_status failed busy; fi
   exit 1
 fi
+[[ "$(readlink -f "$root/current")" == "$release" ]] || { update_status failed busy; exit 1; }
 
 if [[ "$recover" == true ]]; then
   if [[ ! -d "$work" ]]; then
@@ -222,6 +223,12 @@ sql postgres "ALTER DATABASE \"3dprinta\" RENAME TO \"$previous\""
 sql postgres "ALTER DATABASE \"$candidate\" RENAME TO \"3dprinta\""
 volume_restore model-files "$work/archive/model-files.tar.gz"
 volume_restore product-images "$work/archive/product-images.tar.gz"
+for cache in image-cache fetch-cache; do
+  if docker volume inspect "3dprinta_${cache}" > /dev/null 2>&1; then
+    docker run --rm --network none --volume "3dprinta_${cache}:/target" alpine:3.20 \
+      sh -ec 'find /target -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +'
+  fi
+done
 set_phase validating
 
 # The independent privacy ledger is always the current one, never the archived

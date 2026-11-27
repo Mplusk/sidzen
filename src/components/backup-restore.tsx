@@ -23,6 +23,7 @@ export function BackupRestore() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [operation, setOperation] = useState<Restore | null>(null);
+  const operationRef = useRef<Restore | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const title = useId();
@@ -36,10 +37,13 @@ export function BackupRestore() {
       if (!Array.isArray(result.backups)) throw new Error();
       setBackups(result.backups);
       setOperation(result.operation ?? null);
+      operationRef.current = result.operation ?? null;
       setError("");
       setSelected(current => result.backups.some(backup => backup.name === current) ? current : result.backups[0]?.name ?? "");
     } catch {
-      setError("Не удалось получить резервные копии. Проверьте подключение Яндекс Диска и попробуйте снова.");
+      if (!operationRef.current || !["queued", "running", "recovering"].includes(operationRef.current.status)) {
+        setError("Не удалось получить резервные копии. Проверьте подключение и попробуйте снова.");
+      }
     } finally {
       setLoading(false);
     }
@@ -60,6 +64,7 @@ export function BackupRestore() {
     try {
       const id = crypto.randomUUID();
       setOperation({ id, status: "queued" });
+      operationRef.current = { id, status: "queued" };
       const response = await fetch("/api/admin/backups/restore/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

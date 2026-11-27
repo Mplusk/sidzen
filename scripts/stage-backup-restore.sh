@@ -9,6 +9,8 @@ directory=/opt/3dprinta/shared/backup
 [[ -f "$directory/yandex-rclone.conf" && -f "$directory/remote-path" && -f "$directory/restore.agekey" ]] || { printf 'Backup access or recovery key is missing.\n' >&2; exit 2; }
 remote="$(< "$directory/remote-path")"
 [[ "$remote" == sidzen-backup:?* && "$remote" != *$'\n'* && "$remote" != *$'\r'* ]] || { printf 'Invalid backup destination.\n' >&2; exit 2; }
+exec 7>/var/backups/3dprinta/.backup.lock
+flock -n 7 || { printf 'Backup or another restore is in progress.\n' >&2; exit 1; }
 
 options=(--config "$directory/yandex-rclone.conf" --contimeout 15s --timeout 2m --retries 3)
 file="${remote%/}/${name}"

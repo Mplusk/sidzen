@@ -96,6 +96,12 @@ if [[ -f /tmp/sidzen-restore-fail-replay && "$*" == *'scripts/replay-privacy-era
   rm -f /tmp/sidzen-restore-fail-replay
   exit 1
 fi
+if [[ -f /tmp/sidzen-restore-kill-after-swap && "$*" == *'3dprinta_model-files:/target'* ]]; then
+  rm -f /tmp/sidzen-restore-kill-after-swap
+  /usr/bin/docker "$@"
+  kill -KILL "$PPID"
+  exit 1
+fi
 exec /usr/bin/docker "$@"
 DOCKER
 chmod 0755 /tmp/sidzen-restore-bin/curl /tmp/sidzen-restore-bin/docker
@@ -121,6 +127,23 @@ docker run --rm --volume 3dprinta_model-files:/data alpine:3.20 sh -c 'printf sn
 bash "$release/scripts/backup.sh"
 source_backup="$(find "$remote" -maxdepth 1 -type f -name 'sidzen-*.tar.age' -printf '%f\n' | head -1)"
 [[ -n "$source_backup" ]]
+[[ -s "$remote/$source_backup.hmac" ]]
+rm -f -- "$remote/$source_backup.hmac"
+python3 "$release/scripts/attest-existing-backups.py"
+[[ -s "$remote/$source_backup.hmac" ]]
+printf 'PASS: an older encrypted copy was authenticated against its local original.\n'
+tampered=sidzen-20000101T000000Z.tar.age
+cp "$remote/$source_backup" "$remote/$tampered"
+cp "$remote/$source_backup.hmac" "$remote/$tampered.hmac"
+printf 'tampered' >> "$remote/$tampered"
+install -d -m 0700 "$root/shared/restore/tampered-test"
+if bash "$release/scripts/stage-backup-restore.sh" "$tampered" "$root/shared/restore/tampered-test"; then
+  printf 'Tampered encrypted backup was unexpectedly accepted.\n' >&2
+  exit 1
+fi
+[[ -z "$(ls -A "$root/shared/restore/tampered-test")" ]]
+rm -f -- "$remote/$tampered" "$remote/$tampered.hmac"
+printf 'PASS: a modified encrypted archive was rejected before extraction.\n'
 sleep 2
 
 set_fixture() {
@@ -144,13 +167,13 @@ python3 -c 'import json; s=json.load(open("/opt/3dprinta/shared/restore/status.j
 assert_fixture before_rollback_test
 printf 'PASS: failure after switching restores the previous database and uploaded files.\n'
 
-sleep 2
 install -m 0644 "$release/deploy/sidzen-restore-control.service" /etc/systemd/system/sidzen-restore-control.service
 systemctl daemon-reload
 systemctl set-environment PATH="$PATH"
 systemctl start sidzen-restore-control.service
 for attempt in $(seq 1 20); do [[ -S "$root/shared/restore/api/control.sock" ]] && break; sleep 1; done
-python3 - "$source_backup" <<'CONTROL'
+start_controlled_restore() {
+  python3 - "$source_backup" <<'CONTROL'
 import json, socket, sys, uuid
 path = '/opt/3dprinta/shared/restore/api/control.sock'
 def request(data):
@@ -169,11 +192,29 @@ assert request({'action': 'start', 'id': str(uuid.uuid4()), 'name': '../../etc/p
 result = request({'action': 'start', 'id': str(uuid.uuid4()), 'name': sys.argv[1]})
 assert result['status'] == 'queued', result
 CONTROL
-for attempt in $(seq 1 120); do
-  result="$(python3 -c 'import json; print(json.load(open("/opt/3dprinta/shared/restore/status.json"))["status"])')"
-  [[ "$result" == succeeded || "$result" == failed || "$result" == attention ]] && break
-  sleep 3
-done
+}
+wait_for_restore() {
+  for attempt in $(seq 1 160); do
+    result="$(python3 -c 'import json; print(json.load(open("/opt/3dprinta/shared/restore/status.json"))["status"])')"
+    [[ "$result" == succeeded || "$result" == failed || "$result" == attention ]] && return
+    sleep 3
+  done
+  return 1
+}
+
+sleep 2
+set_fixture before_interruption_test
+touch /tmp/sidzen-restore-kill-after-swap
+start_controlled_restore
+wait_for_restore
+[[ "$result" == failed && ! -e /tmp/sidzen-restore-kill-after-swap ]]
+python3 -c 'import json; s=json.load(open("/opt/3dprinta/shared/restore/status.json")); assert s["phase"] == "swapping"'
+assert_fixture before_interruption_test
+printf 'PASS: an interrupted restore is rolled back after the controller restarts it.\n'
+
+sleep 2
+start_controlled_restore
+wait_for_restore
 [[ "$result" == succeeded ]]
 assert_fixture snapshot
 printf 'PASS: controller restored the database and files from the encrypted test backup.\n'

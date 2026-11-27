@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Expose the limited restore operations to the authenticated shop application."""
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -41,11 +42,13 @@ def backups():
         raise ValueError('Invalid backup location')
     if not (CONFIG / 'restore.agekey').is_file():
         raise ValueError('Recovery key unavailable')
-    result = subprocess.run(
-        ['rclone', '--config', str(config), '--contimeout', '10s', '--timeout', '25s',
-         'lsjson', '--files-only', '--max-depth', '1', remote],
-        capture_output=True, check=True, timeout=35,
-    )
+    with open('/var/backups/3dprinta/.backup.lock', 'a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = subprocess.run(
+            ['rclone', '--config', str(config), '--contimeout', '10s', '--timeout', '25s',
+             'lsjson', '--files-only', '--max-depth', '1', remote],
+            capture_output=True, check=True, timeout=35,
+        )
     rows = json.loads(result.stdout)
     names = {item['Name'] for item in rows}
     return sorted(({'name': item['Name'], 'modifiedAt': item['ModTime'], 'size': item['Size']}
